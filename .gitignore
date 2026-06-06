@@ -1,0 +1,19 @@
+# STM32CubeIDE / STM32CubeMX build outputs
+# Per explicit request: exclude these directories only
+/Debug/
+/Release/
+
+# Per-user IDE workspace settings (not project settings)
+/.settings/
+
+# CubeMX backup files (common when regenerating)
+*.bak
+
+# OS / editor junk (safe to ignore everywhere)
+.DS_Store
+Thumbs.db
+desktop.ini
+*~
+*.swp
+*.tmp
+*.log
