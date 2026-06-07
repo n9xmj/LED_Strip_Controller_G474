@@ -26,6 +26,8 @@ Prior G0B0 work lives in the separate repo [LED-Strip-Controller](https://github
 | I2S audio out (`App/i2s_audio_out.*`, SAI1.A → MAX98357 clone) | 16-bit mono wire format (duplicated L/R slots for single-speaker hardware); ping-pong DMA; clean 440 Hz sine achieved on bench at actual Fs≈33.2 kHz (MCKDIV=20, FRL+1=32). Temp diagnostics removed. Present config kept. Future: reuse path to audition I2S mic (24b→16b compress OK). |
 | Logging API (`App/logging-api`) | Integrated. `log_helpers.h` holds the LOGCT/LOGC/LOG + RPRINTF/DPRINTF sugar (includes core logging.h). Project-specific tag config lives in `App/Inc/debug_config.h` (normal modules include this). A reusable `debug_config_template.h` (with samples + usage instructions) is provided in `logging-api/` — copy it to your app's Inc/, rename to debug_config.h, and customize. Portable code (e.g. led_strip_control) can avoid project debug_config.h and use logging.h directly. RPRINTF used for startup banner. |
 | CORDIC / FMAC + CMSIS-DSP | IPs enabled in CubeMX; prebuilt G4 DSP libs linked in project. Side project: use CORDIC SIN (Q31, phase accumulator) for LUTless sine synthesis in tone generator or effects. |
+| Debug menu | Added top-level '@' key (debug_menu.c, extern declare only to v_print_startup_banner in app_main.c) that reprints the full startup banner (Project/Target/FW/Build/Reset). Used as low-latency "identify" trigger. |
+| Automation / scripts | Custom `scripts/` (build.ps1/.sh, flash.ps1/.sh, smoke-test.ps1/.sh + smoke_capture.py, discover.py, check-env.*) + SCRIPTS.md. Robust manual arg parsing (no more PowerShell param binding / --port/--stlink-sn / ValidateSet issues). Smoke defaults to 921600. `--identify` mode sends 3× ESC (0x1B @ 50 ms) then '@' to safely unwind submenus on a live board before banner reprint. Full round-trips (clean Debug build + flash on specific ST-Link SN + smoke) exercised and verified (Build # 4 visible in captured banner). Legacy mirror scripts fully purged from repo history (they live only in local `not-in-project/` reference dir; .gitignore protects it; nothing proprietary remains on remote). |
 | RTOS / audio in (INMP441) / TFT / gesture sensor | Not started (I2S mic deferred after logging + CORDIC experiments) |
 
 **UART strip map (CubeMX / `platform.h`):**
@@ -75,6 +77,23 @@ Long-term goals for this hobby firmware project:
 - TFT displays (ST7789 or similar)  
 - VL53L5CX time-of-flight (e.g. VL53L5CX-SATEL breakout)  
 - IR remote receiver module (demodulated 38 kHz; NEC-style)—wishlist only
+
+---
+
+## Automation scripts (build / flash / smoke test)
+
+**Agents and humans:** see **[SCRIPTS.md](SCRIPTS.md)** for complete, agent-friendly instructions.
+
+Key points (as of latest session):
+- `scripts/build.ps1` (and .sh): clean/incremental Debug/Release/Test builds using headless CubeIDE + unique temp workspace (auto-cleaned on success). Supports `--clean`, `--incremental`, `--config`.
+- `scripts/flash.ps1` (and .sh): flash with explicit `--stlink-sn` (your bench has multiple; use `--list` for discovery with accessibility info). Auto-falls back via `discover.py`.
+- `scripts/smoke-test.ps1` (and .sh): post-flash or live-board verification. Opens serial *first* (critical for fast banner at 921600), then either concurrent ST-Link reset or `--identify` (sends 3× ESC at 50 ms then `@` to unwind submenus + trigger banner via the new debug menu key). Defaults to 921600 for this project. `--list` for COM/ST-Link discovery with "free"/"in-use" reports. Produces timestamped log + console capture.
+- `discover.py` + `smoke_capture.py` do the heavy lifting (rich device info, concurrent reset for timing, error messages for locked ports).
+- All scripts have concise `--help`. Manual arg parsing used throughout to avoid PowerShell binding quirks with mixed `--port`/`--stlink-sn` etc.
+
+Example agent flow after a change: "build debug", "flash it with the SN", "run smoke test using COM9 --identify" (or full ST-Link path).
+
+Legacy mirror/reference scripts were never intended for the remote; they live only locally in `not-in-project/` (protected by .gitignore) and have been fully purged from repo history.
 
 ---
 
@@ -241,6 +260,7 @@ HAL callbacks in `app_main.c` forward to `i2s_audio_out_*` helpers.
 | `AI-Readme.md` | Living project guide for agents and contributors; amend as the design evolves. |
 | 2026-06 (this session) | Created n9xmj/LED_Strip_Controller_G474 remote (public, personal account). Added explicit three-repo lineage table. Updated for G474RE as current baseline. .gitignore + initial commit. |
 | 2026-06 (later) | LED driver bring-up completed ... (see previous). Logging fully integrated: split into log_helpers.h (sugar) + Inc/debug_config.h (project tags: SYSTEM/LED/I2S_OUT/I2S_IN). Startup banner upgraded to * -bordered style using v_repeat_char + v_newline (from utils) + RPRINTF; now reports Project + new TARGET_MCU + FIRMWARE_VERSION + BUILD_NUMBER + detailed reset source (populated via x_get_reset_source + pc_reset_source_description). not-in-project/ added to .gitignore (reference only). AI-Readme refreshed. |
+| 2026-06 (evening session) | Added top-level `@` key to debug menu (`App/Src/debug_menu.c`, extern declare only) that directly calls `v_print_startup_banner()` (useful for humans + smoke fallback). Enhanced smoke `--identify` (in `scripts/smoke_capture.py`): now sends 3× ESC (0x1B, 50 ms paced) first to unwind any submenus a live board may be left in, *then* `@`. Updated all automation scripts (`build.ps1`/`flash.ps1`/`smoke-test.ps1` + .sh twins) to robust manual argument parsing (eliminates historical PowerShell param binding / kebab-case / ValidateSet / SwitchParameter errors with mixed `--port`/`--stlink-sn`). Smoke now defaults to 921600 for this project; `--identify` is the fast live-board path. Full round-trips (clean Debug build + flash on specific ST-Link SN + smoke) exercised/verified (banner with Build # 4 captured cleanly). Legacy mirror scripts fully purged from repo history via filter-branch + force-push (they remain only in local `not-in-project/` reference; nothing proprietary on remote). `SCRIPTS.md` created + AI-Readme updated to point agents at it for build/flash/smoke instructions. Commit messages and history sanitized. |
 
 ---
 
