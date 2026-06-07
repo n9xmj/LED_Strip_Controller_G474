@@ -71,6 +71,17 @@ static void v_debug_quick_test_2(void)
 }
 
 /******************************************************************************
+ * Identify / reprint banner (for smoke test "identify yourself" trigger)
+ * Uses @ key. Extern declare only (no header export) per project convention
+ * for debug_menu.c shortcuts.
+ ******************************************************************************/
+static void v_debug_print_banner(void)
+{
+    extern void v_print_startup_banner(void);
+    v_print_startup_banner();
+}
+
+/******************************************************************************
  * LED strip — demo patterns (ROM). Wire order is GRB + W; WS2812 ignores W.
  *
  * Test HW (Docs/AI-Readme.txt): [1] WS2812B ring 21 LEDs (idx 0 center, 1–8 middle,
@@ -616,6 +627,12 @@ static const menu_item_t x_debug_top_menu[] =
         .x_type = MENU_ITEM_HELP_HIDDEN,
         .c_key = '\r',
         .p_c_text = NULL
+    },
+    {
+        .x_type = MENU_ITEM_FUNCTION,
+        .c_key = '@',
+        .p_c_text = "Print startup banner (identify)",
+        .pfn_function = v_debug_print_banner
     },
     {
         .x_type = MENU_ITEM_FUNCTION,
