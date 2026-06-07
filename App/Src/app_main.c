@@ -10,6 +10,8 @@
 #include "led_strip_control.h"
 #include "i2s_audio_out.h"
 
+#include "debug_config.h"   // for RPRINTF + logging tags (banner uses RPRINTF)
+
 //------------------------------------------------------------------------------
 // Global variables
 //------------------------------------------------------------------------------
@@ -115,6 +117,33 @@ void HAL_TIM_PeriodElapsedCallback(TIM_HandleTypeDef *htim)
  *
  ******************************************************************************/
 
+void v_print_startup_banner(void)
+{
+    if (x_reset_source.x_reset_type == RESET_TYPE_UNKNOWN)
+    {
+        (void)x_get_reset_source();
+    }
+
+    v_newline();
+    v_repeat_char('*', -64);
+    RPRINTF("Project             : " PROJECT_NAME "\r\n"
+            "Target              : " TARGET_MCU "\r\n"
+            "Firmware version    : " FIRMWARE_VERSION "\r\n"
+            "Build #             : " BUILD_NUMBER "\r\n"
+            "\r\n"
+            "Reset source        : [%02X] #%u-%s\r\n"
+            , x_reset_source.u8_reset_flags
+            , x_reset_source.x_reset_type
+            , pc_reset_source_description(x_reset_source.x_reset_type)
+           );
+    v_repeat_char('*', -64);
+    v_newline();
+}
+
+/******************************************************************************
+ *
+ ******************************************************************************/
+
 static void v_periodic_timer_service(void)
 {
     static uint16_t u16_timer_1s_prescaler = 0;
@@ -125,17 +154,6 @@ static void v_periodic_timer_service(void)
         u16_timer_1s_prescaler = 0;
         v_job_add(&gx_job_queue, JOB_1S_TICK);
     }
-}
-
-/******************************************************************************
- *
- ******************************************************************************/
-
-void v_print_project_banner(void)
-{
-    printf("*** " PROJECT_NAME " ***\r\n"
-           "Reset source: %s\r\n",
-           pc_reset_source_description(x_get_reset_source()));
 }
 
 /******************************************************************************
@@ -199,10 +217,13 @@ NEVER_RETURNS void v_app_main(void)
     v_system_init();
 
     // Print out banner sign-on message for this project
-    v_print_project_banner();
+    v_print_startup_banner();
 
     // Initialize debug menu
     v_debug_menu_init();
+
+    v_newline();
+    LOGCT(LOG_SYSTEM, "Initialization complete. Starting main task loop");
 
     while (1)
     {

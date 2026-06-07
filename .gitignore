@@ -17,3 +17,6 @@ desktop.ini
 *.swp
 *.tmp
 *.log
+
+# External reference / example code from other projects (not part of this tree)
+not-in-project/

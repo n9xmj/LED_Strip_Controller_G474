@@ -15,6 +15,9 @@
 #include "main.h"
 
 #define PROJECT_NAME    "LED_Strip_Controller_G476"
+#define TARGET_MCU      "STM32G474RE"
+#define FIRMWARE_VERSION "3.0.0"
+#define BUILD_NUMBER    "0"
 
  //------------------------------------------------------------------------------
  // Stringification

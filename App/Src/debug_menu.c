@@ -13,6 +13,8 @@
 #include "led_strip_control.h"
 #include "i2s_test_tone.h"
 
+#include "debug_config.h"   // logging sugar (LOGCT etc.) for this module
+
 #define DEBUG_MENU_STACK_SIZE   4
 
 /** Wait for @ref led_strip_handle_t::b_transfer_in_progress to clear (ms). */
