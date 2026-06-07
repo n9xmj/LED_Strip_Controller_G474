@@ -54,6 +54,8 @@ enum
 
     JOB_1S_TICK,
 
+    JOB_SYNTH_SERVICE,   // Periodic service for synth engine (CORDIC tone gen, future sequencing)
+
     // ---------------------------------------------------
 
     // JOB_QUEUE_OVERFLOW must be declared/present

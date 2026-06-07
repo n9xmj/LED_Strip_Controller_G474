@@ -9,6 +9,7 @@
 #include "debug_menu.h"
 #include "led_strip_control.h"
 #include "i2s_audio_out.h"
+#include "synth_engine.h"
 
 #include "debug_config.h"   // for RPRINTF + logging tags (banner uses RPRINTF)
 
@@ -153,6 +154,7 @@ static void v_periodic_timer_service(void)
     {
         u16_timer_1s_prescaler = 0;
         v_job_add(&gx_job_queue, JOB_1S_TICK);
+        v_job_add(&gx_job_queue, JOB_SYNTH_SERVICE);   // service the synth engine via job runner
     }
 }
 
@@ -167,6 +169,9 @@ static void v_system_init(void)
 
     // Start the periodic 1ms tick timer
     HAL_TIM_Base_Start_IT(&PERIODIC_TIMER_HANDLE);
+
+    // Synth engine (CORDIC tone gen for debug audio tests)
+    v_synth_engine_init();
 }
 
 /******************************************************************************
@@ -194,6 +199,10 @@ void v_process_next_job(void)
         case JOB_1S_TICK:
             break;
 
+        case JOB_SYNTH_SERVICE:
+            v_synth_engine_service();
+            break;
+
         case JOB_QUEUE_OVERFLOW:
             break;
 
@@ -209,6 +218,7 @@ void v_process_next_job(void)
 void v_app_polling_task(void)
 {
     v_process_next_job();
+    v_synth_engine_service();   // cheap direct call for responsiveness (job also posts it)
 }
 
 NEVER_RETURNS void v_app_main(void)

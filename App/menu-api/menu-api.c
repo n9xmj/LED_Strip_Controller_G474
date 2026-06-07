@@ -399,11 +399,23 @@ void v_menu_exec(menu_control_t *p_x_menu_control, char c_key)
                     {
                         printf("WARNING: Menu stack empty\r\n");
                     }
+                    // Optional cleanup / exit callback (e.g. stop active synth on leaving i submenu).
+                    // The pfn_function slot is unused by RETURN items (GOTO/CALL use p_x_menu),
+                    // so we repurpose it here without changing struct size.
+                    if (p_x_entry->pfn_function != NULL)
+                    {
+                        p_x_entry->pfn_function();
+                    }
                     v_menu_help(p_x_menu_control->pap_x_menu[p_x_menu_control->u8_stack_index]);
                     break;
 
                 case MENU_ITEM_RETURN_TO_HOME_MENU:
                     p_x_menu_control->u8_stack_index = 0;
+                    // Optional cleanup / exit callback (see comment above).
+                    if (p_x_entry->pfn_function != NULL)
+                    {
+                        p_x_entry->pfn_function();
+                    }
                     v_menu_help(p_x_menu_control->pap_x_menu[0]);
                     break;
 

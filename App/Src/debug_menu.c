@@ -12,6 +12,7 @@
 #include "utils.h"
 #include "led_strip_control.h"
 #include "i2s_test_tone.h"
+#include "synth_engine.h"   // new non-blocking CORDIC synth (direct sine for v1)
 
 #include "debug_config.h"   // logging sugar (LOGCT etc.) for this module
 
@@ -420,43 +421,27 @@ static void v_debug_led_strip4_off(void)
 }
 
 //------------------------------------------------------------------------------
+// New non-blocking I2S synth engine wrappers (CORDIC direct sine, first iteration).
+// Menu functions initiate and return immediately. Explicit stop via 's' or
+// auto-stop on RETURN from this submenu (via pfn attached to RETURN item).
 
-static void v_debug_i2s_tone_report_err(i2s_test_tone_err_t x_err)
+static void v_debug_i2s_tone_start(float f_freq_hz)
 {
-    switch (x_err)
-    {
-    case I2S_TEST_TONE_ERR_OK:
-        printf("I2S test tone stopped.\r\n");
-        break;
-    case I2S_TEST_TONE_ERR_BUSY:
-        printf("I2S audio out busy — wait for idle and retry.\r\n");
-        break;
-    case I2S_TEST_TONE_ERR_INIT:
-        printf("I2S test tone init failed.\r\n");
-        break;
-    case I2S_TEST_TONE_ERR_START:
-        printf("I2S test tone start failed.\r\n");
-        break;
-    default:
-        printf("I2S test tone error (%d).\r\n", (int) x_err);
-        break;
-    }
-}
+    LOGCT(LOG_I2S_OUT, "menu: tone start request for %.1f Hz", (double)f_freq_hz);
+    v_synth_engine_start_sine(f_freq_hz, 0.25f);   // default level matches legacy test tone
 
-static void v_debug_i2s_tone_run(float f_freq_hz)
-{
-    v_debug_i2s_tone_report_err(x_i2s_test_tone_run_sine_until_key(f_freq_hz,
-                                                                  I2S_TEST_TONE_DEFAULT_LEVEL));
+    // Note: detailed SAI config + "playing" message now emitted from inside engine on success
+    // (or check logs if no message / no sound)
 }
 
 static void v_debug_i2s_tone_440_hz(void)
 {
-    v_debug_i2s_tone_run(440.0f);
+    v_debug_i2s_tone_start(440.0f);
 }
 
 static void v_debug_i2s_tone_1000_hz(void)
 {
-    v_debug_i2s_tone_run(1000.0f);
+    v_debug_i2s_tone_start(1000.0f);
 }
 
 static void v_debug_i2s_tone_custom_hz(void)
@@ -482,7 +467,14 @@ static void v_debug_i2s_tone_custom_hz(void)
         return;
     }
 
-    v_debug_i2s_tone_run(f_freq_hz);
+    v_debug_i2s_tone_start(f_freq_hz);
+}
+
+static void v_debug_i2s_tone_stop(void)
+{
+    LOGCT(LOG_I2S_OUT, "menu: explicit stop request");
+    v_synth_engine_stop();
+    printf("I2S synthesis stopped (silence).\r\n");
 }
 
 //------------------------------------------------------------------------------
@@ -492,7 +484,7 @@ static const menu_item_t x_i2s_audio_tests_submenu[] =
     {
         .x_type = MENU_ITEM_HELP_TEXT_FIXED,
         .c_key = 0,
-        .p_c_text = "\r\n--- I2S audio tests (SAI2 -> MAX98357) ---\r\n"
+        .p_c_text = "\r\n--- I2S audio tests (SAI1 -> MAX98357) ---\r\n"
     },
     {
         .x_type = MENU_ITEM_HELP,
@@ -507,25 +499,32 @@ static const menu_item_t x_i2s_audio_tests_submenu[] =
     {
         .x_type = MENU_ITEM_FUNCTION,
         .c_key = '4',
-        .p_c_text = "Sine 440 Hz (press any key to stop)",
+        .p_c_text = "Sine 440 Hz (CORDIC, non-blocking)",
         .pfn_function = v_debug_i2s_tone_440_hz
     },
     {
         .x_type = MENU_ITEM_FUNCTION,
         .c_key = '1',
-        .p_c_text = "Sine 1000 Hz (press any key to stop)",
+        .p_c_text = "Sine 1000 Hz (CORDIC, non-blocking)",
         .pfn_function = v_debug_i2s_tone_1000_hz
     },
     {
         .x_type = MENU_ITEM_FUNCTION,
         .c_key = 'f',
-        .p_c_text = "Sine custom frequency (Hz prompt)",
+        .p_c_text = "Sine custom frequency (Hz prompt, then non-blocking)",
         .pfn_function = v_debug_i2s_tone_custom_hz
+    },
+    {
+        .x_type = MENU_ITEM_FUNCTION,
+        .c_key = 's',
+        .p_c_text = "Stop current tone (explicit stop + silence)",
+        .pfn_function = v_debug_i2s_tone_stop
     },
     {
         .x_type = MENU_ITEM_RETURN_TO_PREVIOUS_MENU,
         .c_key = 0x1B,
-        .p_c_text = NULL
+        .p_c_text = NULL,
+        .pfn_function = v_debug_i2s_tone_stop   // auto-stop on leaving the i submenu
     },
     {
         .x_type = MENU_ITEM_END_OF_LIST,

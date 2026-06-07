@@ -12,6 +12,7 @@
 #include "app_global.h"
 #include "i2s_audio_out.h"
 #include "sai.h"
+#include "debug_config.h"  // LOGCT(LOG_I2S_OUT, ...) for audio path diagnosis
 
 typedef enum
 {
@@ -270,16 +271,19 @@ i2s_audio_out_err_t x_i2s_audio_out_init(const i2s_audio_out_config_t *p_x_cfg)
 
     if (p_x_cfg == NULL)
     {
+        LOGCT(LOG_I2S_OUT, "i2s_out_init: NULL cfg");
         return I2S_AUDIO_OUT_ERR_NULL;
     }
 
     if (p_x_cfg->pfn_fill == NULL)
     {
+        LOGCT(LOG_I2S_OUT, "i2s_out_init: NULL fill fn");
         return I2S_AUDIO_OUT_ERR_NULL;
     }
 
     if (!b_i2s_audio_out_is_idle())
     {
+        LOGCT(LOG_I2S_OUT, "i2s_out_init: BUSY (not idle)");
         return I2S_AUDIO_OUT_ERR_BUSY;
     }
 
@@ -340,6 +344,8 @@ i2s_audio_out_err_t x_i2s_audio_out_init(const i2s_audio_out_config_t *p_x_cfg)
         s_u32_ms_per_half = 1u;
     }
 
+    LOGCT(LOG_I2S_OUT, "i2s_out_init OK: frames_per_half=%u fs=%lu",
+          (unsigned)s_u16_frames_per_half, (unsigned long)s_u32_actual_fs_hz);
     return I2S_AUDIO_OUT_ERR_OK;
 }
 
@@ -377,15 +383,18 @@ i2s_audio_out_err_t x_i2s_audio_out_start(void)
 
     if (x_hal != HAL_OK)
     {
+        LOGCT(LOG_I2S_OUT, "i2s_out_start: HAL_SAI_Transmit_DMA failed %d", (int)x_hal);
         s_x_state = I2S_AUDIO_OUT_STATE_IDLE;
         return I2S_AUDIO_OUT_ERR_HAL;
     }
 
+    LOGCT(LOG_I2S_OUT, "i2s_out_start: DMA started successfully (fill provider active)");
     return I2S_AUDIO_OUT_ERR_OK;
 }
 
 void v_i2s_audio_out_stop(void)
 {
+    LOGCT(LOG_I2S_OUT, "i2s_out_stop: state=%d (eof flag set)", (int)s_x_state);
     if (s_x_state == I2S_AUDIO_OUT_STATE_STREAMING)
     {
         s_b_eof_requested = true;

@@ -22,6 +22,7 @@ Usage: scripts\build.ps1 [CONFIG] [OPTIONS]
 Options:
   --clean                Force a clean build (default behavior)
   --incremental          Request an incremental build
+  --bump-build-count     Increment BUILD_NUMBER in App/Inc/platform.h before the build (for cleanbuild skill)
   --help, -h             Show this help
 
 Locates stm32cubeidec.exe via `$env:STM32CUBEIDE or common install paths.
@@ -40,6 +41,7 @@ $repoRoot    = Split-Path $PSScriptRoot -Parent
 $Config = "Debug"
 $Clean = $false
 $Incremental = $false
+$BumpBuildCount = $false
 $Help = $false   # handled above
 
 # First positional (non-flag) arg is CONFIG if valid
@@ -54,9 +56,10 @@ if ($args.Count -gt 0 -and $args[0] -notmatch '^-') {
 
 for ($i = $argIndex; $i -lt $args.Count; $i++) {
     switch -Regex ($args[$i]) {
-        '^--?clean$'       { $Clean = $true; break }
-        '^--?incremental$' { $Incremental = $true; break }
-        '^--?config$'      { $Config = $args[++$i]; break }
+        '^--?clean$'           { $Clean = $true; break }
+        '^--?incremental$'     { $Incremental = $true; break }
+        '^--?bump-build-count$' { $BumpBuildCount = $true; break }
+        '^--?config$'          { $Config = $args[++$i]; break }
         default { }
     }
 }
@@ -65,6 +68,22 @@ for ($i = $argIndex; $i -lt $args.Count; $i++) {
 if ($Config -notin @("Debug","Release","Test")) {
     Write-Host "Invalid config '$Config', defaulting to Debug" -ForegroundColor Yellow
     $Config = "Debug"
+}
+
+if ($BumpBuildCount) {
+    $platformH = Join-Path $repoRoot "App\Inc\platform.h"
+    if (Test-Path $platformH) {
+        $content = Get-Content $platformH -Raw
+        if ($content -match '(?m)^#define\s+BUILD_NUMBER\s+"(\d+)"') {
+            $current = $matches[1]
+            $new = [int]$current + 1
+            $newContent = $content -replace '(?m)^#define\s+BUILD_NUMBER\s+"\d+"', "#define BUILD_NUMBER `"$new`""
+            Set-Content -Path $platformH -Value $newContent -NoNewline
+            Write-Host "BUILD_NUMBER bumped from $current to $new in App/Inc/platform.h (due to --bump-build-count)" -ForegroundColor Yellow
+        } else {
+            Write-Host "Could not find BUILD_NUMBER define to bump in $platformH" -ForegroundColor Yellow
+        }
+    }
 }
 
 function Find-LatestCubeIde {

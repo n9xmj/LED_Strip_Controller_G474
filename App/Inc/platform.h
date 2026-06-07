@@ -16,8 +16,8 @@
 
 #define PROJECT_NAME    "LED_Strip_Controller_G476"
 #define TARGET_MCU      "STM32G474RE"
-#define FIRMWARE_VERSION "3.0.1"
-#define BUILD_NUMBER    "4"
+#define FIRMWARE_VERSION "3.0.5"
+#define BUILD_NUMBER "6"
 
  //------------------------------------------------------------------------------
  // Stringification
