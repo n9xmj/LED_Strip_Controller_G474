@@ -1,6 +1,6 @@
 /**
  * @file i2s_test_tone.c
- * @brief Sine test tone generator for I2S bench tests.
+ * @brief Sine test tone generator for I2S bench tests (16-bit mono path).
  */
 
 #include <math.h>
@@ -61,6 +61,33 @@ static void v_i2s_test_tone_build_lut(float f_level)
         s_ai16_sine_lut[u16_i] = (int16_t) (sinf(f_two_pi * f_t) * f_amp);
     }
 }
+
+/*
+ * CORDIC / FMAC experiment note (side project):
+ * The STM32G4 CORDIC peripheral has native sin/cos support in Q31 fixed-point.
+ * It is a natural fit for real-time sine synthesis:
+ *   - Instead of (or in addition to) this LUT + phase accumulator,
+ *     we could feed the CORDIC with the current phase angle and read
+ *     the sine result directly each time we need a new sample (or every
+ *     N samples, then interpolate).
+ *   - Pros: hardware-accelerated, deterministic latency (14 cycles typical),
+ *     no floating-point, very low CPU overhead once configured.
+ *   - Cons: requires careful fixed-point scaling (phase and result),
+ *     CORDIC is shared (may need arbitration if FMAC is also used),
+ *     and for a simple bench tone the current LUT is already extremely cheap.
+ *
+ * A quick experiment would be:
+ *   1. Enable CORDIC in CubeMX (RCC + NVIC if using IRQ, but polling is fine).
+ *   2. Configure for SIN/COS, Q31, 14 iterations or so.
+ *   3. In the fill (or a new generator), write the angle to COSIN, read SIN.
+ *   4. Compare CPU load / jitter vs. the LUT version.
+ *
+ * FMAC could be used for a hardware IIR or FIR low-pass on the generated
+ * tone if we wanted to experiment with filtering, but for pure synthesis
+ * CORDIC is the more direct match.
+ *
+ * This is low priority until the logging API and mic input are in.
+ */
 
 static void v_i2s_test_tone_update_phase_step(void)
 {
@@ -170,6 +197,7 @@ i2s_test_tone_err_t x_i2s_test_tone_run_sine_until_key(float f_freq_hz, float f_
                (unsigned) (((p_x_sai->Instance->CR1 & SAI_xCR1_NODIV) != 0u) ? 1u : 0u));
     }
 
+    printf("... any key to stop\r\n");
     (void) i_getchar_blocking();
 
     v_i2s_audio_out_stop();

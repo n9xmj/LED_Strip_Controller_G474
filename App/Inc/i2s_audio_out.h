@@ -1,11 +1,14 @@
 /**
  * @file i2s_audio_out.h
- * @brief I2S/SAI stereo playback (SAI2.B → MAX98357) via ping-pong DMA.
+ * @brief I2S/SAI mono (or stereo) playback (SAI1.A → MAX98357) via ping-pong DMA.
  *
  * @details
  * PCM is supplied by an application fill callback (16-bit mono or stereo-interleaved).
- * The module converts to 24-bit I2S words in a circular DMA buffer. One DMA half equals
- * @c u16_frames_per_half audio frames (one time instant = one frame; stereo wire = L+R slots).
+ * The module converts to 16-bit I2S data in a circular DMA buffer.
+ * With current SAI config (MONOMODE, 2 slots active 0+1, 16b data, Frame 16), each audio frame
+ * produces 2x 16-bit values in the wire buffer (duplicated for the two slots; L=R for mono).
+ * One DMA half equals @c u16_frames_per_half audio frames.
+ * This matches the hardware (single speaker, SD pin selecting left channel) and saves RAM vs 24b.
  *
  * Buffer lifetime: PCM passed to the callback is not needed after the callback returns unless
  * another fill is pending. After @ref u32_i2s_audio_out_get_chunks_completed increments, the
@@ -158,3 +161,12 @@ void v_i2s_audio_out_sai_tx_cplt(SAI_HandleTypeDef *p_x_sai);
  * @brief Forward @c HAL_SAI_ErrorCallback for @ref I2S_AUDIO_OUT_SAI_HANDLE.
  */
 void v_i2s_audio_out_sai_error(SAI_HandleTypeDef *p_x_sai);
+
+/**
+ * Future note (INMP441 mic integration):
+ * The audio-out path will be reused to audition mic capture.
+ * It is acceptable (and preferred for simplicity) to down-convert
+ * 24-bit mic samples to 16-bit before feeding the existing 16-bit
+ * mono output path. No changes to the core 16-bit wire format are
+ * required for initial bring-up.
+ */

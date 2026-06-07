@@ -216,7 +216,7 @@ void DMA1_Channel1_IRQHandler(void)
   /* USER CODE END DMA1_Channel1_IRQn 0 */
   HAL_DMA_IRQHandler(&hdma_usart1_tx);
   /* USER CODE BEGIN DMA1_Channel1_IRQn 1 */
-
+  HAL_UART_TxCpltCallback(&huart1);
   /* USER CODE END DMA1_Channel1_IRQn 1 */
 }
 
@@ -230,7 +230,7 @@ void DMA1_Channel2_IRQHandler(void)
   /* USER CODE END DMA1_Channel2_IRQn 0 */
   HAL_DMA_IRQHandler(&hdma_lpuart1_tx);
   /* USER CODE BEGIN DMA1_Channel2_IRQn 1 */
-
+  HAL_UART_TxCpltCallback(&hlpuart1);
   /* USER CODE END DMA1_Channel2_IRQn 1 */
 }
 
@@ -244,7 +244,7 @@ void DMA1_Channel3_IRQHandler(void)
   /* USER CODE END DMA1_Channel3_IRQn 0 */
   HAL_DMA_IRQHandler(&hdma_usart3_tx);
   /* USER CODE BEGIN DMA1_Channel3_IRQn 1 */
-
+  HAL_UART_TxCpltCallback(&huart3);
   /* USER CODE END DMA1_Channel3_IRQn 1 */
 }
 
@@ -272,7 +272,7 @@ void DMA1_Channel5_IRQHandler(void)
   /* USER CODE END DMA1_Channel5_IRQn 0 */
   HAL_DMA_IRQHandler(&hdma_uart4_tx);
   /* USER CODE BEGIN DMA1_Channel5_IRQn 1 */
-
+  HAL_UART_TxCpltCallback(&huart4);
   /* USER CODE END DMA1_Channel5_IRQn 1 */
 }
 
@@ -286,7 +286,7 @@ void DMA1_Channel6_IRQHandler(void)
   /* USER CODE END DMA1_Channel6_IRQn 0 */
   HAL_DMA_IRQHandler(&hdma_uart5_tx);
   /* USER CODE BEGIN DMA1_Channel6_IRQn 1 */
-
+  HAL_UART_TxCpltCallback(&huart5);
   /* USER CODE END DMA1_Channel6_IRQn 1 */
 }
 

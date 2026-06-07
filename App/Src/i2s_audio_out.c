@@ -1,6 +1,9 @@
 /**
  * @file i2s_audio_out.c
- * @brief SAI2.B I2S transmit ping-pong DMA playback implementation.
+ * @brief SAI1.A 16-bit I2S transmit ping-pong DMA playback (mono output for single-speaker MAX98357 hardware).
+ *
+ * Wire format matches SAI config: 2 active 16b slots per audio frame (duplicated mono data),
+ * DMA mem=halfword (16b), periph=word (32b, grouping the two slots).
  */
 
 #include <string.h>
@@ -23,7 +26,7 @@ static bool s_b_cfg_valid;
 
 static i2s_audio_out_state_t s_x_state;
 
-static uint32_t *s_p_u32_dma;
+static uint32_t *s_p_u32_dma;  /* 32-bit wire buffer: one 32b word per audio frame, containing two 16b samples (duplicated for the two slots) */
 static int16_t *s_p_i16_pcm_scratch;
 static uint32_t s_u32_dma_words;
 static uint32_t s_u32_half_words;
@@ -97,23 +100,20 @@ static void v_i2s_audio_out_pcm_to_wire_half(const int16_t *p_i16_pcm,
 
     for (u16_i = 0u; u16_i < u16_frames; u16_i++)
     {
-        int32_t s32_l;
-        int32_t s32_r;
+        int16_t sample;
 
         if (b_stereo_in)
         {
-            s32_l = (int32_t) p_i16_pcm[(uint32_t) u16_i * 2u];
-            s32_r = (int32_t) p_i16_pcm[((uint32_t) u16_i * 2u) + 1u];
+            /* For mono hardware (SD pin selects left), duplicate left channel to both slots */
+            sample = p_i16_pcm[(uint32_t) u16_i * 2u];
         }
         else
         {
-            s32_l = (int32_t) p_i16_pcm[u16_i];
-            s32_r = s32_l;
+            sample = p_i16_pcm[u16_i];
         }
 
-        /* 16-bit PCM → 24-bit in 32-bit SAI slot (valid audio in bits 31:8). */
-        p_u32_wire[(uint32_t) u16_i * 2u] = (uint32_t) ((int32_t) s32_l << 8);
-        p_u32_wire[((uint32_t) u16_i * 2u) + 1u] = (uint32_t) ((int32_t) s32_r << 8);
+        /* Pack two 16-bit samples into one 32-bit word for the two slots (duplicated for mono) */
+        p_u32_wire[u16_i] = (uint32_t)(uint16_t)sample | ((uint32_t)(uint16_t)sample << 16);
     }
 }
 
@@ -175,8 +175,8 @@ static void v_i2s_audio_out_copy_pcm_to_half(uint32_t *p_u32_half,
     {
         uint32_t u32_tail_words;
 
-        u32_tail_words = ((uint32_t) s_u16_frames_per_half - (uint32_t) u16_frames_out) * 2u;
-        memset(&p_u32_half[(uint32_t) u16_frames_out * 2u],
+        u32_tail_words = ((uint32_t) s_u16_frames_per_half - (uint32_t) u16_frames_out) * 1u;
+        memset(&p_u32_half[(uint32_t) u16_frames_out * 1u],
                0,
                u32_tail_words * sizeof(uint32_t));
     }
@@ -292,7 +292,7 @@ i2s_audio_out_err_t x_i2s_audio_out_init(const i2s_audio_out_config_t *p_x_cfg)
     v_i2s_audio_out_free_buffers();
 
     s_u16_frames_per_half = p_x_cfg->u16_frames_per_half;
-    s_u32_half_words = (uint32_t) s_u16_frames_per_half * 2u;
+    s_u32_half_words = (uint32_t) s_u16_frames_per_half ;  /* one 32b word per audio frame (packed 2x16b for the two slots) */
     s_u32_dma_words = s_u32_half_words * 2u;
 
     if (s_u32_dma_words > 0xFFFFu)

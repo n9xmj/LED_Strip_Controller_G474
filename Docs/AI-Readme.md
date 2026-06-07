@@ -1,6 +1,16 @@
-# LED_Strip_Controller_L476
+# LED_Strip_Controller_G474
 
 *Guide for AI coding assistants (Cursor, Claude, Grok, etc.) and human collaborators.*
+
+**This is a living document.** Update it as the project evolves.
+
+## Repository lineage (three related repos)
+
+| Repo | MCU | Role | GitHub |
+|------|-----|------|--------|
+| Original | STM32G0B0 | Initial USART/DMA LED driver development | [n9xmj/LED-Strip-Controller](https://github.com/n9xmj/LED-Strip-Controller) |
+| L476 port | STM32L476RG | Validated working baseline (LED patterns + I2S audio test tone) | [n9xmj/LED_Strip_Controller_L476](https://github.com/n9xmj/LED_Strip_Controller_L476) |
+| **G474 port (this tree)** | **STM32G474RE** | **Current forward development baseline** (Nucleo-G474RE) | [n9xmj/LED_Strip_Controller_G474](https://github.com/n9xmj/LED_Strip_Controller_G474) |
 
 Prior G0B0 work lives in the separate repo [LED-Strip-Controller](https://github.com/n9xmj/LED-Strip-Controller). This tree is the **STM32G474** migration and forward development baseline.
 
@@ -10,11 +20,13 @@ Prior G0B0 work lives in the separate repo [LED-Strip-Controller](https://github
 
 | Area | Status |
 |------|--------|
-| USART + DMA LED driver (`App/led_strip_control.*`) | Ported and running on L476 |
-| Test hardware (4 strips) | Wired per layout below; debug menu patterns verified |
-| GitHub | [n9xmj/LED_Strip_Controller_L476](https://github.com/n9xmj/LED_Strip_Controller_L476) |
-| I2S audio out (`App/i2s_audio_out.*`, SAI2.B → MAX98357) | Core API + debug menu sine tests (`i` submenu) |
-| RTOS / audio in / TFT / gesture sensor | Not started |
+| USART + DMA LED driver (`App/led_strip_control.*`) | Ported + fully debugged (incl. UART5/LED_CHANNEL_5); debug menu `t` tests complete with clean TX completion (HAL force-cplt calls inside USER CODE blocks in `stm32g4xx_it.c` as regen-safe). All 5 strips software-ready. |
+| Test hardware (4 strips + 5th expansion) | Wired per layout; 5th (UART5) ready in software/platform.h but no HW/debug-menu test hook yet. |
+| GitHub | [n9xmj/LED_Strip_Controller_G474](https://github.com/n9xmj/LED_Strip_Controller_G474) |
+| I2S audio out (`App/i2s_audio_out.*`, SAI1.A → MAX98357 clone) | 16-bit mono wire format (duplicated L/R slots for single-speaker hardware); ping-pong DMA; clean 440 Hz sine achieved on bench at actual Fs≈33.2 kHz (MCKDIV=20, FRL+1=32). Temp diagnostics removed. Present config kept. Future: reuse path to audition I2S mic (24b→16b compress OK). |
+| Logging API (`App/logging-api`) | Legacy copy imported (build currently disabled in IDE); debug_config.h macros (LOGCT/LOGC etc. for tags+colors) to be integrated; will likely migrate/fold some content into platform.h or device_config.h. |
+| CORDIC / FMAC + CMSIS-DSP | IPs enabled in CubeMX; prebuilt G4 DSP libs linked in project. Side project: use CORDIC SIN (Q31, phase accumulator) for LUTless sine synthesis in tone generator or effects. |
+| RTOS / audio in (INMP441) / TFT / gesture sensor | Not started (I2S mic deferred after logging + CORDIC experiments) |
 
 **UART strip map (CubeMX / `platform.h`):**
 
@@ -24,8 +36,9 @@ Prior G0B0 work lives in the separate repo [LED-Strip-Controller](https://github
 | [2] | SK6812 RGBW | 10 (line) | USART3 |
 | [3] | SK6812 RGBW | 10 (line) | UART4 |
 | [4] | SK6812 RGBW | 10 (line) | LPUART1 |
+| [5] | SK6812 RGBW | (TBD / expansion) | UART5 (LED_CHANNEL_5_UART_HANDLE) |
 
-Debug console: **USART2** (ST-Link VCP). LED test submenu: **`t`**. I2S audio test submenu: **`i`**.
+Debug console: **USART2** (ST-Link VCP). LED test submenu: **`t`**. I2S audio test submenu: **`i`**. (Note: no dedicated debug menu entry for strip 5 yet.)
 
 ---
 
@@ -46,12 +59,12 @@ Long-term goals for this hobby firmware project:
 
 ## Development environment
 
-- **MCU board:** STM32 Nucleo-64 **L476RG** + external test PCB (hardware evolves as needed).
+- **MCU board:** STM32 Nucleo-64 **G474RE** (Nucleo-G474RE) + external test PCB (hardware evolves as needed).
 - **STM32CubeMX** — pin/peripheral configuration.
 - **STM32CubeIDE** — edit, build, flash, debug (GCC).
 - **Tera Term** — serial console, debug menu interaction.
 - Bench test equipment as needed.
-- **Reference PDFs** in `Docs/` (WS2812, SK6812, ST7789, INMP441, Nucleo L476, etc.).
+- **Reference PDFs** in `Docs/` (WS2812, SK6812, ST7789, INMP441, Nucleo G474, Nucleo L476, STM32G4 RM, etc.).
 
 **Planned / available hardware:**
 
@@ -71,16 +84,19 @@ Items may be done **out of order**. Toggle boxes as work completes.
 
 - [x] **1.** Get migrated project (G0B0 → L476) up and running as the work baseline.
 - [x] **2.** Convert project notes to Markdown (`Docs/AI-Readme.md`) for clarity and AI agents.
+- [x] **2a.** Create remote repo for G474 port under personal n9xmj account and initialize with .gitignore (Debug/Release/.settings excluded; Cube project files retained).
 - [ ] **3.** Add an RTOS (FreeRTOS + CMSIS-OS wrappers; ST middleware).
 - [ ] **3a.** Configure project for efficient RTOS use (tasks, priorities, driver interaction).
 - [ ] **4.** I2S microphone input (STM32 SAI or I2S + DMA).
 - [ ] **4a.** Analog microphone via ADC + DMA.
-- [x] **5.** I2S audio output for testing (e.g. SAI2 + DMA) — `i2s_audio_out` API; sine bench tests in debug menu **`i`**.
+- [x] **5.** I2S audio output for testing (SAI1.A + DMA) — `i2s_audio_out` API; 16b mono duplicated-slots wire format for MAX98357 single-speaker; sine bench tests in debug menu **`i`** (clean 440 Hz tone achieved).
 - [ ] **5a.** Audio output via on-chip DAC + DMA.
 - [ ] **6.** Gesture sensor: VL53L5CX (VL53L5CX-SATEL board).
 - [ ] **7.** Small TFT LCD on SPI (e.g. SPI2); consider open-source drivers (e.g. Bodmer / community ST7789 code).
 - [ ] **8.** CMSIS-DSP audio processing (scope TBD).
 - [x] **9.** Debug menu bench tests — *ongoing*; expand as each feature lands (LED submenu under **`t`** today).
+- [ ] **10.** Integrate legacy logging API (App/logging-api copied in; build disabled for now). Preserve/adapt debug_config.h style macros (LOG/LOGC/LOGCT + TAG/COLOR per-class filtering + ANSI colors via LOGCT etc.). Likely fold debug_config content into platform.h / device_config.h over time. Route main app + driver logs through it (not just debug menu).
+- [ ] **11.** CORDIC (and FMAC) experiment: use CORDIC SIN/COS (Q31, 14-cycle precision, phase-accumulator driven) for sine synthesis in place of software LUT or sinf(); natural fit for G4 trig accel. (FMAC for possible filtering later.) CMSIS-DSP prebuilts already linked.
 
 ---
 
@@ -92,9 +108,11 @@ Items here are **optional**—try when curiosity or bench time allows. Not order
 
 ---
 
-### IR receiver — L476 IP options
+### IR receiver — L476 IP options (historical reference)
 
 The STM32L476 has **no dedicated IR peripheral**. A 3-pin IR receiver module already demodulates the 38 kHz carrier; the MCU only decodes **logic-level pulse widths** (NEC / RC5 / Sony, etc.) in software.
+
+> **Note for G474:** The G4 family has more timer options and potentially different low-power / EXTI behavior. Re-evaluate timer input capture choices against the current pinout and `LED_Strip_Controller_G474.ioc` when this feature is worked.
 
 | Approach | On-chip IP | Fit for this project |
 |----------|------------|----------------------|
@@ -123,7 +141,11 @@ The STM32L476 has **no dedicated IR peripheral**. A 3-pin IR receiver module alr
   - **Struct/union members:** Hungarian only (`u16_strip_length`, `b_initialized`) — context comes from the struct type/instance (`led_strip_handle_t`), not `u16_led_strip_length`.
   - **Types/enums/macros:** `led_strip_err_t`, `LED_STRIP_ERR_OK` (module + role) are unchanged.
 - Balance descriptive names with brevity; treat identifiers **> 40 characters** as suspect.
-- **CubeMX / `Core/` (critical):** Treat `Core/` as **STM32CubeMX-owned**. Do **not** edit files under `Core/` (including `Core/Src/sai.c`, `main.c`, `stm32l4xx_it.c`, etc.) unless the user **explicitly** asks for a Core change in that task. **Never** change generated lines outside `/* USER CODE BEGIN … */` / `/* USER CODE END … */` without permission. Peripheral fixes (clocks, pins, DMA, SAI) belong in **`LED_Strip_Controller_L476.ioc`** → **Generate Code**, then verify the generated init. Application logic stays in **`App/`**. AI agents: if a fix would touch `Core/`, **stop and tell the user what to set in CubeMX** instead.
+- **CubeMX / `Core/` (critical):** Treat `Core/` as **STM32CubeMX-owned**. Do **not** edit files under `Core/` (including `Core/Src/sai.c`, `main.c`, `stm32g4xx_it.c`, etc.) unless the user **explicitly** asks for a Core change in that task. **Never** change generated lines outside `/* USER CODE BEGIN … */` / `/* USER CODE END … */` without permission. 
+
+  **Autogenerated code regeneration rule (mandatory):** The project must build cleanly and function correctly after a full "Generate Code" from the `.ioc` file with no manual edits outside USER CODE sections. All custom code, workarounds, diagnostics, or extensions in CubeMX-owned files **must** be placed strictly inside the `/* USER CODE BEGIN xxx */` … `/* USER CODE END xxx */` markers that CubeMX preserves. If a change cannot be expressed inside those markers, implement it via settings in the `.ioc` (preferred) or obtain explicit user approval for an exception. AI agents must verify after any Core edit that regeneration would not break the build. Peripheral configuration changes always go through the `.ioc` first.
+
+  Application logic stays in **`App/`**. AI agents: if a fix would touch `Core/`, **stop and tell the user what to set in CubeMX** instead.
 - **HAL** by default; register access and **LL** are fine when clearer or faster.
 - **GNU C11** (`-std=gnu11`): C11 plus GCC extensions; portability to other toolchains is not a goal.
 - **Doxygen**-style API comments; `//` or `/* */` for non-obvious logic and section breaks.
@@ -200,25 +222,15 @@ Parameters and locals keep Hungarian as elsewhere (`p_cfg`, `pfn_fill`, `u16_fra
 
 Do **not** use generic names like `audio_out_init()` or `led_strip_create()` (no Hungarian / no path segment) in `App/` — they collide once multiple paths exist.
 
-**I2S playback (`i2s_audio_out`):** SAI2.B → MAX98357 (`I2S_AUDIO_OUT_SAI_HANDLE` in `platform.h`). Ping-pong circular DMA; fill callback supplies 16-bit PCM (mono or stereo-interleaved); module packs 24-bit stereo wire words. Public API: `x_i2s_audio_out_init`, `x_i2s_audio_out_start`, `v_i2s_audio_out_stop`, `b_i2s_audio_out_is_idle`, `u32_i2s_audio_out_get_chunks_completed`, `u32_i2s_audio_out_get_stream_time_ms`, `u32_i2s_audio_out_get_sample_rate_hz`, `v_i2s_audio_out_callback_signal_eof`. Bench sine tones: `i2s_test_tone` (`x_i2s_test_tone_run_sine_until_key`), debug menu **`i`**. HAL forwards in `app_main.c`: `HAL_SAI_TxHalfCpltCallback` / `TxCpltCallback` / `ErrorCallback` → `v_i2s_audio_out_sai_*`. Init only when idle; EOF via `I2S_AUDIO_OUT_FILL_EOF` or `v_i2s_audio_out_callback_signal_eof()`; drain plays silence halves then stops DMA.
+**I2S playback (`i2s_audio_out`):** SAI1 Block A (Master TX) → MAX98357 clone single-speaker breakout (`I2S_AUDIO_OUT_SAI_HANDLE` in `platform.h`). Ping-pong circular DMA (M2P, WORD-aligned); fill callback supplies 16-bit PCM (mono or stereo-interleaved); module packs to 32-bit wire words (sample | (sample<<16) duplicated for the two active 16b slots). Current config: MONO mode, 2 slots (0+1 active=0x3), FrameLength=32, 16b data, NoDivider=ENABLE, MCKDIV≈20 → actual Fs ≈ 33.203 kHz (better than nominal 32 kHz target; measured/derived from regs in `u32_i2s_audio_out_compute_fs_hz`). Public API and bench usage as before. HAL forwards in `app_main.c`. Drain logic + silence halves on stop/EOF. See `App/Inc/i2s_audio_out.h` future note for INMP441 mic reuse (24b→16b compress acceptable for initial audition via this path).
 
-**SAI2 clock (amp) — fix in CubeMX, not hand-edited `Core/`:** PLLSAI2 → **8 MHz** SAI2 kernel (`RCC.SAI2Freq_Value=8000000`). I2S **24-bit stereo** → **64-bit** frame. With **No Divider = Disabled** (`SAI_MASTERDIVIDER_DISABLE`, NODIV=1), **Fs = SAI_CK / (MCKDIV × 64)**. Cube’s **Real Audio Frequency** line shows **31.25 kHz** only when **MCKDIV = 4**; **MCKDIV = 1** yields **125 kHz** LRCLK (**8 µs** period). Selecting **Audio Frequency = 32 kHz** alone lets L476 HAL recompute the wrong divider — scope **125 kHz** / **800 kHz** BCLK (32× ratio) is a symptom.
+**SAI clock / wire format — fix in CubeMX, not hand-edited `Core/`:** All SAI1.A params (AudioMode=SAI_MODEMASTER_TX, DataSize=16, FrameLength=32, MonoStereoMode=MONO, SlotNumber=2, SlotActive=0x00000003, NoDivider=ENABLE, MckOutput=DISABLE) and DMA (circular, mem WORD, periph WORD, M2P) are controlled via the `.ioc`. After regen, verify `Core/Src/sai.c` and `Core/Src/stm32g4xx_it.c` (callbacks stay in USER CODE only). Drive strength on SAI pins (PA8 SCK_A, PA9 FS_A, PA10 SD_A AF14) was lowered (MED/LOW) as short-term mitigation for jumper-wire ringing; probe load can mask issues. Future: proper series R + small C or shorter wiring.
 
-**CubeMX steps (SAI2 block B master TX, after regen verify `Core/Src/sai.c`):**
+**RCC:** SAI1 kernel clock source and PLL config per current `.ioc` (G474RE specifics; MCKDIV effective 20 for ~33 kHz). `u32_i2s_audio_out_get_sample_rate_hz()` and tone generator report the live-derived Fs.
 
-1. **Connectivity → SAI2 → Block B** — keep Master TX, I2S, 24-bit, 2 slots (unchanged).
-2. **Parameter Settings** — set **Audio Frequency** to **Master Clock Divider** / **MCKDIV** (wording varies by Cube version; *not* the fixed “32 kHz” enum only).
-3. Set **Master Clock Divider (MCKDIV) = 4** (because 8 MHz ÷ (4 × 64) = 31.25 kHz).
-4. Leave **No Divider** as **Disabled** (current `.ioc`: `SAI2.NoDivider-SAI_B_Master=SAI_MASTERDIVIDER_DISABLE`) so frame length stays 64.
-5. Confirm Cube still reports **Real Audio Frequency ≈ 31.25 kHz** (and ~−2.34 % error vs 32 kHz nominal).
-6. **Generate Code** — generated `MX_SAI2_Init()` should contain `SAI_AUDIO_FREQUENCY_MCKDIV` and `.Init.Mckdiv = 4` (exact lines may vary). Repeat for **SAI1 block A** (mic) if you use it.
-7. Bench: **LRCLK ~32 µs** period, **BCLK ~2 MHz** (64× LRCLK). MAX98357: **SD** high (~3.3 V).
+**Analog / other playback:** TBD later; keep the same pattern (`<path>_audio_out_*`).
 
-**RCC (unchanged):** `SAI2` clock source = **PLLSAI2** (`RCC.SAI2CLockSelection=PLLSAI2`).
-
-**Analog playback:** spec later; keep the same pattern (`<path>_audio_out_*`).
-
-HAL callbacks in `app_main.c` forward to `i2s_audio_out_*` / `i2s_audio_in_*` helpers, not mixed with `dac_*`.
+HAL callbacks in `app_main.c` forward to `i2s_audio_out_*` helpers.
 
 ---
 
@@ -227,3 +239,9 @@ HAL callbacks in `app_main.c` forward to `i2s_audio_out_*` / `i2s_audio_in_*` he
 | File | Notes |
 |------|--------|
 | `AI-Readme.md` | Living project guide for agents and contributors; amend as the design evolves. |
+| 2026-06 (this session) | Created n9xmj/LED_Strip_Controller_G474 remote (public, personal account). Added explicit three-repo lineage table. Updated for G474RE as current baseline. .gitignore + initial commit. |
+| 2026-06 (later) | LED driver bring-up completed (5th strip UART5 software support + force HAL_UART_TxCpltCallback in USER CODE blocks of `stm32g4xx_it.c` for G4 HAL callback path; no more timeouts/BUSY; FIFOs off for LED UARTs). I2S audio: finalized 16b mono duplicated wire format + DMA alignments; clean 440 Hz tone confirmed; temp [tone diag] spam removed; actual Fs~33.2 kHz documented. Logging API imported (`App/logging-api` present, IDE build disabled for this commit only). CORDIC+FMAC already enabled in .ioc + CMSIS DSP prebuilts linked; side-project queued. AI-Readme updated (status, strip map incl. #5, TODOs 10/11, architecture notes for current SAI1.A 16b config). "Autogenerated code regeneration rule (mandatory)" already present. |
+
+---
+
+**End of AI-Readme.md** — keep this file accurate and up to date.
