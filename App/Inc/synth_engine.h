@@ -17,8 +17,23 @@
 /** Initialize the synth engine (call once at startup, after MX_CORDIC_Init). */
 void v_synth_engine_init(void);
 
-/** Start a sine tone (non-blocking). Replaces any current tone. */
+/** Start a sine tone (non-blocking). Replaces any current tone. Prints diagnostic banner (for simple 'i' menu tests). */
 void v_synth_engine_start_sine(float f_freq_hz, float f_level);
+
+/**
+ * Set/retrigger a tone (freq + level) for interactive players or sequencers.
+ * Quiet (no diagnostic banner, minimal logging). Replaces current tone if playing.
+ * If nothing was active, performs the necessary i2s setup.
+ * Phase accumulator is reset for the new frequency.
+ */
+void v_synth_engine_set_tone(float f_freq_hz, float f_level);
+
+/**
+ * Update level/amplitude of the currently playing tone (or the level that will be used on next set_tone/start).
+ * Does not reset phase or frequency; change takes effect on subsequent fill samples (live volume while sustaining).
+ * Safe to call while playing.
+ */
+void v_synth_engine_set_level(float f_level);
 
 /** Stop current synthesis (requests drain/silence via i2s_audio_out). */
 void v_synth_engine_stop(void);

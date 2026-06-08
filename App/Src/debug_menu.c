@@ -13,6 +13,7 @@
 #include "led_strip_control.h"
 #include "i2s_test_tone.h"
 #include "synth_engine.h"   // new non-blocking CORDIC synth (direct sine for v1)
+#include "note_player.h"    // interactive terminal piano / note player ('p' from top menu)
 
 #include "debug_config.h"   // logging sugar (LOGCT etc.) for this module
 
@@ -656,6 +657,12 @@ static const menu_item_t x_debug_top_menu[] =
         .c_key = 'i',
         .p_c_text = "I2S audio tests",
         .p_x_menu = x_i2s_audio_tests_submenu
+    },
+    {
+        .x_type = MENU_ITEM_FUNCTION,
+        .c_key = 'p',
+        .p_c_text = "Interactive note player (terminal piano, CORDIC sustained tones)",
+        .pfn_function = v_note_player_run
     },
     {
         .x_type = MENU_ITEM_FUNCTION,

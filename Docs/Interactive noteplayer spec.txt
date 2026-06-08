@@ -1,0 +1,47 @@
+Simple keyboard terimnal driven piano test idea
+
+Create a console driven simplistic keyboard-like note player.
+
+Accepts these inputs:
+
+‘1’-‘8’ : Play whole-tone C..B tones (1=C, 2=D, ... , 7=B, 8=C +1 octave) 
+‘a’..‘g’ : Play whole-tone notes of same name
+‘A’..‘G’ : Play the notes named +1 semitone up; e.g. ‘A’ = play A sharp
+‘-’ or ‘,’ : Shift the octave down -1
+‘+’ or ‘.’ : Shift the octave up +1
+! @ # $ % ^ & * (shift-1 thru shift-8) : Directly set the octave 1..8
+‘ ‘ <Space> : Silence/rest.
+‘[’ : Lower volume by 10% of full scale
+‘]’ : Raise volume by 10% of full-scale
+‘v’ : Set volume to 50% FS
+‘V’ : Set volum to 100% FS
+‘‘’ : Output HAL_GetTick()
+‘~’ : Status display - time tick, note playing, octave, volume. CSV, can violate 10-char rule, concise and compact.
+<Esc> : Silence any note playing, exit the player interface.
+Other activation keys may be added later.
+
+Once a tone starts playing, it continues playing until another tone (note) is set, or <space> is sent.
+
+Default octave is 4, corresponding to octave 4 on a piano
+Note: Middle C = 261.63 Hz, octave 4
+Octave range: 1..8, bounded
+
+Volume defaults to 50% FS, can be lowered or raised in 10% steps, range 0..100% FS
+
+Octave and volume settings do not have to persist across calls (not static). Set to specified defaults on entry.
+
+Do not use the menu API to drive this. It can be invoked via the main menu,
+but the debug process that runs it will be a semi-blocking task, with its own
+i_getchar call, which will not block the main task loop.
+
+This interface could be used in conjunction with a driving script to enable a script-driven music player.
+
+As each key is processed, it should output a SHORT <=10 char + CRLF message, something both human and script-readable.
+e.g.:
+send ‘A’ -> output “A#\r\n”
+send ‘a’ -> output “A\r\n”
+send ‘1’ -> output “C\r\n”
+send ‘4’ -> output “Oct:4\r\n”
+Send ‘v’ -> output “Vol:50\r\n”
+
+Unsupported key codes emit “?\r\n” and ignored.

@@ -138,63 +138,13 @@ void v_synth_engine_init(void)
 
 void v_synth_engine_start_sine(float f_freq_hz, float f_level)
 {
-    if (f_level < 0.0f) f_level = 0.0f;
-    if (f_level > 1.0f) f_level = 1.0f;
-
     LOGCT(LOG_I2S_OUT, "start_sine freq=%.1f level=%.2f", (double)f_freq_hz, (double)f_level);
 
-    // Stop any current stream first (non-blocking request)
-    if (b_synth_engine_is_playing() || !b_i2s_audio_out_is_idle())
-    {
-        v_synth_engine_stop();
-        // Short cooperative wait for drain (max ~100ms). Safe in main context (menu dispatch).
-        // Prevents immediate BUSY on re-start.
-        uint32_t t0 = HAL_GetTick();
-        while (!b_i2s_audio_out_is_idle() && (HAL_GetTick() - t0 < 100))
-        {
-            v_app_polling_task();
-        }
-    }
+    v_synth_engine_set_tone(f_freq_hz, f_level);
 
-    s_f_freq_hz = f_freq_hz;
-    s_f_level   = f_level;
-    s_u32_phase = 0u;
-
-    // Get actual Fs from the SAI (same as legacy)
-    // We will query after i2s init or use a default and correct later.
-    i2s_audio_out_config_t x_cfg;
-    x_cfg.pfn_fill           = x_synth_engine_fill;
-    x_cfg.p_pv_user          = NULL;
-    x_cfg.u16_frames_per_half = 256u;   // same as legacy test tone
-    x_cfg.u8_silence_halves   = I2S_AUDIO_OUT_DEFAULT_SILENCE_HALVES;
-    x_cfg.b_stereo_in         = false;
-
-    LOGCT(LOG_I2S_OUT, "calling i2s_audio_out_init (frames_per_half=%u)", x_cfg.u16_frames_per_half);
-    i2s_audio_out_err_t x_err = x_i2s_audio_out_init(&x_cfg);
-    LOGCT(LOG_I2S_OUT, "i2s_audio_out_init returned %d (0=OK,3=BUSY,etc)", (int)x_err);
-    if (x_err != I2S_AUDIO_OUT_ERR_OK)
-    {
-        s_b_active = false;
-        return;
-    }
-
-    s_u32_fs_hz = u32_i2s_audio_out_get_sample_rate_hz();
-    if (s_u32_fs_hz == 0u) s_u32_fs_hz = 33203u; // approx from legacy
-
-    s_u32_phase_step = u32_synth_compute_phase_step(s_f_freq_hz, s_u32_fs_hz);
-    LOGCT(LOG_I2S_OUT, "Fs=%lu phase_step=0x%08lx", (unsigned long)s_u32_fs_hz, (unsigned long)s_u32_phase_step);
-
-    s_b_active = true;  // must set BEFORE start(), so that the prefill produces in start() see active=true and call CORDIC (not return EOF)
-
-    x_err = x_i2s_audio_out_start();
-    LOGCT(LOG_I2S_OUT, "i2s_audio_out_start returned %d", (int)x_err);
-    if (x_err != I2S_AUDIO_OUT_ERR_OK)
-    {
-        s_b_active = false;
-        return;
-    }
-
-    // Detailed status like legacy (visible on console for bench diagnosis)
+    // Emit the detailed banner only for the verbose path (simple 'i' menu test tones).
+    // Interactive note player / sequencers use set_tone directly for clean short responses per key.
+    if (s_b_active)
     {
         const SAI_HandleTypeDef *p_x_sai = &I2S_AUDIO_OUT_SAI_HANDLE;
         uint32_t u32_mckdiv_reg = (p_x_sai->Instance->CR1 & SAI_xCR1_MCKDIV) >> SAI_xCR1_MCKDIV_Pos;
@@ -208,6 +158,68 @@ void v_synth_engine_start_sine(float f_freq_hz, float f_level)
                (unsigned long) ((p_x_sai->Instance->FRCR & SAI_xFRCR_FRL) + 1u),
                (unsigned) (((p_x_sai->Instance->CR1 & SAI_xCR1_NODIV) != 0u) ? 1u : 0u));
     }
+}
+
+/**
+ * Core (quiet) implementation for starting or changing a tone.
+ * Used by v_synth_engine_start_sine (which adds banner) and directly by note player / future sequencer.
+ */
+void v_synth_engine_set_tone(float f_freq_hz, float f_level)
+{
+    if (f_level < 0.0f) f_level = 0.0f;
+    if (f_level > 1.0f) f_level = 1.0f;
+
+    // Stop any current stream first (non-blocking request) to allow clean retrigger
+    if (b_synth_engine_is_playing() || !b_i2s_audio_out_is_idle())
+    {
+        v_synth_engine_stop();
+        // Short cooperative wait for drain. Prevents BUSY on re-start. Player/sequencer calls are frequent.
+        uint32_t t0 = HAL_GetTick();
+        while (!b_i2s_audio_out_is_idle() && (HAL_GetTick() - t0 < 100))
+        {
+            v_app_polling_task();
+        }
+    }
+
+    s_f_freq_hz = f_freq_hz;
+    s_f_level   = f_level;
+    s_u32_phase = 0u;
+
+    i2s_audio_out_config_t x_cfg;
+    x_cfg.pfn_fill            = x_synth_engine_fill;
+    x_cfg.p_pv_user           = NULL;
+    x_cfg.u16_frames_per_half = 256u;
+    x_cfg.u8_silence_halves   = I2S_AUDIO_OUT_DEFAULT_SILENCE_HALVES;
+    x_cfg.b_stereo_in         = false;
+
+    i2s_audio_out_err_t x_err = x_i2s_audio_out_init(&x_cfg);
+    if (x_err != I2S_AUDIO_OUT_ERR_OK)
+    {
+        s_b_active = false;
+        return;
+    }
+
+    s_u32_fs_hz = u32_i2s_audio_out_get_sample_rate_hz();
+    if (s_u32_fs_hz == 0u) s_u32_fs_hz = 33203u; // approx from legacy
+
+    s_u32_phase_step = u32_synth_compute_phase_step(s_f_freq_hz, s_u32_fs_hz);
+
+    s_b_active = true;  // MUST before start() so prefill in x_i2s start sees active and generates CORDIC samples
+
+    x_err = x_i2s_audio_out_start();
+    if (x_err != I2S_AUDIO_OUT_ERR_OK)
+    {
+        s_b_active = false;
+        return;
+    }
+}
+
+void v_synth_engine_set_level(float f_level)
+{
+    if (f_level < 0.0f) f_level = 0.0f;
+    if (f_level > 1.0f) f_level = 1.0f;
+    s_f_level = f_level;
+    // Change is picked up by next fill callback samples. No phase/freq disturbance.
 }
 
 void v_synth_engine_stop(void)
