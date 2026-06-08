@@ -133,6 +133,18 @@ static void v_noteplayer_play(int8_t i8_octave, int8_t i8_semitone)
     printf("%s\r\n", ac_name);
 }
 
+static void v_noteplayer_print_help(void)
+{
+    printf("\r\n*** Interactive note player (CORDIC direct) ***\r\n");
+    printf("Octave 4, Vol 50%%. Tone sustains until next note key or space.\r\n");
+    printf("1-8: C D E F G A B C+   a-g: naturals   A-G: sharps\r\n");
+    printf("  - , : octave down     + . : octave up     !@#$%%^&* : set octave 1-8\r\n");
+    printf("  [ ] : vol -/+ 10%%     v : 50%%     V : 100%%\r\n");
+    printf("  <space> : rest/silence     / : tick     ~ : status     ? : help\r\n");
+    printf("Esc : silence + exit\r\n");
+    printf("Ready (press keys):\r\n");
+}
+
 //------------------------------------------------------------------------------
 /** Public entry point. */
 
@@ -146,14 +158,7 @@ void v_note_player_run(void)
     v_synth_engine_stop();   // silence anything left from other tests ('i' menu etc.)
 
     // Entry instructions (human friendly; short responses still emitted for each key / scriptability)
-    printf("\r\n*** Interactive note player (CORDIC direct) ***\r\n");
-    printf("Octave 4, Vol 50%%. Tone sustains until next note key or space.\r\n");
-    printf("1-8: C D E F G A B C+   a-g: naturals   A-G: sharps\r\n");
-    printf("  - , : octave down     + . : octave up     !@#$%%^&* : set octave 1-8\r\n");
-    printf("  [ ] : vol -/+ 10%%     v : 50%%     V : 100%%\r\n");
-    printf("  <space> : rest/silence     ~ : status     ? : tick\r\n");
-    printf("Esc : silence + exit\r\n");
-    printf("Ready (press keys):\r\n");
+    v_noteplayer_print_help();
 
     for (;;)
     {
@@ -336,10 +341,17 @@ void v_note_player_run(void)
             continue;
         }
 
-        // Tick (per spec: just the number)
-        if (c == '?')
+        // Timestamp (replaces old '?' per mod)
+        if (c == '/')
         {
             printf("%lu\r\n", (unsigned long)HAL_GetTick());
+            continue;
+        }
+
+        // Re-display entry help
+        if (c == '?')
+        {
+            v_noteplayer_print_help();
             continue;
         }
 

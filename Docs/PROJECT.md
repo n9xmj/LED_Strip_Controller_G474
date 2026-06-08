@@ -138,6 +138,8 @@ Items may be done out of order. Toggle boxes as work completes.
 
 - [ ] IR remote control receiver (demodulated 38 kHz module). Decode NEC-style and map keys to patterns, menu actions, or test triggers. G4 timer input capture options should be re-evaluated against the current `.ioc` pinout when this is worked.
 
+- [ ] USB device usage (STM32G474 USB FS). Explore standard classes for project-relevant features: CDC (command-and-control interface or alternative debug console), HID (lighting pattern upload or custom controls), MIDI (note input to drive the synth / player-piano), or similar. Prefer composite device if multiple classes are combined. Keep initial scope simple; re-evaluate .ioc pinout/clock config and USB middleware if pursued.
+
 - [ ] Music sequencer / player-piano API. Uses audio synthesis to play musical tones. Accepts a compact script string providing musical notes, durations, tempo settings, and various modifiers to sequence and play monotonal music. The script format will likely be modeled on (an expanded version of) the string/script format used by the old IBM GWBASIC PLAY command. Timing uses interrupts so playback can occur in the background, or RTOS tasks once RTOS is integrated. The CORDIC work is a prerequisite (for efficient sine/tone generation without LUTs or floating-point sinf).
 - [x] Interactive note player (experimental for-fun, 'p' from main debug menu). Monophonic sustained tones via terminal keys (1-8/a-g/A-G layout, octave/vol controls, status, script-friendly short responses). Uses the CORDIC synth engine (set_tone + set_level for live changes, quiet path). 2^(n/12) freq calc from C1 base (no LUT). Precursor / validation for the full sequencer above. See Docs/Interactive noteplayer spec.txt.
 
