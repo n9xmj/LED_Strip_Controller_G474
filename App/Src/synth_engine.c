@@ -1,11 +1,14 @@
 /**
  * @file synth_engine.c
- * @brief Synthesis engine implementation (first iteration: direct CORDIC sine).
+ * @brief Synthesis engine implementation (direct CORDIC sine + light attack/decay envelope).
  *
  * - Direct (on-the-fly) CORDIC evaluation inside the audio fill (ISR context ok for v1 sine).
- * - Non-blocking start/stop.
+ * - Simple linear attack (~7 ms) + short decay (~4 ms) envelope applied per-sample in the
+ *   fill path. Eliminates the leading-edge and turn-off pops/clicks on note changes and
+ *   start/stop without buffering or extra jobs.
+ * - Non-blocking start/stop. Live note changes (note player) are hot-swapped with no drain gap.
  * - State owned here; fill registered with i2s_audio_out.
- * - Service hook for future job-driven work (sequencing, FM, envelopes).
+ * - Service hook for future job-driven work (sequencing, FM, full ADSR, etc.).
  * - CORDIC configured for SINE, 32-bit Q1.31, reasonable precision.
  */
 
@@ -33,6 +36,26 @@ static uint32_t s_u32_phase_step;
 
 // CORDIC configured flag
 static bool     s_b_cordic_configured;
+
+// Envelope (light linear attack + short decay/release) to eliminate audible pops/clicks
+// on note activation, deactivation, and live changes from the note player or sequencer.
+// Attack/decay times are short enough to feel immediate but long enough to soften edges.
+// These advance at audio sample rate inside the fill (no job or service involvement needed).
+#define SYNTH_ENV_ATTACK_MS   (7u)   // lighter attack on start/retrigger
+#define SYNTH_ENV_DECAY_MS    (4u)   // short decay on stop
+#define SYNTH_ENV_TRANSITION_RELEASE_MS (3u)  // quick release-to-zero on live note changes (note player etc.) before switching freq/phase. Switch only happens near amp=0 so discontinuity is inaudible. Linear for now (see note in header).
+
+// Current envelope state (0.0 = silent, 1.0 = full requested level)
+static float s_f_env_gain;
+static float s_f_env_inc;   // >0 attacking, <0 releasing, 0 = steady (sustain or idle)
+
+// For clean monophonic transitions: when a new set_tone arrives while playing,
+// we fast-release the *old* tone (keeping its freq/phase), then switch params
+// + start attack only when env has reached ~0. This is the standard "release old
+// to silence then start new" de-click technique.
+static float s_f_pending_freq_hz;
+static float s_f_pending_level;
+static bool  s_b_retrigger_pending;
 
 // Diagnostics counters (updated in ISR fill, read in service/main)
 static volatile uint32_t s_u32_fills = 0;
@@ -128,11 +151,18 @@ void v_synth_engine_init(void)
     s_u32_phase_step = 0u;
     s_b_cordic_configured = false;
 
+    s_f_env_gain = 0.0f;
+    s_f_env_inc  = 0.0f;
+
+    s_f_pending_freq_hz = 0.0f;
+    s_f_pending_level   = 0.0f;
+    s_b_retrigger_pending = false;
+
     s_u32_fills = 0;
     s_i32_last_cordic_out = 0;
     s_u32_cordic_errors = 0;
 
-    LOGCT(LOG_I2S_OUT, "synth_engine_init (CORDIC direct sine path)");
+    LOGCT(LOG_I2S_OUT, "synth_engine_init (CORDIC direct sine path + light attack/decay envelope)");
     v_synth_configure_cordic();
 }
 
@@ -163,27 +193,60 @@ void v_synth_engine_start_sine(float f_freq_hz, float f_level)
 /**
  * Core (quiet) implementation for starting or changing a tone.
  * Used by v_synth_engine_start_sine (which adds banner) and directly by note player / future sequencer.
+ *
+ * Envelope behavior (linear ramps for v1):
+ * - Cold start: init the i2s path + start with attack ramp from zero (first samples are near-silent).
+ * - Live retrigger (note change while streaming, e.g. 'p' player keys or octave shift):
+ *   We do *not* instantly change freq/phase. Instead we start a short fast release of the
+ *   *old* tone (old freq/phase keep playing while amp decays). Only when env reaches ~0
+ *   (inside the fill) do we apply the new freq, reset phase, and begin the normal attack.
+ *   This guarantees the waveform discontinuity happens at (near) zero amplitude → no pop.
+ *   The I2S stream is never stopped for live changes (no drain gap).
+ * - Normal stop: short decay then EOF/drain.
+ * - Proper ADSR later should use exp/log curves for the segments (A/D/R); linear is acceptable
+ *   and cheap for de-popping right now.
  */
 void v_synth_engine_set_tone(float f_freq_hz, float f_level)
 {
     if (f_level < 0.0f) f_level = 0.0f;
     if (f_level > 1.0f) f_level = 1.0f;
 
-    // Stop any current stream first (non-blocking request) to allow clean retrigger
-    if (b_synth_engine_is_playing() || !b_i2s_audio_out_is_idle())
+    bool was_streaming = s_b_active && !b_i2s_audio_out_is_idle();
+
+    if (was_streaming)
     {
-        v_synth_engine_stop();
-        // Short cooperative wait for drain. Prevents BUSY on re-start. Player/sequencer calls are frequent.
+        // Hot/live retrigger path (the common case for the interactive note player).
+        // Keep the stream and the *old* oscillator running. Start a quick release-to-zero
+        // of the current tone. Stash the requested new tone; the fill will switch to it
+        // (new freq + phase=0 + attack) only after the old one has decayed to silence.
+        float rel_samps = (s_u32_fs_hz * (float)SYNTH_ENV_TRANSITION_RELEASE_MS) / 1000.0f;
+        if (rel_samps < 4.0f) rel_samps = 4.0f;
+        s_f_env_inc = (s_f_env_gain > 0.0f) ? (-s_f_env_gain / rel_samps) : 0.0f;
+
+        s_f_pending_freq_hz = f_freq_hz;
+        s_f_pending_level   = f_level;
+        s_b_retrigger_pending = true;
+
+        // Do not touch s_f_freq_hz / s_f_level / phase / step yet — they stay "old" during the release tail.
+        // The next fill(s) will see the negative inc and perform the decay + deferred switch.
+        return;
+    }
+
+    // Cold start path (nothing was streaming, or recovering from a previous full stop).
+    s_f_freq_hz = f_freq_hz;
+    s_f_level   = f_level;
+    s_u32_phase = 0u;
+
+    // Ensure idle before re-init (rare for normal piano use).
+    if (!b_i2s_audio_out_is_idle())
+    {
+        v_i2s_audio_out_stop();
         uint32_t t0 = HAL_GetTick();
-        while (!b_i2s_audio_out_is_idle() && (HAL_GetTick() - t0 < 100))
+        while (!b_i2s_audio_out_is_idle() && (HAL_GetTick() - t0 < 60))
         {
             v_app_polling_task();
         }
     }
-
-    s_f_freq_hz = f_freq_hz;
-    s_f_level   = f_level;
-    s_u32_phase = 0u;
 
     i2s_audio_out_config_t x_cfg;
     x_cfg.pfn_fill            = x_synth_engine_fill;
@@ -196,6 +259,7 @@ void v_synth_engine_set_tone(float f_freq_hz, float f_level)
     if (x_err != I2S_AUDIO_OUT_ERR_OK)
     {
         s_b_active = false;
+        s_f_env_inc = 0.0f;
         return;
     }
 
@@ -204,12 +268,19 @@ void v_synth_engine_set_tone(float f_freq_hz, float f_level)
 
     s_u32_phase_step = u32_synth_compute_phase_step(s_f_freq_hz, s_u32_fs_hz);
 
-    s_b_active = true;  // MUST before start() so prefill in x_i2s start sees active and generates CORDIC samples
+    // Attack from zero so the prefill / first audio has a soft leading edge.
+    float attack_samps = (s_u32_fs_hz * (float)SYNTH_ENV_ATTACK_MS) / 1000.0f;
+    if (attack_samps < 8.0f) attack_samps = 8.0f;
+    s_f_env_gain = 0.0f;
+    s_f_env_inc  = 1.0f / attack_samps;
+
+    s_b_active = true;  // MUST before start() so prefill in x_i2s start sees active
 
     x_err = x_i2s_audio_out_start();
     if (x_err != I2S_AUDIO_OUT_ERR_OK)
     {
         s_b_active = false;
+        s_f_env_inc = 0.0f;
         return;
     }
 }
@@ -227,9 +298,25 @@ void v_synth_engine_stop(void)
     LOGCT(LOG_I2S_OUT, "stop (active was %d)", (int)s_b_active);
     if (s_b_active)
     {
-        v_i2s_audio_out_stop();
+        // Initiate a short decay ramp. The fill will continue producing the decaying
+        // tail of the sine for a few ms, then return EOF which triggers the i2s drain.
+        // This replaces the previous hard cut-off (major source of turn-off pop).
+        float decay_samps = (s_u32_fs_hz * (float)SYNTH_ENV_DECAY_MS) / 1000.0f;
+        if (decay_samps < 4.0f) decay_samps = 4.0f;
+        // Ramp from whatever the current env gain is down to zero.
+        s_f_env_inc = (s_f_env_gain > 0.0f) ? (-s_f_env_gain / decay_samps) : 0.0f;
+        s_b_retrigger_pending = false;  // cancel any queued note change; user explicitly stopped
+        // s_b_active remains true until the fill crosses zero and clears it + returns EOF.
+        // The i2s stop/drain is driven by that EOF, not here.
     }
-    s_b_active = false;
+    else
+    {
+        // Already inactive; make sure i2s layer is also idle.
+        if (!b_i2s_audio_out_is_idle())
+        {
+            v_i2s_audio_out_stop();
+        }
+    }
 }
 
 bool b_synth_engine_is_playing(void)
@@ -240,7 +327,8 @@ bool b_synth_engine_is_playing(void)
 void v_synth_engine_service(void)
 {
     // v1: mostly no-op. Re-ensure CORDIC config if it ever failed.
-    // Future iterations: advance envelopes, process queued note events from jobs, etc.
+    // Envelope advance happens at audio rate inside x_synth_engine_fill (per-sample linear ramps).
+    // Future iterations (PLAY sequencer, full ADSR, etc.) can use this hook for event scheduling.
     if (!s_b_cordic_configured)
     {
         v_synth_configure_cordic();
@@ -278,10 +366,67 @@ i2s_audio_out_fill_result_t x_synth_engine_fill(int16_t *p_i16_pcm,
 
     uint32_t u32_phase = s_u32_phase;
     uint32_t u32_step  = s_u32_phase_step;
-    float    f_lvl     = s_f_level;
+    float    f_base_lvl = s_f_level;
+    float    f_env      = s_f_env_gain;
+    float    f_inc      = s_f_env_inc;
 
     for (uint16_t u16_i = 0u; u16_i < u16_max_frames; u16_i++)
     {
+        // Advance the linear envelope at sample rate. This is cheap compared with
+        // the per-sample CORDIC and gives smooth attack/decay edges with no extra
+        // buffering or jobs required.
+        if (f_inc > 0.0f)
+        {
+            f_env += f_inc;
+            if (f_env >= 1.0f)
+            {
+                f_env = 1.0f;
+                f_inc = 0.0f;
+            }
+        }
+        else if (f_inc < 0.0f)
+        {
+            f_env += f_inc;
+            if (f_env <= 0.0f)
+            {
+                f_env = 0.0f;
+                f_inc = 0.0f;
+
+                if (s_b_retrigger_pending)
+                {
+                    // We have decayed the *old* tone to (near) silence using its own freq/phase.
+                    // Now it is safe to switch the oscillator parameters. The discontinuity
+                    // (phase reset + new freq) happens at amp ~ 0, so it produces no audible pop.
+                    s_f_freq_hz = s_f_pending_freq_hz;
+                    s_f_level   = s_f_pending_level;
+
+                    uint32_t new_step = u32_synth_compute_phase_step(s_f_freq_hz, s_u32_fs_hz);
+                    s_u32_phase_step = new_step;
+                    s_u32_phase = 0u;           // fresh phase for the new note (consistent attack point)
+
+                    // Update locals so the *rest of this half* (starting with this sample) uses the new tone.
+                    u32_step  = new_step;
+                    u32_phase = 0u;             // this sample will be the first of the new freq (phase 0)
+                    f_base_lvl = s_f_level;
+
+                    // Begin the normal attack ramp for the new note (from zero).
+                    float attack_samps = (s_u32_fs_hz * (float)SYNTH_ENV_ATTACK_MS) / 1000.0f;
+                    if (attack_samps < 8.0f) attack_samps = 8.0f;
+                    f_env = 0.0f;
+                    f_inc  = 1.0f / attack_samps;
+
+                    s_b_retrigger_pending = false;
+                    // s_b_active stays true
+                }
+                else
+                {
+                    s_b_active = false;   // normal release complete; remaining samples in this half will be silent
+                }
+            }
+        }
+
+        float f_eff_lvl = f_base_lvl * f_env;
+
         int32_t i32_angle = i32_phase_to_cordic_q31(u32_phase);
 
         int32_t i32_out = 0;
@@ -297,13 +442,23 @@ i2s_audio_out_fill_result_t x_synth_engine_fill(int16_t *p_i16_pcm,
         s_i32_last_cordic_out = i32_out;  // for service to report (sampled)
         s_u32_fills++;
 
-        p_i16_pcm[u16_i] = i16_scale_cordic_result(i32_out, f_lvl);
+        p_i16_pcm[u16_i] = i16_scale_cordic_result(i32_out, f_eff_lvl);
 
         u32_phase += u32_step;
     }
 
     s_u32_phase = u32_phase;
+    s_f_env_gain = f_env;
+    s_f_env_inc  = f_inc;
 
     *p_u16_frames_out = u16_max_frames;
+
+    // If a release just completed inside this fill, return EOF so the i2s layer
+    // will drain (silence tails + stop DMA). During the decay we were still
+    // returning OK + the actual decaying sine tail (no hard cut).
+    if (!s_b_active)
+    {
+        return I2S_AUDIO_OUT_FILL_EOF;
+    }
     return I2S_AUDIO_OUT_FILL_OK;
 }

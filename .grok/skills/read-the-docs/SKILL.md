@@ -18,6 +18,7 @@ Follow the detailed instructions defined in the primary bootstrap skill (`.grok/
 - `README.md`
 - `Docs/PROJECT.md`
 - `SCRIPTS.md`
+- `.grok/memory/` (MEMORY.md index + all body files)
 - Then run `/myskills` and list `.grok/skills/`
 
 After loading everything, summarize readiness and ask for the actual task.

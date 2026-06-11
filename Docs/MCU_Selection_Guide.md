@@ -11,6 +11,7 @@ This guide summarizes MCU/Nucleo options based on current project needs and the 
   - DSP features (CORDIC + FMAC heavily used in current synth engine)
   - USB device support (CDC/HID/MIDI composite in wishlist)
   - Headroom for: large DMA buffers (LED + audio), RTOS, pattern storage, polyphonic synthesis, future gesture/TFT/mic
+  - External storage (QSPI NOR flash + SD card) + filesystem (LittleFS / FatFs) for offloading patterns, sequences, samples, and other cold data from limited on-chip SRAM
 - Current board: **Nucleo-G474RE (STM32G474RE)**
   - Cortex-M4 @ 170 MHz
   - 128 KB SRAM / 512 KB Flash
@@ -29,13 +30,15 @@ This guide summarizes MCU/Nucleo options based on current project needs and the 
 
 **Trigger for upgrade**: When adding RTOS + any two of the above features.
 
+**Mitigation on current or new hardware**: Offload "cold" data (pattern/sequence strings, audio samples, presets, uploaded content) to onboard QSPI NOR flash (via LittleFS) or SD card (via FatFs/FAT32 for PC drag-and-drop compatibility). Stream only what's needed into the limited SRAM at runtime. This extends the usable life of the G474's 128 KB significantly for data-heavy but non-real-time-critical features. The FK H7 boards already expose these peripherals.
+
 ## Comparison of Strong Nucleo Options
 
 | Board                  | MCU              | CPU                  | RAM          | Flash   | Key Strengths for This Project                          | Key Trade-offs                                      | Notes / Availability |
 |------------------------|------------------|----------------------|--------------|---------|---------------------------------------------------------|-----------------------------------------------------|----------------------|
 | **Nucleo-G474RE** (current) | STM32G474RE     | M4 @ 170 MHz        | 128 KB      | 512 KB | CORDIC + FMAC (current synth engine), excellent analog, many UARTs, SAI, USB FS | Low RAM headroom for RTOS + buffers                 | Best balance today. Widely stocked at Mouser. |
-| **Nucleo-H723ZG**     | STM32H723ZG     | M7 @ 550 MHz        | 564 KB      | 1 MB   | Massive RAM, very fast M7, multiple SAI, USB FS+HS, plenty of UARTs (4 USART + 4 UART) | No hardware CORDIC/FMAC; higher power/complexity    | Good upgrade path. Mouser/DigiKey stock. |
-| **Nucleo-H743ZI2**    | STM32H743ZI     | M7 @ 480 MHz        | 1 MB        | 2 MB   | Even more RAM, excellent peripherals (SAI, USB HS+FS, Ethernet), very mature ecosystem | No CORDIC/FMAC; biggest migration effort            | **Strongly recommended** if moving to H7. Very popular for high-end hobby projects. |
+| **Nucleo-H723ZG**     | STM32H723ZG     | M7 @ 550 MHz        | 564 KB      | 1 MB   | Massive RAM, very fast M7, multiple SAI, USB FS+HS, plenty of UARTs (4 USART + 4 UART). Onboard QSPI flash + SD for LittleFS/FatFs storage of patterns/samples (RAM offload). | No hardware CORDIC/FMAC; higher power/complexity    | Good upgrade path. Mouser/DigiKey stock. |
+| **Nucleo-H743ZI2**    | STM32H743ZI     | M7 @ 480 MHz        | 1 MB        | 2 MB   | Even more RAM + 64 MB external SDRAM, excellent peripherals (SAI, USB HS+FS, Ethernet), very mature ecosystem. Onboard QSPI + SD for filesystems (LittleFS/FatFs) to further reduce SRAM pressure. | No CORDIC/FMAC; biggest migration effort            | **Strongly recommended** if moving to H7. Very popular for high-end hobby projects. |
 | **Nucleo-F767ZI**     | STM32F767ZI     | M7 @ 216 MHz        | 512 KB      | 2 MB   | 4× RAM vs G474, solid UARTs + SAI + USB, cheaper than H7 | Older family, less future-proof than H7             | Good "middle step" if you want more RAM without jumping to 550 MHz. |
 
 ### Other Notes on Alternatives

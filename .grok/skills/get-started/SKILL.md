@@ -18,8 +18,9 @@ When this skill is invoked, follow the instructions in the primary `bootstrap` s
 2. Read `README.md` (root).
 3. Read `Docs/PROJECT.md`.
 4. Read `SCRIPTS.md`.
-5. Run `/myskills` (or invoke the myskills skill).
-6. List the `.grok/skills/` directory.
+5. Read `.grok/memory/MEMORY.md` and every body file it indexes (project-local agent memory).
+6. Run `/myskills` (or invoke the myskills skill).
+7. List the `.grok/skills/` directory.
 
 After completing the sequence, give the user a brief readiness summary and wait for the actual work request.
 

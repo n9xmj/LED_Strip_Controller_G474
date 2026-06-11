@@ -53,6 +53,7 @@ This is a hobby bare-metal STM32 firmware project with the following aspirations
 - **Gesture / “theremin” interaction:** Hand gestures (e.g. VL53L5CX time-of-flight) to control lighting and possibly sound.
 - **Status UI:** Small TFT over SPI (ST7789-class or similar).
 - **DSP:** Use CMSIS-DSP (and G4 hardware accelerators CORDIC/FMAC) for audio processing.
+- **Networked / smart features:** Offload WiFi, Bluetooth, and MQTT (AWS or local) to an ESP32 coprocessor module communicating over bidirectional UART. Enables remote control, pattern upload, telemetry, and home-automation integration without burdening the real-time STM32 core.
 - Other ideas may be added over time.
 
 **Author background:** Strong experience with bare-metal STM32 (especially low/mid-range parts). Less experience with RTOS, DSP, audio signal chains, and TFT displays. Moderate electrical engineering background.
@@ -132,7 +133,7 @@ Items may be done out of order. Toggle boxes as work completes.
 - [ ] CMSIS-DSP audio processing (scope TBD).
 - [x] Debug menu bench tests — ongoing; expand as features land.
 - [x] Integrate and restructure legacy logging API.
-- [ ] CORDIC (and FMAC) experiment: use hardware trig acceleration for sine synthesis, filtering, etc. (prerequisite for the music sequencer / player-piano experiment described in the wishlist below).
+- [ ] CORDIC (and FMAC) experiment: use hardware trig acceleration for sine synthesis, filtering, etc. (prerequisite for music sequencer / player-piano; see wishlist below and [Docs/PLAY_language_design.md](Docs/PLAY_language_design.md)).
 
 ## TODO Wishlist (Low Priority / Experiments)
 
@@ -140,8 +141,12 @@ Items may be done out of order. Toggle boxes as work completes.
 
 - [ ] USB device usage (STM32G474 USB FS). Explore standard classes for project-relevant features: CDC (command-and-control interface or alternative debug console), HID (lighting pattern upload or custom controls), MIDI (note input to drive the synth / player-piano), or similar. Prefer composite device if multiple classes are combined. Keep initial scope simple; re-evaluate .ioc pinout/clock config and USB middleware if pursued.
 
-- [ ] Music sequencer / player-piano API. Uses audio synthesis to play musical tones. Accepts a compact script string providing musical notes, durations, tempo settings, and various modifiers to sequence and play monotonal music. The script format will likely be modeled on (an expanded version of) the string/script format used by the old IBM GWBASIC PLAY command. Timing uses interrupts so playback can occur in the background, or RTOS tasks once RTOS is integrated. The CORDIC work is a prerequisite (for efficient sine/tone generation without LUTs or floating-point sinf).
-- [x] Interactive note player (experimental for-fun, 'p' from main debug menu). Monophonic sustained tones via terminal keys (1-8/a-g/A-G layout, octave/vol controls, status, script-friendly short responses). Uses the CORDIC synth engine (set_tone + set_level for live changes, quiet path). 2^(n/12) freq calc from C1 base (no LUT). Precursor / validation for the full sequencer above. See Docs/Interactive noteplayer spec.txt.
+- [ ] ESP32 coprocessor module (e.g. ESP32-C3/C6 or S3). Provide WiFi, Bluetooth, and MQTT connectivity (to AWS IoT or a local broker) for remote control, pattern/effect upload, state telemetry, and home-automation integration. Communicate over a bidirectional UART link (following the same architecture as the mirror project) so the main STM32 can stay focused on real-time LED driving, audio synthesis, and low-latency tasks. This also sidesteps STM32 pinmux and RAM constraints for networking features.
+
+- [ ] External storage + lightweight filesystem (onboard QSPI NOR flash + microSD). Use LittleFS on NOR flash (power-loss safe, wear-leveled, low RAM) for internal patterns, sequences, config, and wavetables. Use FatFs/FAT32 on SD for user-friendly drag-and-drop of lighting patterns, MIDI sequences, or audio samples from a PC. Stream larger data (samples, complex sequences) on demand to avoid loading everything into the 128 KB SRAM. Perfect for the player-piano sequencer (see [Docs/PLAY_language_design.md](Docs/PLAY_language_design.md)) and future polyphonic/sample-based synthesis. The H7 boards already have these peripherals populated.
+
+- [ ] Music sequencer / player-piano API. See [Docs/PLAY_language_design.md](Docs/PLAY_language_design.md) for the complete PLAY meta-language specification (note descriptors, durations W/H/Q/I/X/Y + dot, articulation, duty, commands R/T/O/K/V, repeats, labels/gotos, polyphony via independent voices + conductor model, EBNF, parser/scheduler, storage integration, etc.), design, and roadmap. The CORDIC synth engine and interactive note player are stepping stones.
+- [x] Interactive note player (experimental for-fun, 'p' from main debug menu). Monophonic sustained tones via terminal keys (1-8/a-g/A-G layout, octave/vol controls, status, script-friendly short responses). Uses the CORDIC synth engine (set_tone + set_level for live changes, quiet path). 2^(n/12) freq calc from C1 base (no LUT). Precursor / validation for the full sequencer. See Docs/Interactive noteplayer spec.txt and [Docs/PLAY_language_design.md](Docs/PLAY_language_design.md) for the planned PLAY meta-language sequenced playback.
 
 See the historical IR options section that was carried forward from the L476 work if needed for reference.
 
@@ -157,6 +162,7 @@ Project-local slash commands (the convenient shorthand layer) are documented via
 - Coding rules and agent instructions: [AGENTS.md](../AGENTS.md)
 - Scripts reference: [SCRIPTS.md](../SCRIPTS.md)
 - Project-local skills: `.grok/skills/`
+- PLAY meta-language design (player-piano / sequencer spec, parser plans, polyphony model, storage integration): [Docs/PLAY_language_design.md](Docs/PLAY_language_design.md)
 
 **This is a living document.** Update it as goals, status, or the roadmap evolve.
 

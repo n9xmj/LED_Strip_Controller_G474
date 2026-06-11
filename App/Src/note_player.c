@@ -22,6 +22,7 @@
 static uint8_t s_u8_octave;
 static uint8_t s_u8_vol_pct;        // 0..100
 static char    s_ac_last_note[8];   // e.g. "C4", "A#5", or "" (treated as rest for status)
+static int8_t  s_i8_current_semitone; // -1 = none; 0-11 for current playing note's semitone (for octave shift re-trigger)
 
 // Base for 2^(n/12): C1 (lowest in the supported octave 1 range)
 #define NOTEPLAYER_C1_HZ   (32.703125f)
@@ -111,6 +112,7 @@ static void v_noteplayer_rest(void)
 {
     v_synth_engine_stop();
     s_ac_last_note[0] = '\0';
+    s_i8_current_semitone = -1;
     printf("Rest\r\n");
 }
 
@@ -122,6 +124,12 @@ static void v_noteplayer_play(int8_t i8_octave, int8_t i8_semitone)
 {
     float f_hz = f_noteplayer_calc_freq(i8_octave, i8_semitone);
     float f_lev = (float)s_u8_vol_pct / 100.0f;
+
+    // Remember the normalized semitone (0-11) so octave changes can re-trigger the same note
+    int8_t norm_semi = i8_semitone;
+    if (norm_semi < 0) norm_semi = 0;
+    if (norm_semi > 11) norm_semi = 11;
+    s_i8_current_semitone = norm_semi;
 
     char ac_name[8];
     v_noteplayer_format_name(i8_octave, i8_semitone, ac_name, sizeof(ac_name));
@@ -145,6 +153,21 @@ static void v_noteplayer_print_help(void)
     printf("Ready (press keys):\r\n");
 }
 
+static void v_noteplayer_set_octave(uint8_t u8_new_oct)
+{
+    if (u8_new_oct < 1u) u8_new_oct = 1u;
+    if (u8_new_oct > 8u) u8_new_oct = 8u;
+
+    s_u8_octave = u8_new_oct;
+    printf("Oct:%u\r\n", (unsigned)s_u8_octave);
+
+    if (s_i8_current_semitone >= 0)
+    {
+        // Re-trigger the current note at the new octave (stop old tone, play at new freq)
+        v_noteplayer_play(s_u8_octave, s_i8_current_semitone);
+    }
+}
+
 //------------------------------------------------------------------------------
 /** Public entry point. */
 
@@ -154,6 +177,7 @@ void v_note_player_run(void)
     s_u8_octave   = 4u;
     s_u8_vol_pct  = 50u;
     s_ac_last_note[0] = '\0';
+    s_i8_current_semitone = -1;
 
     v_synth_engine_stop();   // silence anything left from other tests ('i' menu etc.)
 
@@ -172,6 +196,7 @@ void v_note_player_run(void)
         {
             v_synth_engine_stop();
             s_ac_last_note[0] = '\0';
+            s_i8_current_semitone = -1;
             printf("Exit\r\n");
             break;
         }
@@ -209,57 +234,49 @@ void v_note_player_run(void)
         // Octave down
         if (c == '-' || c == ',')
         {
-            if (s_u8_octave > 1u)
-            {
-                s_u8_octave--;
-            }
-            printf("Oct:%u\r\n", (unsigned)s_u8_octave);
+            v_noteplayer_set_octave( (uint8_t)(s_u8_octave > 1u ? s_u8_octave - 1u : s_u8_octave) );
             continue;
         }
 
         // Octave up
         if (c == '+' || c == '.')
         {
-            if (s_u8_octave < 8u)
-            {
-                s_u8_octave++;
-            }
-            printf("Oct:%u\r\n", (unsigned)s_u8_octave);
+            v_noteplayer_set_octave( (uint8_t)(s_u8_octave < 8u ? s_u8_octave + 1u : s_u8_octave) );
             continue;
         }
 
         // Direct octave set: ! @ # $ % ^ & *  (shift-1 through shift-8)
         if (c == '!')
         {
-            s_u8_octave = 1u; printf("Oct:%u\r\n", 1u); continue;
+            v_noteplayer_set_octave(1u); continue;
         }
         if (c == '@')
         {
-            s_u8_octave = 2u; printf("Oct:%u\r\n", 2u); continue;
+            v_noteplayer_set_octave(2u); continue;
         }
         if (c == '#')
         {
-            s_u8_octave = 3u; printf("Oct:%u\r\n", 3u); continue;
+            v_noteplayer_set_octave(3u); continue;
         }
         if (c == '$')
         {
-            s_u8_octave = 4u; printf("Oct:%u\r\n", 4u); continue;
+            v_noteplayer_set_octave(4u); continue;
         }
         if (c == '%')
         {
-            s_u8_octave = 5u; printf("Oct:%u\r\n", 5u); continue;
+            v_noteplayer_set_octave(5u); continue;
         }
         if (c == '^')
         {
-            s_u8_octave = 6u; printf("Oct:%u\r\n", 6u); continue;
+            v_noteplayer_set_octave(6u); continue;
         }
         if (c == '&')
         {
-            s_u8_octave = 7u; printf("Oct:%u\r\n", 7u); continue;
+            v_noteplayer_set_octave(7u); continue;
         }
         if (c == '*')
         {
-            s_u8_octave = 8u; printf("Oct:%u\r\n", 8u); continue;
+            v_noteplayer_set_octave(8u); continue;
         }
 
         // Volume

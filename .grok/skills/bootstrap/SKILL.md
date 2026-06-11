@@ -19,9 +19,11 @@ This skill ensures the agent has the correct, current project documentation load
 
 4. **SCRIPTS.md** — General reference for the automation scripts (build, flash, smoke/probe, discovery). Note that bench-specific defaults live in the local skills, not here.
 
-5. Discover available project-local commands by invoking the `myskills` skill (or explicitly running `/myskills`).
+5. Read **every** `*.md` in `.grok/memory/` (start with `MEMORY.md` index, then each body file). Project-local agent memory lives here — user prefs, tone, bench notes.
 
-6. (Strongly recommended) Use `list_dir` on `.grok/skills/` to see all available skills and their SKILL.md files.
+6. Discover available project-local commands by invoking the `myskills` skill (or explicitly running `/myskills`).
+
+7. (Strongly recommended) Use `list_dir` on `.grok/skills/` to see all available skills and their SKILL.md files.
 
 ## After loading the context
 
