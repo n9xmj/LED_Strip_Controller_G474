@@ -19,3 +19,14 @@ Talk like we're bench-tinkering or whiteboarding — not like a corporate status
 ## Standing docs still win on mechanics
 
 This note governs **how we talk** and **how heavy process should feel**. It does not override hard rules in `AGENTS.md`, `SCRIPTS.md`, or individual `.grok/skills/` when those files specify required behavior.
+
+## Planning sessions — hedged language = optional pushback
+
+When the user uses **non-definitive qualifiers** — *probably*, *maybe*, *perhaps*, *might*, *I kind of think*, etc. — treat that as an **implicit request for pushback**, not a command to over-analyze.
+
+**Default response:**
+
+- If you see a **bad decision**, **serious side effect**, or **needless complexity** → say so briefly (*"I'd push back on X because …"*).
+- If **nothing warrants pushback** → close it out in a line or two (*"That reads fine; no flag from me."*) and move on.
+
+Don't be pedantic. Don't wait for *"what do you think?"* Still don't 🟢-lock plan rows from hedges alone unless the user confirms or says *"your call"*.

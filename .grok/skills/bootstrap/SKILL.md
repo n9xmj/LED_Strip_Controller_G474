@@ -21,9 +21,11 @@ This skill ensures the agent has the correct, current project documentation load
 
 5. Read **every** `*.md` in `.grok/memory/` (start with `MEMORY.md` index, then each body file). Project-local agent memory lives here — user prefs, tone, bench notes.
 
-6. Discover available project-local commands by invoking the `myskills` skill (or explicitly running `/myskills`).
+6. Read `Docs/planning/decision-log-model.md` — how multi-session planning works (D/S/I/T/Q IDs, status table). If an active plan is in flight (see MEMORY.md index), read that plan doc. Then read the **newest** `Docs/planning/*-session-handoff-*.md` if present — **agent handoff from the prior session** (written by `/wrapup`).
 
-7. (Strongly recommended) Use `list_dir` on `.grok/skills/` to see all available skills and their SKILL.md files.
+7. Discover available project-local commands by invoking the `myskills` skill (or explicitly running `/myskills`).
+
+8. (Strongly recommended) Use `list_dir` on `.grok/skills/` to see all available skills and their SKILL.md files.
 
 ## After loading the context
 
@@ -37,6 +39,7 @@ This skill ensures the agent has the correct, current project documentation load
 - AGENTS.md always overrides older instructions or previous session memory.
 - The split documentation exists for a reason: AGENTS.md for rules the agent must obey; Docs/PROJECT.md for goals, status, and human context.
 - After significant work, the user should be encouraged to run `/update-docs` or `/docs` (see the update-docs skill).
+- Before ending a long session, run **`/wrapup`** (commit WIP + session handoff for the next `/read-the-docs`).
 
 ## Usage
 

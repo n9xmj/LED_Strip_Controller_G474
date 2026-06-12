@@ -1,6 +1,11 @@
 # PLAY Meta-Language Design (Player-Piano / Sequencer)
 
-**Status:** Early preview / evolving.  
+> **Implementation readiness:** open decisions are tracked in the living plan
+> [`Docs/planning/play-v1-implementation-plan.md`](planning/play-v1-implementation-plan.md)
+> (resolve by ID in chat: D1, S2, I1, …). Planning workflow:
+> [`Docs/planning/decision-log-model.md`](planning/decision-log-model.md).
+
+**Status:** Early preview / evolving → **v1 contract in progress** (see plan above).  
 **Owner:** User (full spec coming).  
 **Current driver:** `tools/play_melody.py` (host-side, drives the terminal note player over serial).  
 **Recent progress (as of this session):** CORDIC-based sine synth now has linear attack (~7 ms) + decay (~4 ms) envelope + special fast transition release logic (3 ms) for clean note changes in the live 'p' player (no more audible pops on key-to-key or octave shifts). Hot-swap of tones without stopping the I2S stream. Linear envelopes noted as acceptable for de-popping; proper ADSR will want exponential/log ramps later.  
@@ -121,13 +126,13 @@ The design aims to strike a practical balance between:
 
 This distinction keeps the common case (dense sequences of notes) clean and fast to parse while still allowing the overall alphabet to be used efficiently.
 
-Current command lead characters: R (rest), T (tempo), O (octave), ^ (octave up), v (octave down, proposed), K (key), S (shift/transpose), U (beat unit), V (volume).
+Current command lead characters: R (rest), T (tempo), O (octave), ^ (octave up), v (octave down), K (key), S (shift/transpose), U (beat unit), V (volume), P (voice/timbre), **? (debug print)**. **Multi-char metas (exceptions):** `@ … @` comment blocks and **`K"…"`** quoted key args (D8b).
 
 The instrument/waveform command lead character remains TBD (user has not specified one). It must be a lead character that does not collide with existing note leads (C D E F G A B) or current command leads. Punctuation characters are also viable for future features such as "repeat last note" (see Inheritance Model below). Do not use 'A' for the instrument command (conflicts with note A).
 
 ## Character Allocation Summary (Living)
 
-This living table summarizes all character selections made so far in the PLAY meta-language. It is intended as a quick reference and will be kept up to date as the spec evolves. For any command whose character is not yet finalized, '?' is used and marked TBD. Punctuation characters are deliberately left open for features like note-repeat that benefit from visual distinction from letter-based tokens.
+This living table summarizes all character selections made so far in the PLAY meta-language. It is intended as a quick reference and will be kept up to date as the spec evolves. For any command whose character is not yet finalized, the table marks it TBD. Punctuation characters are deliberately allocated for features that benefit from visual distinction from letter-based tokens.
 
 **Note on categories**: "Lead" characters appear at the start of a token (notes or commands) and must be disjoint. "Metadata" characters (durations, modifiers, etc.) only appear after a note lead character and may overlap with lead characters of other categories per the guidelines above.
 
@@ -145,11 +150,12 @@ This living table summarizes all character selections made so far in the PLAY me
 | O               | Command              | Set default octave for subsequent notes |
 | ^               | Command (Octave Up)  | Increment current octave by 1. Slightly redundant with direct octave-in-note (C5) + inheritance, but highly valuable for visual/intuitive transcription of real sheet music. Supplements (does not replace) `O<n>`. |
 | v (proposed)    | Command (Octave Down)| Decrement current octave by 1 (down character TBD; 'v' used successfully in prior implementation). Slightly redundant with inheritance + explicit octave in note specs, but very intuitive for transcription. Supplements `O<n>`. |
-| K               | Command              | Set key signature (Circle of Fifths: e.g. KC, KG, KDb, KD-m) |
+| K               | Command              | Set key signature — **`K<root>[#\|b\|+\|-][m]<WS>`** (unquoted + mandatory whitespace) **or** **`K"<keyspec>"`** (quoted; closing `"` ends token). Circle of Fifths LUT. Invalid `K` → WARNING, keep current key. Default C major. |
 | S               | Command (Transposition / Shift) | Transpose subsequent pitches by semitones (S+1, S-2, S0). 'S' chosen to avoid conflict with duration 'X'. |
-| V               | Command              | Set volume for the current voice |
-| U               | Command (Beat Unit)  | Set which note value gets one beat (e.g. UQ = quarter note is the beat, UE = eighth note is the beat). Affects duration interpretation relative to tempo. |
-| ? (TBD)         | Command (Instrument) | **TBD** — select waveform type ("instrument"): sine, triangle, saw, more complex, etc. |
+| V               | Command              | Set volume for the current voice (0–100, v1 plan D6) |
+| U               | Command (Beat Unit)  | Set which note value gets one beat (e.g. UQ, UE). Affects duration interpretation relative to tempo. |
+| ?               | Command              | **Debug print (v1):** **`?"…"`** — C string escapes, no auto-CRLF; **`?""`** silent; **bare `?`** → CR/LF. No `printf` `%` formats. |
+| P               | Command              | Voice / timbre selection (`P0` = sine default). See v1 plan D1/D11. |
 | [ ] :           | Structural (Repeat)  | `[ sequence ]:N` — repeat the block N times (nestable) |
 | *               | Structural (Label)   | `*<n>` — define a label for goto |
 | >               | Structural (Goto)    | `><n>` — jump to the given label |
@@ -169,12 +175,14 @@ This living table summarizes all character selections made so far in the PLAY me
 - `O<1-digit>` — set default octave (1-8 or 0-7 per convention). Subsequent notes without an explicit octave use this. (Note that the `^` / `v` shorthands and the ability to put an octave digit directly on a note also affect this value; see octave shorthands below.)
 - `^` — octave up shorthand: increment the current octave by 1. Slightly redundant given the ability to specify octave directly in a note (C5Q) and the improved inheritance/defaults model, but the visual/intuitive aspect makes it very useful when transcribing real-world sheet music. Supplements (does not replace) the full `O<n>` command. Directly updates the current octave in the note memory.
 - `v` (proposed) — octave down shorthand: decrement the current octave by 1 (down character is TBD; lowercase 'v' was used successfully in a prior implementation). Slightly redundant with inheritance + explicit octave-in-note, but highly intuitive for transcription work. Supplements `O<n>`. Directly updates the current octave in the note memory.
-- `K<root>[#|b][m]` — set key signature using Circle of Fifths (e.g. `KC`, `KG`, `KDb` or `KD-`, `KD-m` for D minor, `KF#m`). Sets the default accidentals for subsequent bare notes. Minor keys derive the relative major signature (root + 3 semitones). May require explicit space or separator for disambiguation in some contexts (TBD during implementation planning).
+- `K<root>[#|b|+|-][m]<WS>` — set key signature using Circle of Fifths (e.g. `KC `, `KG `, `KDb `, `KD-m `, `KF#m `). **Unquoted form requires mandatory whitespace** after the key token (space, CR, LF, or TAB). Sets the default accidentals for subsequent bare notes. Minor keys derive the relative major signature (root + 3 semitones). Invalid syntax → **WARNING**, current key unchanged; default at sequence start is **C major**.
+- `K"<keyspec>"` — **quoted alternate** for the same key grammar inside ASCII double quotes (e.g. `K"C"`, `K"Db"`, `K"F#m"`). The closing **`"`** is an unambiguous token boundary — **`K"Db"C4Q`** is valid without a space after the key. **`\"`** escapes a literal quote inside the payload. Unquoted and quoted forms coexist.
+- `?"<text>"` — **debug print (v1):** at runtime, emit the **expanded** string to the debug UART (host tools should apply the same rules). Single-char lead **`?`** (BASIC **`PRINT`** shorthand). Payload uses **C character escapes** (`\n`, `\r`, `\t`, `\"`, `\\`, `\0`, `\a`, `\b`, `\f`, `\v`; optional `\xHH` hex and `\ooo` octal). **Not `printf`** — no `%` conversion specifiers (deferred). **No auto-CRLF** after quoted output; **`?""`** emits nothing. **Bare `?`** (not followed by `"`) emits **CR/LF (`\r\n`)**. Unterminated quote or garbage after closing `"` → **WARNING**, continue. Max **64 source chars** inside quotes (before expansion).
 - `S{+|-}<semitones>` — transpose/shift (e.g. `S+1`, `S-2`, `S0`). Applies a global semitone shift to all subsequent pitches after key-signature accidentals have been applied. Can be changed mid-sequence. 'S' (Shift) chosen instead of 'X' to avoid collision with the duration specifier 'X' (sixteenth note).
 - `U<duration>` — set beat unit (e.g. `UQ` = quarter note gets one beat, `UE` = eighth note gets one beat). This tells the player which duration value corresponds to one beat for the current tempo. Affects all subsequent duration calculations. Full time signatures (e.g. 4/4, 3/8) are primarily for human readability or authoring tools; the runtime primarily cares about the beat unit + tempo.
 - Clef is not required as a runtime command (the combination of explicit octaves + note letters is sufficient). It may be useful only for human-readable score export or authoring tools.
 - `V<n>` — set volume (0–127 or 0–100 scale TBD; maps to the `level` passed to the synth engine).
-- Instrument / waveform selection command (specific character still TBD — must follow the "Character Allocation Guidelines" above and use a lead character that does not collide with note leads C D E F G A B or existing command leads R T O K S U V ^ v). Sets the "instrument"; i.e. type of waveform generated for the current voice (0 or "sine" = CORDIC sine (current hardware path); 1 or "tri" = triangle; 2 or "saw" = sawtooth; others TBD for more complex / FM / sample-based timbres). Changes take effect on the next note (or immediately via the tone generator). Enables different sounds per voice or mid-piece "orchestration" changes. (See synth_engine integration note below.)
+- `P<n>` — voice / timbre selection (`P0` = sine default). See v1 plan D1/D11. Replaces earlier TBD instrument command.
 - `R<duration-spec>` — rest (see above).
 - `[ <sequence> ]:<repeat-count>` — repeat the enclosed sequence `<repeat-count>` times (0 = no repeat, 1 = one repeat, etc.). Nestable (reasonable depth limit ~10 stack levels for implementation).
 - `*<n>` defines a goto-label (n may be a number, perhaps > 9; some limit imposed on upper value, TBD; stored in a small label table).
@@ -241,7 +249,7 @@ CH G FQ E D C5H G4 ...
 - Ideally, no spaces are required between note descriptors and commands (compact storage).
 - Optional `<space>` (or other separators) can be inserted to disambiguate parsing, especially around single-letter items that could be confused (e.g., a flat 'b' vs. note 'B' when case-insensitive, or after a duration before the next letter).
 - The "-" separator in examples is treated as a comment/ignorable separator.
-- **K (key signature) note**: The `K<root>[acc][m]` form (e.g. `KD-m` or `KDb`) may be one of the cases that benefits from an explicit space or other separator in some contexts to avoid parser ambiguity with following note tokens. This will be resolved during implementation planning.
+- **K (key signature) — resolved (v1 plan D8/D8b):** use **mandatory whitespace** after unquoted key tokens (`KDb C4Q`), or the **quoted form** `K"Db"C4Q` when abutting the next token. Invalid `K` → WARNING + retain current key. See [play-v1-implementation-plan.md](planning/play-v1-implementation-plan.md) for full locked rules.
 
 **Example (Star Wars intro theme, C major)**
 ```
@@ -255,7 +263,15 @@ This is a starting point for a formal grammar (using standard EBNF notation). It
 
 ```
 play_sequence   = { element } ;
-element         = note_descriptor | command | repeat_block | label_def | goto | whitespace ;
+element         = note_descriptor | command | repeat_block | label_def | goto | comment_block | debug_print_cmd | whitespace ;
+comment_block   = "@" { comment_char } "@" ;  (* skipped during playback except first block → title; see v1 plan D9/D10 *)
+comment_char    = ? any char except unescaped "@" ? | "\\@" ;
+debug_print_cmd = "?" [ c_quoted_string ] ;  (* absent → bare-? CRLF; empty "" → no output; else expanded C-string payload — D14 *)
+c_quoted_string   = '"' { c_quoted_char } '"' ;
+c_quoted_char     = ? any char except '"' and '\\' ? | "\\" escape_seq ;
+escape_seq        = ( "n" | "r" | "t" | "0" | "a" | "b" | "f" | "v" | "\\" | "\"" | "'" | "?" | "x" hex_digit { hex_digit } | octal_digit { octal_digit } ) ;
+quoted_string     = '"' { k_quoted_char } '"' ;  (* K key payload — minimal escapes only, D8b *)
+k_quoted_char     = ? any char except '"' and '\\' ? | "\\" ( "\\" | "\"" ) ;
 note_descriptor = note , { ( accidental | octave | duration [ dot ] [ modifier ] [ duty ] ) } ;  (* After the note letter, accidental, octave, duration+attachments may appear in any order. Only the note letter is required and must come first. *)
 modifier        = "_" | "!" ;
 duty            = ( "D" digits "/" "8" ) | ( digits "%" ) ;  (* proposed; e.g. D4/8 or 75%; TBD exact syntax per user: percentage or n/8 value, n=note play time over 8, modified by duration spec *)
@@ -266,12 +282,14 @@ duration        = "W" | "H" | "Q" | "I" | "X" | "Y" ;
 dot             = "." ;
 modifier        = "_" | "!" ;
 duty            = ( "D" digits "/" "8" ) | ( digits "%" ) ;  (* e.g. D4/8 or 50%; TBD exact prefix/syntax *)
-command         = tempo_cmd | octave_cmd | octave_up_cmd | octave_down_cmd | key_cmd | transpose_cmd | beat_cmd | volume_cmd | instrument_cmd | rest_cmd ;
+command         = tempo_cmd | octave_cmd | octave_up_cmd | octave_down_cmd | key_cmd | transpose_cmd | beat_cmd | volume_cmd | voice_cmd | instrument_cmd | rest_cmd ;
 tempo_cmd       = "T" digits ;
 octave_cmd      = "O" digit ;  (* single-digit parser is sufficient and efficient *)
 octave_up_cmd   = "^" ;        (* increment current octave by 1; shorthand for transcription *)
-octave_down_cmd = "v" ;        (* decrement current octave by 1; down character proposed as 'v' (TBD). Supplements O<n> *)
-key_cmd         = "K" root [ accidental ] [ "m" ] ;  (* root is a note letter (C-G,A,B); optional accidental #/b (or - for flat); optional m for minor. May need space disambiguation in some cases. *)
+octave_down_cmd = "v" ;        (* decrement current octave by 1; supplements O<n> *)
+key_cmd         = "K" root [ accidental ] [ "m" ] whitespace
+                | "K" quoted_string ;  (* quoted payload: same root/acc/m grammar inside quotes *)
+voice_cmd       = "P" digits ;  (* voice/timbre index; v1 plan D1 — default sine P0 *)
 transpose_cmd   = "S" signed_digits ;  (* e.g. S+1, S-2, S0; semitone shift applied after key sig accidentals. 'S' for Shift, avoiding duration 'X' conflict. Only command where the sign is semantically meaningful. *)
 beat_cmd        = "U" duration ;  (* set which note value gets one beat, e.g. UQ, UE. Affects duration-to-time mapping. *)
 volume_cmd      = "V" number ;  (* full numeric (0-100 or 0-127 range); multi-digit parser required *)

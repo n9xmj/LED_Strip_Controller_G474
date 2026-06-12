@@ -163,6 +163,7 @@ Project-local slash commands (the convenient shorthand layer) are documented via
 - Scripts reference: [SCRIPTS.md](../SCRIPTS.md)
 - Project-local skills: `.grok/skills/`
 - PLAY meta-language design (player-piano / sequencer spec, parser plans, polyphony model, storage integration): [Docs/PLAY_language_design.md](Docs/PLAY_language_design.md)
+- PLAY v1 implementation readiness (decision-log plan, resolve D/S/I/T/Q IDs in chat): [Docs/planning/play-v1-implementation-plan.md](planning/play-v1-implementation-plan.md) · [planning model](planning/decision-log-model.md)
 
 **This is a living document.** Update it as goals, status, or the roadmap evolve.
 

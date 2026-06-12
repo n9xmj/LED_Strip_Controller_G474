@@ -19,8 +19,9 @@ When this skill is invoked, follow the instructions in the primary `bootstrap` s
 3. Read `Docs/PROJECT.md`.
 4. Read `SCRIPTS.md`.
 5. Read `.grok/memory/MEMORY.md` and every body file it indexes (project-local agent memory).
-6. Run `/myskills` (or invoke the myskills skill).
-7. List the `.grok/skills/` directory.
+6. Read `Docs/planning/decision-log-model.md` (+ active plan from MEMORY); **newest** `*-session-handoff-*.md` if present.
+7. Run `/myskills` (or invoke the myskills skill).
+8. List the `.grok/skills/` directory.
 
 After completing the sequence, give the user a brief readiness summary and wait for the actual work request.
 

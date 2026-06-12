@@ -58,13 +58,28 @@ This document tells you how to work effectively and safely in this project. Read
 - Top-level debug menu key `@` (implemented in `debug_menu.c` with `extern` to `v_print_startup_banner()`) reprints the full banner. Used for smoke-test "identify".
 - Smoke/probe scripts use 3× ESC (0x1B, paced ~50 ms) then `@` to safely unwind submenus on a live board before capturing the banner.
 
+## Planning & multi-session design
+
+For specs or features with many open decisions (e.g. PLAY meta-language v1), use the
+**decision-log planning model**:
+
+- Mechanics: [`Docs/planning/decision-log-model.md`](Docs/planning/decision-log-model.md)
+- Summary table with IDs (**D** design, **S** semantics, **I** implementation, **T** tooling, **Q** user question) and status: 🔴 open · 🟡 leaning · 🟢 resolved · 🔵 deferred
+- User resolves in chat by ID (*"green D3"*, *"S2 option C"*); agent updates the plan doc same session
+- **Active plan:** [`Docs/planning/play-v1-implementation-plan.md`](Docs/planning/play-v1-implementation-plan.md) → parent spec [`Docs/PLAY_language_design.md`](Docs/PLAY_language_design.md)
+- **Session handoff (read on new chat):** newest [`Docs/planning/play-v1-session-handoff-*.md`](Docs/planning/) — updated by **`/wrapup`**
+
+Also indexed in [`.grok/memory/MEMORY.md`](.grok/memory/MEMORY.md). Loaded on `/bootstrap` / `/read-the-docs`.
+
+**Session boundaries:** run **`/wrapup`** before leaving a long planning/coding session (handoff doc + WIP commit, no push by default). Start the next session with **`/read-the-docs`**.
+
 ## Sources of Truth
 
 - **Automation (build / flash / smoke / probe / discover)**: `SCRIPTS.md` (general, bench-agnostic patterns and flags).  
   Bench-specific defaults (COM port, ST-Link SN) live in the project-local skills under `.grok/skills/`.
 - **Project goals, status, hardware layout, roadmap**: `Docs/PROJECT.md`
 - **Versioning**: `App/Inc/platform.h` (`PROJECT_NAME`, `TARGET_MCU`, `FIRMWARE_VERSION`, `BUILD_NUMBER`). Scripts and skills report these.
-- **Project-local slash commands**: `.grok/skills/` (run `/myskills` to list them). Current set includes `/build`, `/cleanbuild`, `/fullbuild`, `/fixme`, `/flash`, `/smoke`, `/probe`, `/roundtrip`, `/setver`, `/myskills`.
+- **Project-local slash commands**: `.grok/skills/` (run `/myskills` to list them). Includes `/wrapup` (end-of-session handoff), `/read-the-docs`, `/build`, `/cleanbuild`, `/fullbuild`, `/fixme`, `/flash`, `/smoke`, `/probe`, `/roundtrip`, `/setver`, `/myskills`.
 - **Hardware datasheets and reference material**: `Docs/` directory.
 
 ## How to Work in This Project (Agent Workflow)
