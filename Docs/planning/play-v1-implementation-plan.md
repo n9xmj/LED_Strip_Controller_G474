@@ -40,8 +40,8 @@ _D-items **D1–D22** listed in numeric order; detail sections below may still b
 | D13 | 🔵 | Envelope / ADSR PLAY syntax — post-v1 (after synth + duty ship) |
 | D14 | 🟢 | **`?"…"`** debug print — C escapes in string; no auto-CRLF; bare **`?`** → CRLF |
 | D15 | 🔵 | **Tuplet / triplet timing** — syntax + duration math (v2+; not v1 blocker) |
-| D16 | 🟡 | **String goto labels** — `<"name"` / `>"name"` (max 8 chars; see **D17** for define lead) |
-| D17 | 🟡 | **Label define `<` / goto `>`** — replace `*` define; `<`/`>` symmetry (**S2** semantics unchanged) |
+| D16 | 🟢 | **String goto labels** — `<"name"` / `>"name"` (max **`PLAY_LABEL_MAX_LEN`**, default 16) |
+| D17 | 🟢 | **Label define `<` / goto `>`** — replace `*` define; `<`/`>` symmetry (**S2** semantics unchanged) |
 | D18 | 🟢 | **Expansion `\` — `\`"<cmd>:<args>"`** → dispatch; **`ctx:`** = zero-time note-memory load |
 | D19 | 🟢 | **GOSUB / RETURN / END** — **`="name"`** / **`/`** / **`*`**; **`/`** underflow + **undefined label ref** = **hard abort** |
 | D20 | 🟢 | **`R` rest** — full notation sub-parser → note memory + timed silence |
@@ -50,6 +50,7 @@ _D-items **D1–D22** listed in numeric order; detail sections below may still b
 | S1 | 🟢 | Polyphony — one monophonic PLAY string = one voice; sync post-v1 |
 | S2 | 🟢 | Goto / label snapshots — forward keep ctx, backward restore; **undefined `>`/`=` ref → hard abort** |
 | S3 | 🔵 | Sync barriers — **deferred** (post-v1 polyphony); leaning **`|"name"`** when scheduled |
+| S11 | 🟡 | **v2+ headwind** — multi-instance + NVM/FS load **requires** explicit sync/staging model (observations; design open) |
 | S4 | 🟢 | Repeat `[ … ]:N` — re-entry restores **`[` snapshot** (same model as S2 backward) |
 | S5 | 🟢 | **Timing formula** + **`U`/`W/H/Q/I` tables**; **`PLAY_TEMPO_BPM_MAX=240`**; tick budget → **I4** |
 | S6 | 🟢 | Duty constants — **`#define` only** for v1 (`PLAY_DUTY_*`, `PLAY_DUTY_NUMERATOR`) |
@@ -65,14 +66,15 @@ _D-items **D1–D22** listed in numeric order; detail sections below may still b
 | S10 | 🟢 | **Session init defaults** — full note-memory struct + **`Cn4Q_`** template for first **`~`** |
 | S8 | 🟢 | **Closed** — **`&0`** explicit transpose reset (**D21**); legacy **`S`** retired |
 | S9 | 🟢 | Duty on one note — **last parsed modifier wins** |
-| I1 | 🟡 | **PLAY v1 feature fence** (must-ship list) |
-| I2 | 🔴 | Label ID range + table size cap |
+| I1 | 🟢 | **PLAY v1 feature fence** (must-ship list) |
+| I2 | 🟢 | Label table cap — **`PLAY_LABEL_MAX_LEN`**, **`PLAY_LABEL_TABLE_MAX`** |
 | I3 | 🟢 | Stack depth cap → **S7e** (`PLAY_STACK_MAX_DEPTH`) |
 | I4 | 🟢 | **Dedicated HW timer** @ **`PLAY_SCHED_TICK_US`**; shared tick counter; integer math; no 0-tick |
 | I5 | 🔵 | Per-voice RAM budget line in spec |
 | I6 | 🔵 | Binary compiled event format in v1 |
-| I7 | 🟡 | On-device module split + debug entry (`playfile` / `playstr`) |
+| I7 | 🔵 | **Module split** — deferred **v2+**; v1 = opaque **`play_handle_t`** + exposed **`play_instance_t`** (bench cast) + on-chip source (**I9**) |
 | I8 | 🟢 | **Resolve hook** — callback on every completed parse (Release-safe; verbose / test / GUI / LEDs) |
+| I9 | 🟢 | **Player tests submenu** — ROM smoke tune + **`playstr`** (<128) + terminal **`p`** duplicate |
 | T1 | 🔴 | `PLAY_language_design.md` dedupe + implementer quick-ref (not user howto) |
 | T2 | 🔴 | `play_melody.py` conformance phases vs v1 |
 | T3 | 🔴 | Reference test strings + acceptance criteria |
@@ -93,7 +95,7 @@ These are **already chosen** in the spec or firmware; v1 implementation should a
 - **Lead vs metadata chars** — first char of token disambiguates note vs command; W/H/Q/I/X/Y, `.`, `_`, `!`, **`;` duty**, only valid **after** note letter **A–G** or after **`N` semitone digits** (**D22**). Lowercase **`n`** = natural accidental (**D7**) — not **`N`** command.
 - **Order-flexible note descriptors** — after the lead letter, accidental / octave / duration / dot / duty modifier may appear in any order; exactly one duration required per note token.
 - **Note duty (D5 🟢, D5c 🟢, S9 🟢)** — one **`duty_ratio`** in note memory (inherited). Shorthands **`_`**, **`!`**, bare **`;`**, **`;n`** (see D5 detail). More duty shorthands (e.g. pizzicato, D5d 🔵) are **non-blocking** — same modifier pattern. **Envelope / ADSR PLAY surface** deferred (**D13 🔵**); v1 uses existing `synth_engine` linear attack/decay only.
-- **Command letters (current):** `R` rest · **`N` absolute semitone (**D22** 🟢) · `T` tempo · `O` octave · **`^` / `v` octave step (D3 🟢)** · `K` key · **`&` transpose (D21 🟢)** · `U` beat unit · **`V` volume (D6 🟢)** · **`P` voice selection (D1 🟢)** · **`?` debug print (D14 🟢)** · **`\` expansion hook (D18 🟢)** · `[ ]:` repeat · **`<` label (D17 🟡)** · **`>` goto** · **`=` GOSUB (D19 🟢)** · **`/` RETURN** · **`*` END** · **`~` note-repeat (D2 🟢)**. _(Legacy **`S`** retired; **`T`** = tempo only.)_
+- **Command letters (current):** `R` rest · **`N` absolute semitone (**D22** 🟢) · `T` tempo · `O` octave · **`^` / `v` octave step (D3 🟢)** · `K` key · **`&` transpose (D21 🟢)** · `U` beat unit · **`V` volume (D6 🟢)** · **`P` voice selection (D1 🟢)** · **`?` debug print (D14 🟢)** · **`\` expansion hook (D18 🟢)** · `[ ]:` repeat · **`<` label (D17 🟢)** · **`>` goto** · **`=` GOSUB (D19 🟢)** · **`/` RETURN** · **`*` END** · **`~` note-repeat (D2 🟢)**. _(Legacy **`S`** retired; **`T`** = tempo only.)_
 - **Expansion hook (D18 🟢)** — top-level **`\` + quoted string** only: **`\"cmd:args"`** (payload pattern **`cmd:args`**, colon-separated). Core parser extracts decoded payload → **`play_extension_fn_t`** dispatch table; **v1 default stub** echoes payload to debug UART (**same spirit as D14 `?"…"`**, for bench-test). Reserved **`ctx:`** cmd → **zero-time note-memory load** (see **D18** / **D20**). Unknown **`cmd`** → stub path (WARNING optional per **S7**). Not valid inside note descriptors. **`\@`** remains comment-escape only (**D9**).
 - **`R` rest (D20 🟢)** — **`R`** accepts the **full notation sub-parser** (same postfix set as **`C4Q`**: octave, duration, dot, duty — order-flexible; **one duration required**). **All applicable fields update unified note memory**; **schedule timed silence** only (no pitch). **`#`/`b`/`+`/`-` on `R`:** parsed but **no rest audio effect** and **not stored** (no accidental-inheritance field). **Timed context bump** (octave + duration + duty in one token): use **`R4Q;6`**. **Zero-time context-only** (no wall-clock gap): use **`\"ctx:4Q;6"`** (**D18**) — **no dedicated SET lead** (rejected).
 - **`~` note-repeat (D2 🟢, S10 🟢)** — **top-level only**. Replays **last completed note** snapshot (“whole smash”). **Before any completed note:** replay **session default note template** (**`Cn4Q_`**, **S10**) + **WARNING**. Distinct from labels / sync.
@@ -114,13 +116,18 @@ These are **already chosen** in the spec or firmware; v1 implementation should a
   Playback then **streams** from `pos=0`; `@` blocks skipped during interpret.
 - **Case + accidentals (D7 🟢)** — note letters **`A`–`G` uppercase only**; flat **`b`** or **`-`**; sharp **`#`** / **`+`**; natural **`n`** (descriptor-only). Top-level **`N`** = absolute semitone (**D22**). **`=` not natural** (GOSUB).
 - **Lexical boundaries (D12 🟢)** — Think **BASIC/C lexer**, not REPL lines. **Whitespace** = skipped readability (mostly), plus soft boundary between executives. **String consumers** (**D8b**): optional WS before **`"`**. **`:`** = optional **end-of-statement** at top level (BASIC mental model — **not required** in our metalanguage). After **`:`**, skip WS → next sig char = top-level lead. **`;`** is **not** PLAY EOS — it is **note duty** (**D5** `;` / **`;n`** inside descriptors only; C’s statement-terminator role **not adopted** at top level). **Exception:** **`]:N`** repeat tail (**S4**). **`:`** / **`;`** literal inside **`"…"`**, **`@ … @`**, note sub-FSM.
-- **Polyphony (S1 🟢)** — **One PLAY string = one monophonic voice** (one note at a time per interpreter instance). **No inline chords** in a single string (e.g. no `C4Q E4Q G4Q` chord tuples in one stream). **Polyphony = multiple concurrent `play_session`s**, each with its own string + note memory + scheduler — **conductor / sync deferred (S3 🔵)**. v1 ships **one monophonic interpreter**; multi-session mixing is post-v1. **`P<n>` (D1)** = timbre within a voice, not a polyphony slot.
+- **Polyphony (S1 🟢)** — **One PLAY string = one monophonic voice** (one note at a time per interpreter instance). **No inline chords** in a single string (e.g. no `C4Q E4Q G4Q` chord tuples in one stream). **Polyphony = multiple concurrent `play_instance`s**, each with its own string + note memory + scheduler — **conductor / sync deferred (S3 🔵)**; **load + readiness sync deferred (S11 🟡)**. v1 ships **one monophonic interpreter**; multi-session mixing is post-v1. **`P<n>` (D1)** = timbre within a voice, not a polyphony slot.
 - **Goto / label context (S2 🟢)** — on each **`<n`** (or **`<"…"`**, **D16**/**D17**) parse during playback, **overwrite** stored label snapshot with current note memory. **`>n` forward** (target offset **>** current): move PC only — **keep** present context. **`>n` backward** (target offset **<** current): move PC **and restore** label snapshot at that define (**overwrites** present context). _(Wire: define **`<`**, goto **`>`** per **D17**; older text used `*` for define.)_
 - **Repeat blocks (S4 🟢)** — same **backward restore** principle as S2, anchored at **`[`** instead of **`<n`**. On **`[`** parse: push stack frame + **overwrite** **`[` open snapshot** with current note memory. **First** entry into the body: continue **without** restore (forward entry). On **`]`** with iterations remaining: **restore `[` snapshot** and jump to after **`[`** (re-entry overwrites mutations from the prior pass). On **`]`** when count exhausted: pop stack, continue forward. Nested repeats: **one snapshot per stack frame**.
 - **Synth path today** — CORDIC sine + linear attack/decay + fast retrigger release (`synth_engine`); monophonic output first.
 - **Resolve hook (I8 🟢)** — every time the parser finishes one **complete executive** (note, rest, meta, `?`, structural token, …), invoke an optional **Release-safe callback** with source span + resolved semantics + schedule context. Default **NULL** (single branch, near-zero cost). Enables verbose console echo, golden trace tests, virtual synthboard GUI, LED animation — without duplicating the parser. Parameter struct TBD at implementation; see **I8** detail.
 - **Storage direction (post-v1 loader)** — text `.play` on LittleFS / FAT; not blocking first on-device interpreter if strings live in flash/const for tests.
 - **Tuplets / triplets (D15 🔵)** — **not in v1.** No syntax for “N notes in the time of M” (e.g. triplet eighths, Star Wars opening). **S5** v1 formula assumes **standard W/H/Q/I (+ dot)** durations only. v1 demos (**Q1**, **T5** Star Wars) use **approximation** (even eighths + author comment). Real tuplet support is **v2+** (or v1 only if **D15** closes early with a clean design).
+- **PLAY v1 feature fence (I1 🟢)** — **Must ship:** notes **A–G** + **`N<n>`** (**D22**); accidentals **`#`/`-`/`n`**; octave digit; durations **W H Q I** + dot; duty **`_` `!` `;` `;n`** (**D5**); **`R`** rest (**D20**); executives **`T` `O` `^` `v` `K"…"` `&` `U` `V` `P` `?"…"` `~`**; expansion **`\"cmd:args"`** incl. **`ctx:`** stub (**D18**); repeat **`[ ]:N`**; labels **`<n`/`<"…"`/`>…`/`="…"`** (**D16**/**D17** 🟢); **GOSUB/RETURN/END** (**D19**); optional first **`@`** title (**D10**); startup **label pre-scan** (**S7d**); **`play_resolve_fn_t`** hook (**I8**, NULL default); **monophonic** interpreter → **`synth_engine`** sine output (**P0** default, **`P<n>`** stored); **const-string** input OK for first bench (debug **`playstr`**). **Out of v1:** **X/Y** (**D4**); tuplets (**D15**, **Q1** approx only); inline chords / multi-voice in one string; polyphony / **`|"`** sync (**S3**); **VIB/TRM/ADSR** PLAY syntax (**D13**); binary compile (**I6**); LittleFS loader / ESP upload path; mandatory magic / **`VER:`** header. **Delivery:** one **`play_session`**, dedicated HW tick (**I4**), bypass terminal **`p`** keys for first on-device audio path.
+- **Label table limits (I2 🟢, D16/D17 🟢)** — **`PLAY_LABEL_MAX_LEN`** (default **16**) caps quoted name length; **`PLAY_LABEL_TABLE_MAX`** (default **10**) caps **define** count per sequence (**`<"…"`** and **`<n`** share one sparse table). Both are **`#define`** build-time invariants in **`play_config.h`**. **11th define** or name **> max len** → **FATAL** at pre-parse. **Duplicate define** (same name or same numeric id) → **last wins** + **WARNING**. **Missing ref** unchanged (**FATAL**). Numeric **`<n` / `>n` / `=n`** use the same table — no dense **`label_pos[256]`** array.
+- **PLAY C constants policy (I2 🟢)** — avoid magic-number literals in firmware for invariants and build-time limits; prefer **`#define`** in **`play_config.h`** (or documented headers). Runtime-mutable defaults only where a decision explicitly allows them (case-by-case).
+- **Player bench menu (I9 🟢)** — debug top menu **`m`** → submenu banner **`--- Player tests and experiments ---`**. **v1 minimum:** **`1`** = in-flash PLAY smoke tune (C major scale ascending, quarter notes — interpreter smoke-test); **`s`** = prompt + **`i_getline()`** → dispatch **≤ `PLAY_DEBUG_LINE_MAX`** chars to PLAY API (async); **`p`** = same blocking terminal note player as top menu (**`v_note_player_run`**, **not** PLAY). Top-level **`p`** **kept** (duplicate entry). Menu handlers non-blocking; PLAY runs from jobs + **I4** tick. **Star Wars** intro ROM tune = follow-on preset, not v1 smoke gate.
+- **PLAY v1 input scope (I7 🔵 / v1 implement)** — one start path: **`const char *`** to a **NUL-terminated** sequence in **core-accessible on-chip memory** (flash `.rodata` **`const`** literals or RAM buffers — same to the core). **No** separate ROM vs RAM API. **No** LittleFS / SD **`playfile`**, **no** NVM loader in v1. **Immutable source:** **`play_instance_t`** holds **`const char *psz_src`**; parser **never writes** the PLAY string (read-only walk via offset). Caller keeps storage valid for the session lifetime. **Handles:** **`play_handle_t`** = opaque token (**`void *`** in v1 sketch) returned by **`b_play_start`**, passed to **`v_play_stop`** / future APIs — product code treats it as opaque. **`play_instance_t`** struct is **declared in `play.h`** so bench/debug can **`PLAY_HANDLE_AS_INSTANCE(px_handle)`** and **read** status fields — **not** for general mutation. v1 **`PLAY_INSTANCE_MAX = 1`**. Module file split deferred **v2+**.
 
 ---
 
@@ -576,7 +583,7 @@ C4Q ?"after C4" E4Q
 
 ### D16 — String goto labels (`<"…"` / `>"…"`)
 
-**Status:** 🟡 · **Needs user:** confirm for v1 (user canonical example 2026-06-11)
+**Status:** 🟢 · **Needs user:** no (resolved 2026-06-11; caps locked **I2** same session)
 
 **User direction:** Label **define** and **goto** use the **same quoted name** — not different strings. **`>`** jumps to the offset recorded for **`<"`** with that name. Closing **`"`** ends the label token (D8b / **`K"Db"C4Q`** pattern) — music may **abut immediately** after the quote.
 
@@ -600,7 +607,7 @@ C4Q ?"after C4" E4Q
 
 | Rule | Detail |
 |------|--------|
-| **Define** | **`<"`** + name + **`"`** — max **`PLAY_LABEL_MAX_LEN`** (default **8**) |
+| **Define** | **`<"`** + name + **`"`** — max **`PLAY_LABEL_MAX_LEN`** (default **16**; **I2**) |
 | **Goto** | **`>"`** + **same name** + **`"`** — lookup in label table; **missing target → FATAL** at pre-parse (**S7d**) |
 | **Not `><n>`** | Goto is **one** **`>`** lead — legacy design-doc typo **`><n>`** is wrong |
 | **Numeric alt** | **`<1` … `>1`**, **`=1`** — same table; undefined id → **hard abort** |
@@ -619,13 +626,13 @@ Runtime hit on undefined ref (should not occur if pre-parse ran) → **hard abor
 
 **Agent leaning:** **String labels in v1** — this is the natural authoring idiom; numeric optional.
 
-**Resolution:** _(pending lock)_
+**Resolution:** **Locked 2026-06-11.** **`<"name"` / `>"name"`** in v1; same quoted name on both sides; **S2** snapshot rules unchanged. Name length capped by **`PLAY_LABEL_MAX_LEN`** (default **16**); table size **`PLAY_LABEL_TABLE_MAX`** (default **10**) — see **I2**. Name **> max** → **FATAL** at pre-parse. Missing ref → **FATAL**; unreferenced define → **WARNING**.
 
 ---
 
 ### D17 — Label define `<` / goto `>` (replace `*`)
 
-**Status:** 🟡 · **Needs user:** confirm (user direction 2026-06-11; loop example clarifies intent)
+**Status:** 🟢 · **Needs user:** no (resolved 2026-06-11; caps **I2** same session)
 
 **Wire shape (locked intent):**
 
@@ -644,7 +651,7 @@ Runtime hit on undefined ref (should not occur if pre-parse ran) → **hard abor
 
 **Agent leaning:** **Adopt for v1** — see **D16** canonical loop example.
 
-**Resolution:** _(pending user lock)_
+**Resolution:** **Locked 2026-06-11.** Define **`<`**, goto **`>`** (single char); **`*`** = **END** only (**D19**). Numeric **`<n` / `>n` / `=n`** alternate shares **I2** sparse table. **S2** forward/backward snapshot semantics unchanged.
 
 ---
 
@@ -667,7 +674,7 @@ Runtime hit on undefined ref (should not occur if pre-parse ran) → **hard abor
 | **Payload** | **`"` … `"`** — **C string escapes** (same rules as **D14 `?"…"`**): `\n`, `\"`, `\\`, etc. |
 | **Payload shape** | **`cmd:args`** — first colon splits **command name** (sub-parser route) from **argument tail** (opaque to core parser). Examples: **`tuplet:3:2`**, **`echo:hello`**, **`ctx:4Q;6`**. |
 | **`ctx:` handler** | **Zero-time note-memory load** — **`args`** parsed with the **same rules as a note/rest descriptor suffix** (octave, duration, dot, duty; **no pitch letter**). Updates note memory; **does not schedule** silence or tone. Alternative to **`R`** when author wants context without a rest gap (**D20**). |
-| **Dispatch** | Core calls **`play_extension_fn_t(cmd, args, ctx)`** (names TBD at **I7**). Table of handlers; **NULL / unknown `cmd` → default stub**. |
+| **Dispatch** | Core calls **`play_extension_fn_t(cmd, args, ctx)`** (names TBD at v1 implement). Table of handlers; **NULL / unknown `cmd` → default stub**. |
 | **v1 stub** | **Default handler echoes decoded payload** to debug UART — **bench-test parity with `?"…"`**. Real **`ctx:`** handler (apply note memory, no schedule) ships when extension table is wired — can land same release as **`R`** parser reuse. |
 | **I8** | Emit **`PLAY_RESOLVE_EXTENSION`** (or **DEBUG_PRINT** kind with tag) on successful dispatch. |
 
@@ -869,7 +876,7 @@ K"Db" N60Q     ; key sticky — N60 still sounds 60
 
 | Char | Executive | Syntax | Semantics |
 |------|-----------|--------|-----------|
-| **`=`** | **GOSUB** | **`="name"`** (quoted; max **8** chars; same rules as **D16**) | Resolve label via pre-scan table; push **return PC** + **caller note-memory snapshot**; jump to **`<"name"`** target. Callee **inherits** caller context on entry (**no** callee-local reset). Optional numeric **`=n`** *(same id space as **`<n` / `>n`*) — implement when **D16** numeric labels lock. |
+| **`=`** | **GOSUB** | **`="name"`** (quoted; max **`PLAY_LABEL_MAX_LEN`**; same rules as **D16**) | Resolve label via pre-scan table; push **return PC** + **caller note-memory snapshot**; jump to **`<"name"`** target. Callee **inherits** caller context on entry (**no** callee-local reset). Optional numeric **`=n`** *(same table as **`<n` / `>n`*, **I2**)*. |
 | **`/`** | **RETURN** | bare **`/`** | Pop return PC; **restore caller snapshot** from matching **GOSUB**. **Hard abort** (refuse / stop playback) if call stack already empty — not WARNING-and-continue. |
 | **`*`** | **END** | bare **`*`** | **Hard STOP** — cease parser/scheduler immediately; no snapshot restore. Equivalent to BASIC **END**. *(Repurposes **`*`** from retired label-define role — **D17** uses **`<`**.) |
 
@@ -931,7 +938,7 @@ T120 ="TURN" C4Q … *
 - **I8 resolve hook** — emit structural events on **`=`**, **`/`**, **`*`**.
 - **D18** — **`\"gosub:…"`** extension prototype **superseded** by native **`="name"`**.
 
-**v1 scheduling:** Wire syntax is **🟢**; **I1** still lists **GOSUB/RETURN/END** as **optional** until fence closes — authors without **`/`** stack must not emit stray **`/`**.
+**v1 scheduling:** Wire syntax + firmware path **🟢** (**I1**). **GOSUB/RETURN/END** ship in v1; stray **`/`** with empty stack → **hard abort** (**S7a**).
 
 **Resolution:** **`="name"` / `/` / `*`**; callee inherits, **RETURN** restores caller snapshot; **`/`** underflow or **undefined label ref** = **hard abort**; **`*`** = hard STOP.
 
@@ -1108,9 +1115,9 @@ CH GH FQ EQ DQ C5Q ...
 | **Conductor / sync** | **Deferred (S3 🔵)** — post-v1 multi-session |
 | **`P<n>` (D1)** | **Timbre** within a voice — **not** “voice 2 of a chord” |
 
-**v1 implementation:** Ship **one** monophonic interpreter + one active session; architecture should not preclude a session array later.
+**v1 implementation:** Ship **one** monophonic interpreter + one active instance; architecture should not preclude a **`play_instance_t`** pool later — but **must** leave room for per-instance **LOADING / READY** states when storage lands (**S11**).
 
-**Resolution:** **Conductor model; monophonic per string; multi-session polyphony later; sync deferred (S3 🔵).**
+**Resolution:** **Conductor model; monophonic per string; multi-session polyphony later; score sync deferred (S3 🔵); load/readiness sync TBD (S11 🟡).**
 
 ---
 
@@ -1200,7 +1207,7 @@ T140 D4Q >2               ; snapshot at <1 was T120; forward to >2 keeps T140
 
 | ID | Form | Notes |
 |----|------|-------|
-| **S3-A (recommended)** | **`\|"name"`** — barrier marker only | **Pipe + quoted string** — visually distinct from **`*"…"`** / **`>"…"`**. Same **8-char** cap as **D16** or shared **`PLAY_SYNC_NAME_MAX`**. Example: `\|"verseEnd"` in each voice’s string; all must hit before any continues. |
+| **S3-A (recommended)** | **`\|"name"`** — barrier marker only | **Pipe + quoted string** — visually distinct from **`*"…"`** / **`>"…"`**. Same name cap as **`PLAY_LABEL_MAX_LEN`** (default 16) or shared **`PLAY_SYNC_NAME_MAX`**. Example: `\|"verseEnd"` in each voice’s string; all must hit before any continues. |
 | **S3-B** | **`|n`** numeric | Simple but **easy to confuse** with **`*n`** at a glance; user rejected shared token family |
 | **S3-C** | **`&"name"`** or **`%` lead** | Unused leads today; **`&`** was note-repeat history — avoid |
 
@@ -1219,12 +1226,55 @@ T140 D4Q >2               ; snapshot at <1 was T120; forward to >2 keeps T140
 - Barrier ID namespace: **same strings as labels allowed?** **Leaning:** **separate tables**.
 - Timeout / missing voice → **S7** policy.
 - Conductor scope: all sessions in a **group** vs global — TBD with **S1** multi-session API.
+- **Load / readiness (S11 🟡):** barriers are meaningless if one voice is still blocked on LittleFS/NVM while another is already parsing — see **S11** before locking **S3** semantics.
 
-**Resolution:** **Deferred (🔵).** Split from goto labels is settled in principle; **`|"name"`** leaning when multi-session work is scheduled. Not v1.
+**Resolution:** **Deferred (🔵).** Split from goto labels is settled in principle; **`|"name"`** leaning when multi-session work is scheduled. Not v1. **Hard dependency:** **S11** load/staging model must exist before **S3** barriers can be implemented safely.
 
 ---
 
-### S4 — Repeat block re-entry state
+### S11 — Multi-instance load + synchronization (v2+ headwinds)
+
+**Status:** 🟡 · **Needs user:** no (observations captured 2026-06-11 — design **open**)
+
+**Context:** v1 deliberately avoids this pain: **one** instance, **`const char *`** already in core memory, synchronous pre-parse, shared **I4** tick. **v2+ polyphony (S1)** plus **pull-from-NVM / filesystem (I7)** reopens a much harder problem than “mix N sine voices on one timer.”
+
+**User observation (locked as planning constraint):** **Synchronization is going to be a bitch** — especially once sequences are loaded from NVM or a filesystem. **Non-deterministic blocking delays** (path lookup, open/read, index search, wear-leveling pauses, pre-parse CPU time on large files) **absolutely require an explicit synchronization model**. Hoping “everyone starts at `b_play_start` and stays aligned on **I4**” will fail the moment load latency differs per voice.
+
+**What shared **I4** does and does *not* solve:**
+
+| **I4** shared HW tick | **S11** load + readiness |
+|-------------------------|---------------------------|
+| Keeps **scheduled note deadlines** comparable once all voices are **RUNNING** on the same timeline | Does **not** align **when each voice’s source buffer exists** or when pre-parse completes |
+| Integer tick math avoids float drift between instances (**I4** note) | Does **not** prevent voice A from reaching **S3** barrier while voice B is still **`LOADING`** |
+
+**Headaches to plan for (non-exhaustive):**
+
+1. **Variable start skew** — Voice 1 starts from flash instantly; voice 2 **`playfile`** on SD takes 40–400 ms. Without staging, “measure 1 downbeat” is undefined.
+2. **Blocking on the wrong thread** — FS/NVM reads **must not** run inside menu callbacks, **I4** tick context, or parser hot paths. Loader work belongs in **jobs** (or dedicated task when RTOS lands) with completion posted back to the instance state machine.
+3. **Pre-parse vs play start** — **S7d** label resolver may scan the whole file. On slow media that scan is itself a **non-deterministic delay**; cannot gate “group play” on synchronous **`b_play_start(path)`** returning only when audio-ready.
+4. **Partial group failure** — Voice 3 missing file / corrupt NVM entry while voices 1–2 are **READY** — conductor must define **abort-all**, **start subset**, or **timeout → S7** policy before **S3** barriers mean anything.
+5. **Mid-performance reload** — Streaming next movement from FS while others continue — needs **double-buffer / swap** semantics; not the v1 “immutable **`psz_src`** for life of session” rule.
+6. **Deterministic test (T2/T3)** — Golden traces assume repeatable “tick 0.” Host tests need **RAM-staged strings** or **injected FS timing**; cannot rely on real SD latency in CI.
+
+**Leaning architecture directions (not locked — reopen when scheduling v2+):**
+
+| Layer | Leaning rule |
+|-------|----------------|
+| **Instance state machine** | Extend **`play_instance_t`** / internal FSM: **`IDLE` → `LOADING` → `READY` → `RUNNING` → (`WAIT_BARRIER` post-**S3**) → `STOPPED`/`ENDED`/`FAULT`**. **`b_play_start`** on a path returns a handle immediately; audio/parser **RUNNING** only after **`READY`**. |
+| **Staging** | **Option A:** conductor **`b_play_group_arm(handles[], n)`** — no voice enters **RUNNING** until **all** handles **READY** (shared tick zero). **Option B:** per-voice async start with explicit **`|"start"`** barrier in score (author-controlled). Likely need **both**. |
+| **Storage API** | **`b_play_start(const char *psz_src, …)`** stays for RAM/flash. **`b_play_start_file(path, …)`** or loader job is **async** — never blocks until bytes are in a **core buffer pool**. |
+| **Barriers (S3)** | Evaluate barrier reach **only** in **RUNNING** state; **`LOADING`** voices do not participate in rendezvous counts. |
+| **Timeouts** | Every wait (barrier, load, group arm) needs **S7**-classified timeout → **FATAL** or **WARNING+skip** — TBD with user when **S3** closes. |
+
+**v1 carry-forward (do not paint into a corner):**
+
+- Keep **`play_handle_t`** + instance pool design (**I7**).
+- Keep **read-only parse** on a **`const char *`** once **READY** — loader copies/stages into RAM; parser still never mutates source bytes in place.
+- Document in **`play_instance_t`** bench fields at least **`e_state`** + load fault code so **S11** pain is visible on UART before audio lies.
+
+**Cross-refs:** **S1** (N instances) · **S3** (score barriers — blocked on **S11**) · **I4** (audio timeline) · **I7** (storage adapter) · **S7d** (pre-parse gate) · **T2/T3** (determinism)
+
+**Resolution:** **Observations captured (🟡).** No v1 action. **Do not implement **S3** sync barriers or multi-instance **`playfile`** without an **S11** design pass.** User reopen welcome when v2+ polyphony is scheduled.
 
 **Status:** 🟢 · **Needs user:** no (resolved 2026-06-11)
 
@@ -1471,7 +1521,7 @@ Cross-ref: session init / **`~`** seed → **S10** (not an S7 sub-item).
 | Malformed note / **`N`** / executives | **S7c** — skip + WARNING once + continue | **S7b** where listed |
 | Unbalanced **`[` / `]`** | Runtime (not v1 pre-parse) | **S7c** |
 | Incomplete descriptor, forbidden **`~`** in descriptor | Runtime parse error | **S7c** |
-| Duplicate **`<"name"`** / **`<n`** | **Last wins** (leaning) or WARNING — not pre-parse | **I2** 🔴 |
+| Duplicate **`<"name"`** / **`<n`** | **Last wins** + **WARNING** at pre-parse | **I2** 🟢 |
 | Undefined label if pre-parse skipped/bypassed | **S7a** hard abort | Safety net |
 
 **Later phase (S7h 🔵):** optional **strict LINT** pass (host CLI, IDE hook, or `play lint` menu) — full grammar, bracket balance, unreachable labels, duplicate defines, etc. Invoked **by author choice**; does not replace minimal v1 pre-parse.
@@ -1618,7 +1668,9 @@ Separate stacks, **shared numeric limit**. Depth **10** is **`#define`-able** on
 
 ### I1 — PLAY v1 feature fence
 
-**Status:** 🟡 · **Needs user:** confirm
+**Status:** 🟢 · **Needs user:** no (resolved 2026-06-11)
+
+**Question:** What is the **minimum shippable v1** on-device interpreter — syntax surface, runtime modules, and explicit deferrals?
 
 **Proposed v1 must-ship:**
 
@@ -1628,28 +1680,51 @@ Separate stacks, **shared numeric limit**. Depth **10** is **`#define`-able** on
 | Durations W H Q I + dot | **Tuplets / triplets (D15 🔵, Q1)** |
 | `_` `!` `;` `;n` duty (D5 🟢) | **Inline chords / multi-voice in one string (S1 🟢)** |
 | **`R` rest — full descriptor → memory + silence (D20 🟢)** | Polyphony / conductor sync (**S3** 🔵 deferred) |
-| T O ^ v **`K"…"`** **`&+`/ `&-`/ `&0` (D21 🟢)** S U **`V` 0..100 (D6 🟢)** **`?"…"` (D14 🟢)** **`\"cmd:args"` (D18 🟢)** incl. **`ctx:`** handler (zero-time memory) | VIB/TRM/ADSR |
-| **`P` voice index** | **`P0` sine default; v1 audio always sine; index stored for future voice table** |
-| `[ ]:N` **`<n` / `>n` / `<"…"` / `>"…"` (D16/D17)** **`~` note-repeat (D2 🟢)** **`="…"` / `/` / `*` GOSUB/RETURN/END (D19 🟢)** | LittleFS loader optional — const string OK for first bench |
-| Label pre-scan | ESP upload path |
-| **`play_resolve_fn_t` hook (I8 🟢)** — NULL default | Mandatory magic / `VER:` header |
-| Optional **first `@` title block** (D10) | Binary compile (I6 🔵) |
+| T O ^ v **`K"…"`** **`&+`/ `&-`/ `&0` (D21 🟢)** S U **`V` 0..100 (D6 🟢)** **`?"…"` (D14 🟢)** **`\"cmd:args"` (D18 🟢)** incl. **`ctx:`** handler (zero-time memory) | VIB/TRM/ADSR PLAY syntax (**D13** 🔵) |
+| **`P` voice index** — stored; **audible output = sine only** until voice table grows | Non-sine timbre generators |
+| `[ ]:N` **`<n` / `>n` / `<"…"` / `>"…"` (D16/D17 🟢)** **`~` note-repeat (D2 🟢)** **`="…"` / `/` / `*` GOSUB/RETURN/END (D19 🟢)** | Binary compile (I6 🔵) |
+| Label **pre-scan** (**S7d** 🟢) | Mandatory magic / `VER:` header |
+| **`play_resolve_fn_t` hook (I8 🟢)** — NULL default | ESP32 / host upload transport |
+| Optional **first `@` title block** (D10 🟢) | LittleFS **`playfile`** loader (const string OK for first bench) |
 
 **Leaning:** Ship **monophonic interpreter** driving `synth_engine` directly (bypass terminal `p` keys). **Default voice = sine (D1);** `P` stored, audible sine until more voices exist.
 
-**Resolution:** _(pending)_
+**Resolution:** **Locked 2026-06-11.** v1 delivers **one monophonic `play_session`** with the **In** column above — full streaming parser + **I4** scheduler + **`synth_engine`** sine path. **Input:** **`const char *`** in on-chip memory only (**I7** / **I9**); **no** filesystem loader in v1. Parser **read-only** on source bytes. **GOSUB/RETURN/END** in v1 firmware. **String + numeric labels** (**D16**/**D17**/**I2** 🟢). **Out** column hard deferral. Unblocks **T4/T5** and v1 coding.
 
 ---
 
 ### I2 — Label table cap
 
-**Status:** 🔴 · **Needs user:** yes
+**Status:** 🟢 · **Needs user:** no (resolved 2026-06-11)
 
-**Numeric labels (v1 baseline):** **IDs 0–255**, array `label_pos[256]`, undefined = 0 sentinel (0 reserved as invalid goto/call target). Labels must be ≥1 or use **`<1`…`<255`** (**D17**). **`>n` / `=n`** to undefined id → **hard abort** (**S2**/**D19**).
+**Question:** How big is the label table, how long can names be, and how are limits expressed in firmware?
 
-**String labels (**D16**):** If **D16** lands in v1, add parallel **string → offset** table (max entries TBD; same **255** cap leaning). Keys capped at **`PLAY_LABEL_MAX_LEN`** (default 8). Pre-scan pass builds table before execution — **I8** resolve hook can emit label binds for tests.
+**User direction:** **16** chars max name; **10** table entries; both **`#define`-able** at build time. General rule: **no magic-number literals** in PLAY C code for invariants — **`#define`** preferred in **`play_config.h`**; runtime-mutable values only when explicitly specified per feature.
 
-**Resolution:** _(pending — numeric minimum for v1 ship; **D16** optional same release)_
+**Locked `play_config.h` constants:**
+
+```c
+#define PLAY_LABEL_MAX_LEN       (16U)   /* max chars in quoted label name (excl. quotes) */
+#define PLAY_LABEL_TABLE_MAX     (10U)   /* max label defines per sequence (<"…" + <n) */
+```
+
+**Table model (replaces dense `label_pos[256]` leaning):**
+
+| Aspect | Rule |
+|--------|------|
+| **Structure** | One **sparse** table per **`play_session`**, sized **`PLAY_LABEL_TABLE_MAX`** at compile time |
+| **String keys** | **`<"name"`** / **`>"name"`** / **`="name"`** — name length **≤ `PLAY_LABEL_MAX_LEN`** |
+| **Numeric keys** | **`<n` / `>n` / `=n`** — same table; **`n`** is the lookup id (not an array index) |
+| **Pre-scan** | Linear pass builds table before playback (**S7d**); **I8** may emit binds |
+| **11th define** | **FATAL** — table full |
+| **Name too long** | **FATAL** at pre-parse (or at define parse) |
+| **Duplicate define** | Same string or same numeric id seen twice → **last wins**, log **WARNING** |
+| **Missing reference** | **`>"…"`**, **`>n`**, **`="…"`**, **`=n`** with no matching **`<…`** → **FATAL** (**S7d**) |
+| **Unreferenced define** | **WARNING** only (**S7b**) |
+
+**Why sparse:** v1 pieces need few labels; **`PLAY_LABEL_TABLE_MAX=10`** keeps RAM predictable (~few hundred bytes including names + offsets + snapshot refs) vs a 256-slot dense map.
+
+**Resolution:** **`PLAY_LABEL_MAX_LEN=16`**, **`PLAY_LABEL_TABLE_MAX=10`**, both overridable **`#define`s**; sparse unified table; duplicate **last wins + WARNING**; overflow/name-too-long **FATAL**. **D16/D17** wire locked to same caps.
 
 ---
 
@@ -1711,9 +1786,9 @@ Separate stacks, **shared numeric limit**. Depth **10** is **`#define`-able** on
 
 **Status:** 🔵
 
-**Leaning:** Document target **≤ 2 KB/voice** including label table (256×4 B = 1 KB). Track in spec after I2 locks.
+**Leaning:** Document target **≤ 2 KB/voice** including label table. At **I2** defaults: **`PLAY_LABEL_TABLE_MAX × (PLAY_LABEL_MAX_LEN + overhead)`** ≈ **< 512 B** for labels alone (vs retired **256×4 B** dense-map sketch). Track full budget in spec after implementation skeleton lands.
 
-**Resolution:** _(defer to post-I2)_
+**Resolution:** _(defer detailed line-item budget to T1 / impl)_
 
 ---
 
@@ -1727,22 +1802,60 @@ Separate stacks, **shared numeric limit**. Depth **10** is **`#define`-able** on
 
 ---
 
-### I7 — Module split + debug entry
+### I7 — Module split + string input (storage)
 
-**Status:** 🟡 · **Needs user:** confirm
+**Status:** 🔵 · **Needs user:** no (resolved 2026-06-11 — **v2+**; v1 scope locked below)
 
-**Leaning:**
+**Question:** How is the on-device PLAY code organized, and where do sequences come from?
+
+**User direction:** **Defer formal module split until v2+.** v1 player uses **core-accessible on-chip memory** only — no filesystem, NVM, or loader pass.
+
+**Design note (immutable source — locked):**
+
+- `play_instance_t` holds **`const char *psz_src`** (and read cursor / length derived from scan — **no** mutable copy of the score in the instance).
+- The parser **must not write** through **`psz_src`** — streaming interpret is **read-only** on the source buffer (flash **`const`** literal or RAM buffer filled by **`playstr`**).
+- On STM32G474, flash `.rodata` and RAM are both ordinary core-addressable; **one** start API — no **`start_rom` / `start_ram`** split.
+
+**v1 (implement now — minimal surface):**
+
+| Aspect | Rule |
+|--------|------|
+| **Input** | **`const char *psz`** — NUL-terminated PLAY text; storage = flash **`const`** array (**I9** **`1`**) **or** static/menu RAM buffer (**I9** **`s`**) |
+| **Lifetime** | Caller guarantees **`psz`** valid until **`v_play_stop(px_handle)`** / session end. Caller holds **`play_handle_t`** (pointer) from **`b_play_start`** until stop or natural **`*` END** |
+| **Instances** | v1: **`PLAY_INSTANCE_MAX = 1`** — second **`b_play_start`** fails until stop. v2+: raise cap; **same pointer handle** for N concurrent voices (**S1**) |
+| **Out of v1** | **`playfile`**, LittleFS/FAT, SD, NVM sequence slots |
+| **Code shape** | Cohesive module OK; **`play.h`** + **`play_config.h`** publish API + limits; **`play_instance_t`** body in **`play.h`** (bench-readable); mutation only in **`play.c`** |
+| **Minimum API (v1 — `play.h`)** | **`b_play_start(…, &px_handle)`** · **`v_play_stop(px_handle)`** · opaque **`play_handle_t`**; bench cast **`PLAY_HANDLE_AS_INSTANCE`** → **`play_instance_t *`** |
+| **Bench** | **I9** 🟢 owns debug-menu wiring |
+
+**v2+ (deferred — reopen I7 + S11 then):**
 
 | Module | Role |
 |--------|------|
-| `App/Src/play_parser.c` | Streaming parse + state |
-| `App/Src/play_scheduler.c` | Tick-driven note on/off |
-| `App/Inc/play.h` | Public API |
-| Debug menu | `playstr "<fragment>"` then `playfile` when storage lands |
+| `App/Src/play_parser.c` | Streaming parse + state (optional extract) |
+| `App/Src/play_scheduler.c` | Tick-driven note on/off (optional extract) |
+| Storage adapter | LittleFS / `.play` loader, optional NVM index — **async jobs only** (**S11**) |
+| Loader / staging | Copy or mmap score into **RAM buffer pool**; pre-parse in job context; **`READY`** gate before **RUNNING** |
+| Conductor (optional) | Group arm, barrier orchestration — depends on **S11** then **S3** |
+| **`play_pitch.c`** | Shared K LUT if promoted from `note_player` |
 
-Reuse `f_noteplayer_calc_freq()` / K LUT from shared helper.
+**v2+ warning (S11 🟡):** **`playfile` / NVM pull** introduces **non-deterministic blocking**. A **`b_play_start(path)`** that synchronously opens and reads will desync multi-instance starts and fight the **I4** model. Plan **explicit load + readiness synchronization** before score-level **S3** barriers.
 
-**Resolution:** _(pending)_
+Reuse pitch math from **`note_player`** / shared helper in v1; extract to **`play_pitch.c`** when a second consumer lands (v2+ leaning).
+
+**Handle model (locked — forward-compatible with v2+ polyphony):**
+
+- **`play_handle_t`** — **opaque token** (`void *` in the v1 sketch). Product / menu code passes handles to **`b_play_start`**, **`v_play_stop`**, and future per-instance APIs **without dereferencing**.
+- **`play_instance_t`** — **exposed struct** in **`play.h`** (not hidden in **`play.c`**). Holds interpreter + scheduler status fields for **bench-test monitoring** (run state, source offset, title, tempo snapshot, … — finalized at implement). **Read-only** for callers outside **`play.c`**; only the PLAY module mutates instance fields.
+- **Bench cast (debug / HIL / menu status — not general API):**
+  ```c
+  play_instance_t *px_inst = PLAY_HANDLE_AS_INSTANCE(px_active_play);
+  /* e.g. px_inst->e_state, px_inst->u32_src_offset — read only */
+  ```
+- **`b_play_start`** stores a handle whose underlying object is a **`play_instance_t`** pool entry.
+- v1 menu: **`play_handle_t px_active_play = PLAY_HANDLE_NULL`**; clear after **`v_play_stop`**.
+
+**Resolution:** **Locked 2026-06-11 (amended same session).** **I7** module/storage architecture deferred **v2+.** v1: opaque **`play_handle_t`** + exposed **`play_instance_t`** for bench reads; **`b_play_start` / `v_play_stop`**; on-chip source only; parser never mutates score bytes. **`PLAY_INSTANCE_MAX = 1`**. No filesystem/NVM.
 
 ---
 
@@ -1759,7 +1872,7 @@ Reuse `f_noteplayer_calc_freq()` / K LUT from shared helper.
 | **`?"…"` / bare `?` (D14)** | **Author** embeds debug text in the `.play` string | Intentional trace lines in the score |
 | **Resolve hook (I8)** | **Firmware / host tool** registers a callback | Observe **every** executive the parser commits — including notes and metas the author never explicitly printed |
 
-**Fire point:** Synchronous call **immediately after** the parser has a **fully resolved, valid executive** and has applied sticky state updates to note memory (for metas) or built the resolved note/rest descriptor (for pitch events). **Before** or **as** the scheduler enqueues the audio side-effect — exact ordering pinned when **I7** splits parser vs scheduler; hook must see **final resolved values** (freq, duration_ms, level, voice, tempo, key, …).
+**Fire point:** Synchronous call **immediately after** the parser has a **fully resolved, valid executive** and has applied sticky state updates to note memory (for metas) or built the resolved note/rest descriptor (for pitch events). **Before** or **as** the scheduler enqueues the audio side-effect — exact ordering pinned at v1 implement; hook must see **final resolved values** (freq, duration_ms, level, voice, tempo, key, …).
 
 **Must NOT fire for:** skipped `@ … @` comment regions (never parsed as music). **Should fire for:** **`<`** label defs, **`>`** goto, **`=`** GOSUB, repeat **`[`** / **`]`** boundaries? **Leaning yes** for animation/test visibility — mark **structural** kind so GUI can ignore or consume.
 
@@ -1772,7 +1885,7 @@ Reuse `f_noteplayer_calc_freq()` / K LUT from shared helper.
 **Payload (TBD — design targets from user examples):**
 
 ```c
-/* Illustrative — names/types finalized in play.h during I7 */
+/* Illustrative — names/types finalized in play.h at v1 implement */
 typedef enum {
     PLAY_RESOLVE_NOTE,
     PLAY_RESOLVE_REST,
@@ -1810,7 +1923,118 @@ typedef void (*play_resolve_fn_t)(play_session_t *px_session,
 
 **Cross-refs:** D14 (`?` is both a resolve event **and** may emit UART itself — hook still fires so tests see it); **T3** reference strings should include expected resolve traces; **S7** WARNING path — **leaning:** hook does **not** fire on rejected tokens (only successful resolves); failed parse logs separately.
 
-**Resolution:** **Ship Release-safe resolve callback; NULL default; fire on every successful complete executive; payload carries source span + resolved semantics + schedule context; struct finalized in I7.**
+**Resolution:** **Ship Release-safe resolve callback; NULL default; fire on every successful complete executive; payload carries source span + resolved semantics + schedule context; struct finalized at v1 implement.** _(UART verbose consumer optional post-**I9** minimum.)_
+
+---
+
+### I9 — Player tests submenu (debug menu)
+
+**Status:** 🟢 · **Needs user:** no (resolved 2026-06-11 — v1 minimum)
+
+**Question:** What debug-menu surface is required for v1 bench-testing the PLAY interpreter — while keeping the existing terminal note player?
+
+**User direction (v1 minimum):**
+
+1. **In-ROM (flash) smoke tune** — one-shot trigger; start with a **simple C major scale** (interpreter smoke-test). **Star Wars** main-theme intro is a natural next preset but **not** the v1 gate.
+2. **Short typed PLAY string** — enter **< 128 characters**, dispatch to the PLAY interpreter after entry.
+3. **Keep** the existing keyboard/terminal note player — **does not** use the PLAY API.
+4. **Consolidate** all player-related bench items in one submenu titled **`--- Player tests and experiments ---`**. **Duplicate** the terminal **`p`** entry here (same handler as top menu); **do not remove** top-level **`p`**.
+
+**Architecture rules (unchanged from prior draft):**
+
+- Menu **`pfn_function`** handlers **return immediately** — PLAY runs async via jobs + **I4** HW tick (not inside the menu callback).
+- While a **`play_session`** is **RUNNING**, **refuse** submenu **`p`** (terminal piano) or **auto-stop** PLAY first — one **`synth_engine`** owner.
+- Submenu **ESC / RETURN** **auto-stops** an active PLAY session (mirror **`i`** submenu synth stop).
+- Limits are **`#define`** in **`play_config.h`** (**I2** policy — no magic numbers).
+
+**Locked menu layout:**
+
+| Location | Key | Label / action |
+|----------|-----|----------------|
+| Debug **top** menu | **`m`** | **CALL_MENU** → **`x_player_tests_submenu`** |
+| Top menu | **`p`** | *(unchanged)* Interactive note player |
+| Submenu banner | — | **`--- Player tests and experiments ---`** |
+| Submenu | **`?`** | Help (menu-api) |
+| Submenu | **`1`** | **PLAY smoke** — **`b_play_start(psz_play_smoke_test, &px_active_play)`** |
+| Submenu | **`s`** | **playstr** — prompt **`PLAY>`** · **`i_getline()`** into static buffer · NUL-terminate · **`b_play_start(ac_play_debug_line, &px_active_play)`** |
+| Submenu | **`p`** | **Terminal note player** — **`v_note_player_run()`** (duplicate of top menu; **not** PLAY) |
+| Submenu | **ESC** | Return — **`v_play_stop(px_active_play)`** if non-**`NULL`**, then leave submenu |
+
+**Locked smoke-test string (v1 — `play_presets.c`; pointer + literal, not `#define`, not `[]` array name):**
+
+```c
+/* play_presets.c — v1 interpreter smoke-test */
+const char *psz_play_smoke_test =
+    "@ smoke scale @ T120 O4 C4Q D4Q E4Q F4Q G4Q A4Q B4Q C5Q *";
+```
+
+Exposed via **`play_presets.h`** (`extern const char *psz_play_smoke_test;`) for menu + tests. Self-terminates with **`*` END**; ascending C major oct 4→5.
+
+**Locked `play_config.h`:**
+
+```c
+#define PLAY_DEBUG_LINE_MAX      (128U)   /* max chars for playstr UART entry (incl. NUL room in buffer) */
+#define PLAY_INSTANCE_MAX        (1U)     /* v1: one voice; raise for v2+ polyphony (S1) */
+```
+
+**Public API sketch (`play.h` — v1 minimum):**
+
+```c
+typedef enum {
+    PLAY_STATE_IDLE = 0,
+    PLAY_STATE_LOADING,   /* v2+ async FS/NVM staging (S11) — unused in v1 */
+    PLAY_STATE_READY,     /* staged + pre-parse OK; not yet on I4 timeline */
+    PLAY_STATE_RUNNING,
+    PLAY_STATE_STOPPED,
+    PLAY_STATE_ENDED,
+    PLAY_STATE_FAULT
+} play_state_t;
+
+typedef struct play_instance play_instance_t;
+
+/* Exposed for bench status reads — fields grow at implement; do not mutate outside play.c */
+struct play_instance {
+    play_state_t  e_state;
+    const char   *psz_src;        /* read-only score pointer */
+    uint32_t      u32_src_offset; /* parser cursor — bench monitor */
+    /* title, tempo, voice, fault code, … TBD */
+};
+
+typedef void *play_handle_t;      /* opaque — underlying object is play_instance_t */
+
+#define PLAY_HANDLE_NULL              ((play_handle_t)NULL)
+#define PLAY_HANDLE_AS_INSTANCE(h)    ((play_instance_t *)(h))  /* bench/debug read-only */
+
+bool b_play_start(const char *psz_src, play_handle_t *px_out_handle);
+void v_play_stop(play_handle_t px_handle);       /* NULL → no-op */
+bool b_play_is_running(play_handle_t px_handle);
+```
+
+**Bench usage (I9 extended status / HIL — not product API):** after **`b_play_start`**, **`PLAY_HANDLE_AS_INSTANCE(px_active_play)`** yields a **`play_instance_t *`** for UART status dumps, automated tests, or submenu **`playstatus`** (post-v1). Callers **read** fields only; control stays on **`v_play_stop`** / public start API.
+
+**Implementation (`debug_menu.c` + `play_presets.c`):**
+
+- **`x_player_tests_submenu[]`** + top-menu **`m`** entry.
+- Static **`ac_play_debug_line[PLAY_DEBUG_LINE_MAX + 1U]`** for **`s`** entry.
+- Static **`play_handle_t px_active_play = PLAY_HANDLE_NULL`** — set by **`b_play_start`**, cleared after **`v_play_stop`**.
+- **`1`** → **`b_play_start(psz_play_smoke_test, &px_active_play)`**.
+- **`s`** → fill static **`ac_play_debug_line[]`**, then **`b_play_start(ac_play_debug_line, &px_active_play)`** — buffer must stay valid for session; parser does **not** modify it.
+- **ESC / RETURN** → **`v_play_stop(px_active_play)`** · **`px_active_play = PLAY_HANDLE_NULL`** before leaving submenu.
+- **`p`** → **`v_note_player_run()`** — refuse or **`v_play_stop(px_active_play)`** first if **`b_play_is_running(px_active_play)`**.
+
+**Post-v1 extensions (not v1 menu requirements — track separately):**
+
+| Item | Notes |
+|------|-------|
+| ROM **Star Wars** / richer **T3** presets | Submenu **`2`…`** or flash table |
+| **`playstop` / `playstatus` / `playverbose`** | Extended bench; **I8** trace toggle |
+| **`playparse` dry-run** | **S7d** label dump without audio |
+| **`playfile`** | LittleFS (**I1** out) |
+| Host **`play_melody.py`** retarget | T2 phase 4 — script **`m`** + **`1`** / **`s`** |
+
+**Cross-refs:** **I1** (const-string + **`playstr`** bench) · minimal **`play.h`** at v1 implement · **I8** (optional verbose later) · **T2/T3** (Star Wars + golden strings)
+
+**Resolution:** **Locked 2026-06-11 (amended).** v1 submenu under top **`m`**: **`1`** = **`psz_play_smoke_test`**, **`s`** = **`playstr`**, **`p`** = terminal player dup. **`play_handle_t`** opaque; **`play_instance_t`** exposed for bench cast/read. Top **`p`** retained.
 
 ---
 
@@ -1839,9 +2063,9 @@ typedef void (*play_resolve_fn_t)(play_session_t *px_session,
 1. Inheritance + order-flex + K/S/U/T/O/^/v
 2. Duty + R + errors
 3. Dry-run timing print (S5 formula) without hardware
-4. Optional: serial RPC to on-device interpreter when I7 exists
+4. Optional: serial RPC — script enters submenu **`m`**, preset **`1`** or **`s`** + line (**I9** 🟢)
 
-**Resolution:** _(pending I1)_
+**Resolution:** _(pending spec-lock — **S7f/g** optional; **I1/I2/D16/D17** 🟢)_
 
 ---
 
@@ -2030,18 +2254,20 @@ T120 K"C" … IQ IQ IQ …   ; FQ EQ DQ groups as even eighths — not mathemati
 
 ### Suggested resolution order (first pass)
 
-1. **I1** — fence v1 scope (unblocks everything)
-2. **S1** — monophonic + conductor-only polyphony
-3. ~~**D8**~~ charset/parse rules (D3, D6, D7, D8 🟢)
-4. **S5** — timing formula (implementation contract)
-5. **S2, S4** — control-flow semantics
-6. ~~**D2**~~ charset (D1, D2, D3, D5, D5c, D6, D7, D8, D9, D11, D12 🟢)
-7. **S7, I2, I3, I4** — engineering limits
-8. **D16** — string labels in v1? (optional; numeric OK for first ship)
-9. **T4** — normative EBNF grammar doc (`Docs/PLAY_v1_grammar.md`)
-10. **T5** — musician howto (`Docs/PLAY_howto.md`) — tiered repertoire
-11. **T1** — trim `PLAY_language_design.md`; link T4/T5
-12. **T3 → T2** — golden strings then host parser phases
+1. ~~**I1** — fence v1 scope~~ **🟢 2026-06-11**
+2. ~~**I2** — label table cap (+ **D16**/**D17** wire)~~ **🟢 2026-06-11**
+3. ~~**S1**~~ — monophonic + conductor-only polyphony **🟢**
+4. ~~**D8**~~ charset/parse rules (D3, D6, D7, D8 🟢)
+5. ~~**S5**~~ — timing formula **🟢**
+6. ~~**S2, S4**~~ — control-flow semantics **🟢**
+7. ~~**D2**~~ charset (D1, D2, D3, D5, D5c, D6, D7, D8, D9, D11, D12 🟢)
+8. **S7f/g**, ~~**I2**~~, ~~**I3, I4**~~ — engineering limits (**I2/I3/I4 🟢**)
+9. ~~**D16/D17**~~ — string label wire **🟢**
+10. **T4** — normative EBNF grammar doc (`Docs/PLAY_v1_grammar.md`)
+11. **T5** — musician howto (`Docs/PLAY_howto.md`) — tiered repertoire
+12. ~~**I9** — player tests submenu~~ **🟢 2026-06-11**
+13. **T1** — trim `PLAY_language_design.md`; link T4/T5
+14. **T3 → T2** — golden strings then host parser phases
 
 ### Spec-lock gate (start T4/T5 / implementation)
 
@@ -2049,32 +2275,31 @@ Minimum 🟢 before formal grammar + howto + coding:
 
 | Area | IDs |
 |------|-----|
-| Syntax | D1–D14 except 🔵 deferrals (**D4, D13, D15**) · **D18 🟢** · **D20 🟢** · **D16/D17** 🟡 |
+| Syntax | D1–D14 except 🔵 deferrals (**D4, D13, D15**) · **D16/D17/D18/D20 🟢** |
 | Semantics | **S1–S2, S4–S5, S7, S9** (+ **D21** transpose / **S8** **`&0`**) |
-| Implementation fence | **I1, I2, I3, I4, I8** |
-| Open but non-blocking | **D16** 🟡, **D17** 🟡 |
+| Implementation fence | **I1 🟢**, **I2 🟢**, **I3 🟢**, **I4 🟢**, **I8 🟢**, **I9 🟢** |
+| Open but non-blocking | **S7f**/**S7g** 🟡 |
 
-### Plan status (2026-06-11)
+### Plan status (2026-06-11, I7 deferred)
 
 | Status | Count (approx.) |
 |--------|----------------:|
-| 🔴 Open | 8 |
-| 🟡 Leaning | 9 |
-| 🟢 Resolved | 22+ |
-| 🔵 Deferred | 8 |
+| 🔴 Open | 6 |
+| 🟡 Leaning | 4 |
+| 🟢 Resolved | 27+ |
+| 🔵 Deferred | 9 |
+| 🟡 Observations / open design | **S11** (+ **S7f/g**) |
 
-**Deferred / post-v1 track:** **D4** · **D5d** · **D13** · **D15** (tuplets) · **Q1** (v1 approx only) · **I5** · **I6** · **S3** (sync **`|"name"`**, polyphony) · **D19 impl** *(wire 🟢; **I1** may still defer firmware)*
+**Next suggested chat prompt:** *"Draft T4 EBNF outline or start v1 `play.h` / `play.c` skeleton (I9 + handle API)."*
 
-**Next suggested chat prompt:** *"Lock I1 (v1 feature fence)."*
-
-**Session handoff:** [play-v1-session-handoff-2026-06-11.md](play-v1-session-handoff-2026-06-11.md) — **S7c** locked this session; new chat recommended for **I1**.
+**Session handoff:** [play-v1-session-handoff-2026-06-11.md](play-v1-session-handoff-2026-06-11.md) — **S7f/S7g** still 🟡 (user resolves later).
 
 ### Cross-reference: punctuator roles (D2, S3, D16, D17, D18)
 
 | Lead | Role | Status |
 |------|------|--------|
 | **`~`** | Note-repeat (D2 🟢) | v1 |
-| **`<` / `>`** | Label define / goto (**D16**/**D17** 🟡) | v1 (pending **D17** lock) |
+| **`<` / `>`** | Label define / goto (**D16**/**D17** 🟢) | v1 |
 | **`\` `"`** | Expansion **`cmd:args`** → dispatch (**D18** 🟢) | v1 stub |
 | **`|"`** | Sync barrier (**S3** 🔵) | deferred |
 | **`@`** | Comments (D9 🟢) | v1 |
