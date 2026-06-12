@@ -23,7 +23,10 @@ When this skill is invoked, follow the instructions in the primary `bootstrap` s
 7. Run `/myskills` (or invoke the myskills skill).
 8. List the `.grok/skills/` directory.
 
-After completing the sequence, give the user a brief readiness summary and wait for the actual work request.
+After completing the sequence:
+
+1. Print the **Quick links** block (markdown links, repo-relative paths) — see **After loading the context** in `.grok/skills/bootstrap/SKILL.md`.
+2. Give the user a brief readiness summary and wait for the actual work request.
 
 Users can type either `/bootstrap` or `/get-started` (or natural language equivalents) to trigger this. Both do the same thing.
 

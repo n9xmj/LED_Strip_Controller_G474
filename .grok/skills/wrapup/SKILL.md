@@ -54,7 +54,7 @@ Path (PLAY v1 today):
 Must include:
 
 - **Purpose** — fresh-chat primer
-- **Read first** table (plan, cheat sheet, decision-log model, handoff itself)
+- **Read first** table (plan, cheat sheet, decision-log model, handoff itself) — use **markdown links** with repo-relative paths (see **Clickable links** below)
 - **Suggested opener** for `/read-the-docs` (copy-paste block)
 - **Locked this session** / **Still open**
 - **Next suggested prompt**
@@ -99,11 +99,41 @@ git commit -m "<imperative subject>"
 
 Print:
 
-1. Handoff file path + one-line "start here"
-2. Suggested `/read-the-docs …` opener for next session
-3. Commit hash (or "no commit per instructions")
-4. Whether push happened
-5. Optional: "start a new chat" when context is large
+1. **Quick links** block (required) — see **Clickable links** below
+2. Handoff file + one-line "start here"
+3. Suggested `/read-the-docs …` opener for next session
+4. Commit hash (or "no commit per instructions")
+5. Whether push happened
+6. Optional: "start a new chat" when context is large
+
+## Clickable links (required in wrapup report + handoff doc)
+
+Help the user re-open WIP files in the editor or side pane with **one click**.
+
+**Format:** markdown links using **repo-relative paths** from the project root (no `file://`, no absolute `C:\…` paths):
+
+```markdown
+## Quick links
+
+- [play-v1-implementation-plan.md](Docs/planning/play-v1-implementation-plan.md) — master decision log
+- [play-v1-session-handoff-YYYY-MM-DD.md](Docs/planning/play-v1-session-handoff-YYYY-MM-DD.md) — start here next session
+- [play-lead-char-cheat-sheet.md](Docs/planning/play-lead-char-cheat-sheet.md)
+- [decision-log-model.md](Docs/planning/decision-log-model.md)
+- [AGENTS.md](AGENTS.md)
+```
+
+**Always include** in the user-facing wrapup report:
+
+- Active implementation plan (whatever `*-implementation-plan.md` is in flight)
+- The handoff doc you just wrote/updated
+- Cheat sheet / quick ref if the session touched planning
+- `AGENTS.md` when workflow or agent rules changed
+
+**Also link** any other files heavily edited this session (e.g. `Docs/PROJECT.md`, a spec draft).
+
+**Handoff doc:** the "Read first" table must use the same link style so links work inside the handoff file too (paths relative to `Docs/planning/` for files in that folder, or full repo-relative paths from root — be consistent per file location).
+
+**Bootstrap parity:** session-start skills (`/bootstrap`, `/read-the-docs`, `/get-started`) must echo the same **Quick links** block after loading context — see `.grok/skills/bootstrap/SKILL.md`.
 
 ## Overrides (examples)
 

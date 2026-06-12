@@ -29,9 +29,33 @@ This skill ensures the agent has the correct, current project documentation load
 
 ## After loading the context
 
+- Print a **Quick links** block first (see below) — clickable markdown paths so the user can open WIP docs in the editor or side pane without hunting paths.
 - Briefly summarize the current project state for the user (key completed work, active focus areas from the TODOs, preferred workflows via the skills).
+- If a session handoff exists, one line: what to do next (from handoff **Next suggested prompt**).
 - State clearly: "Project context loaded. AGENTS.md rules are in effect. I am ready for your task."
 - Then wait for the actual request.
+
+### Quick links (required)
+
+Use **markdown links** with **repo-relative paths** from the project root (Cursor makes these clickable):
+
+```markdown
+## Quick links
+
+- [play-v1-session-handoff-YYYY-MM-DD.md](Docs/planning/play-v1-session-handoff-YYYY-MM-DD.md) — prior session handoff (start here if in-flight)
+- [play-v1-implementation-plan.md](Docs/planning/play-v1-implementation-plan.md) — master decision log
+- [play-lead-char-cheat-sheet.md](Docs/planning/play-lead-char-cheat-sheet.md)
+- [decision-log-model.md](Docs/planning/decision-log-model.md)
+- [AGENTS.md](AGENTS.md)
+- [Docs/PROJECT.md](Docs/PROJECT.md)
+```
+
+**Rules:**
+
+- Resolve **newest** `Docs/planning/*-session-handoff-*.md` by filename date (or mtime if ambiguous).
+- Omit links that do not exist; add links for whatever active plan MEMORY.md points at (not only PLAY — adapt paths to the repo).
+- When `<instructions>` or handoff names a specific doc, put that link **first** and label it prominently.
+- Do not use absolute Windows paths or bare backtick paths without link syntax — links are the UX goal.
 
 ## Best practices this skill enforces
 

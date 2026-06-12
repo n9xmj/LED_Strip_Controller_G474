@@ -23,6 +23,9 @@ Follow the detailed instructions defined in the primary bootstrap skill (`.grok/
 - **Newest** `Docs/planning/*-session-handoff-*.md` if present (prior session `/wrapup` — start here for in-flight PLAY work)
 - Then run `/myskills` and list `.grok/skills/`
 
-After loading everything, summarize readiness and ask for the actual task.
+After loading everything:
+
+1. Print the **Quick links** block (markdown links, repo-relative paths) — see **After loading the context** in `.grok/skills/bootstrap/SKILL.md`.
+2. Summarize readiness and ask for the actual task.
 
 This alias is provided for natural phrases such as "read the docs first" or "read-the-docs before we start". It is functionally identical to `/bootstrap` and `/get-started`.
