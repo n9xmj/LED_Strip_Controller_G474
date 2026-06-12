@@ -67,7 +67,7 @@ Next: lock I1 (v1 feature fence).
 ## Git
 
 - Branch: **`main`**
-- WIP committed by **`/wrapup`** (see commit message in log — not pushed unless user asked).
+- WIP committed on **`main`**: **`d16aec6`** — not pushed.
 
 ---
 
