@@ -78,7 +78,7 @@ Next: draft T4 EBNF outline or start v1 play.c/play.h skeleton (I9 menu wiring).
 ## Git
 
 - Branch: **`main`**
-- After wrapup: see commit hash in wrapup report (pushed to **`origin/main`**).
+- Commit: **`4864982`** — pushed to **`origin/main`**
 
 ---
 
