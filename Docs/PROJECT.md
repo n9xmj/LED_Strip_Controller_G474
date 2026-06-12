@@ -58,6 +58,18 @@ This is a hobby bare-metal STM32 firmware project with the following aspirations
 
 **Author background:** Strong experience with bare-metal STM32 (especially low/mid-range parts). Less experience with RTOS, DSP, audio signal chains, and TFT displays. Moderate electrical engineering background.
 
+## Institutional memory — related projects
+
+Future work on **audio-reactive lighting** (mic → analysis → LED mapping) should not start from a blank page. Keep this pointer on file:
+
+| Project | Link | Why look here |
+|---------|------|----------------|
+| **Color Organ** (cayuse) | [github.com/cayuse/color_organ](https://github.com/cayuse/color_organ) | Friend’s ESP32-C3 “color organ”: I2S capture → FFT → multi-band energy → adaptive leveling → attack/release → NeoPixel drive. Useful **signal-processing patterns** (band split, per-band normalization, envelope smoothing, auto-gain) even though the MCU and LED stack differ from this G474 tree. |
+
+**Lineage (from upstream README):** auto-leveling ideas trace to **@mokus0**’s vTree / Haskell `Channel.hs` work (rolling history, normal-CDF normalization, asymmetric attack/decay). **cayuse**’s repo is an independent ESP32-C3 bare-metal realization — not a drop-in port, but a credible place to mine algorithms when this project’s mic + DSP path is scheduled.
+
+**Status (2026-06-11):** Link recorded only — **not reviewed or ported** yet. Deliberately orthogonal to current **PLAY v1** sequencer/synth planning; revisit when **audio-reactive lighting** moves off the backlog (see long-term goals above). Expected overlap: INMP441 / I2S in, CMSIS-DSP FFT on G474, mapping band energy → strip pixels — not PLAY score playback.
+
 ## Development Environment & Hardware
 
 - **MCU board:** STM32 Nucleo-64 G474RE + external test PCB (hardware evolves).
@@ -164,6 +176,7 @@ Project-local slash commands (the convenient shorthand layer) are documented via
 - Project-local skills: `.grok/skills/`
 - PLAY meta-language design (player-piano / sequencer spec, parser plans, polyphony model, storage integration): [Docs/PLAY_language_design.md](Docs/PLAY_language_design.md)
 - PLAY v1 implementation readiness (decision-log plan, resolve D/S/I/T/Q IDs in chat): [Docs/planning/play-v1-implementation-plan.md](planning/play-v1-implementation-plan.md) · [planning model](planning/decision-log-model.md)
+- Audio-reactive lighting (future): [cayuse/color_organ](https://github.com/cayuse/color_organ) — see *Institutional memory* section above; DSP ideas from cayuse / mokus0, not yet reviewed
 
 **This is a living document.** Update it as goals, status, or the roadmap evolve.
 

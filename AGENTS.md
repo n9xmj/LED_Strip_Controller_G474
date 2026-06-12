@@ -81,6 +81,7 @@ Also indexed in [`.grok/memory/MEMORY.md`](.grok/memory/MEMORY.md). Loaded on `/
 - **Versioning**: `App/Inc/platform.h` (`PROJECT_NAME`, `TARGET_MCU`, `FIRMWARE_VERSION`, `BUILD_NUMBER`). Scripts and skills report these.
 - **Project-local slash commands**: `.grok/skills/` (run `/myskills` to list them). Includes `/wrapup` (end-of-session handoff), `/read-the-docs`, `/build`, `/cleanbuild`, `/fullbuild`, `/fixme`, `/flash`, `/smoke`, `/probe`, `/roundtrip`, `/setver`, `/myskills`.
 - **Hardware datasheets and reference material**: `Docs/` directory.
+- **Audio-reactive DSP ideas (future):** [Docs/PROJECT.md](Docs/PROJECT.md) § *Institutional memory* → [cayuse/color_organ](https://github.com/cayuse/color_organ) (scan when mic→LED work starts; not PLAY-related).
 
 ## How to Work in This Project (Agent Workflow)
 
