@@ -24,9 +24,15 @@
 
 
 
-/** @brief Max typed PLAY line for debug menu `s` entry (incl. room for NUL). */
+/** @brief Main-menu automation hook — scripts ESC×3 then this key (not submenu `s`). */
 
-#define PLAY_DEBUG_LINE_MAX          (128U)
+#define PLAY_DEBUG_MENU_HOOK_KEY     ('S')
+
+
+
+/** @brief Max typed PLAY line for UART entry (incl. room for NUL); heap-backed in debug menu. */
+
+#define PLAY_DEBUG_LINE_MAX          (4096U)
 
 
 

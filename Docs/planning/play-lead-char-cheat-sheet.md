@@ -91,6 +91,8 @@ Quoted metas (`"` ends token; **optional WS before `"`** per **D8b**): `K"C"C4Q`
 
 **Bench smoke (fw):** `@ smoke scale @ CQ4DEFGABC5 *` — menu **`m` → `1`** (T120 is session default; explicit `T120` still OK)
 
+**Near-term bench (plan 🟢):** **`m` → `g`** = golden STRICT (Smoke+ Williams excerpts) · **`m` → `l`** = LED piano demo · **`scripts/play_scenarios.py`** = host-fed regression (mirror HIL spirit)
+
 ---
 
 ## Inside note / **`N`** suffix (after **A–G** or **`N` digits**)

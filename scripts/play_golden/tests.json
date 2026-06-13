@@ -1,0 +1,20 @@
+{
+  "smoke": {
+    "description": "C major scale (tier Smoke / T3 P0)",
+    "tier": "smoke",
+    "file": "smoke.play",
+    "aliases": ["P0", "smoke-scale"]
+  },
+  "loop": {
+    "description": "Scale repeat x8 with ^ octave step",
+    "tier": "smoke",
+    "menu_key": "2",
+    "aliases": ["P0-loop", "loop-scale"]
+  },
+  "smoke-menu": {
+    "description": "Same as smoke via menu preset key 1",
+    "tier": "smoke",
+    "menu_key": "1",
+    "aliases": ["P0-menu"]
+  }
+}

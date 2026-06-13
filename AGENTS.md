@@ -119,7 +119,7 @@ Major completed items (as of the skills + automation phase):
 - Custom logging API restructured into reusable form (`log_helpers.h` + project `debug_config.h`).
 - Startup banner with proper borders, versioning, and reset source reporting.
 - Full automation suite (`scripts/*.ps1` + `.sh` twins + Python helpers) with robust manual argument parsing, temp workspaces, concurrent reset for fast banners, `--identify` (ESC+@) support, accessibility reporting, and banner extraction.
-- Project-local skills (`.grok/skills/`) for `/build` (incremental), `/cleanbuild`/`/fullbuild` (clean + bump), `/fixme`, `/flash`, `/smoke` + `/probe`, `/roundtrip`, `/setver`, and `/myskills`.
+- Project-local skills (`.grok/skills/`) for `/build` (incremental), `/cleanbuild`/`/fullbuild` (clean + bump), `/fixme`, `/flash`, `/smoke` + `/probe`, `/roundtrip`, `/setver`, `/myskills`, **`/playstr`**, **`/playfile`**, **`/playtest`** (PLAY bench harness — plan **T2**).
 - History sanitization: proprietary reference scripts purged from remote via filter-branch; they remain only in local `not-in-project/` (gitignore-protected).
 - Debug menu `@` key for fast banner reprint / identification.
 - SCRIPTS.md established as the general automation reference.

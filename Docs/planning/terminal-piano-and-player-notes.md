@@ -74,7 +74,8 @@ bool b_play_is_running(play_handle_t px_handle);
 |----------|-----|--------|
 | Top debug menu | **`m`** | Open **`--- Player tests and experiments ---`** |
 | Submenu | **`1`** | **`b_play_start(psz_play_smoke_test, &px_active_play)`** |
-| Submenu | **`s`** | Prompt **`PLAY>`** · `i_getline()` · ≤ **`PLAY_DEBUG_LINE_MAX`** → **`b_play_start(ac_play_debug_line, …)`** |
+| Top menu | **`S`** | **playstr hook** — same `PLAY>` / `i_getline()` as submenu **`s`**; scripts ESC×3 then **`S`** |
+| Submenu | **`s`** | Prompt **`PLAY>`** · `i_getline()` · ≤ **`PLAY_DEBUG_LINE_MAX`** (4096, heap) → **`b_play_start(...)`** |
 | Submenu | **`p`** | **`v_note_player_run()`** — duplicate of top **`p`**, **not** PLAY |
 | Submenu | **ESC** | **`v_play_stop(px_active_play)`** then leave |
 | Top menu | **`p`** | *(unchanged)* interactive note player |
@@ -82,7 +83,8 @@ bool b_play_is_running(play_handle_t px_handle);
 **Config (`play_config.h`):**
 
 ```c
-#define PLAY_DEBUG_LINE_MAX   (128U)
+#define PLAY_DEBUG_MENU_HOOK_KEY ('S')
+#define PLAY_DEBUG_LINE_MAX   (4096U)
 #define PLAY_INSTANCE_MAX     (1U)
 ```
 

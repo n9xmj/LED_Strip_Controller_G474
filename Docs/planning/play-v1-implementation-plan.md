@@ -78,11 +78,11 @@
 | I6  | 🔵     | Binary compiled event format in v1                                                                                                          |
 | I7  | 🔵     | **Module split** — deferred **v2+**; v1 = opaque `**play_handle_t**` + exposed `**play_instance_t**` (bench cast) + on-chip source (**I9**) |
 | I8  | 🟢     | **Resolve hook** — callback on every completed parse (Release-safe; verbose / test / GUI / LEDs)                                            |
-| I9  | 🟢     | **Player tests submenu** — ROM smoke tune + `**playstr**` (<128) + terminal `**p**` duplicate                                               |
+| I9  | 🟢     | **Player tests submenu** — **`1`/`2`/`s`/`q`/`p`** shipped; near-term **`g`** golden · **`l`** LED viz (**T3** / **I8**) |
 | I10 | 🔴     | **Firmware implementation gap** — live tracker vs **I1** fence (`App/Src/play.c`)                                                           |
 | T1  | 🔴     | `PLAY_language_design.md` dedupe + implementer quick-ref (not user howto)                                                                   |
-| T2  | 🔴     | `play_melody.py` conformance phases vs v1                                                                                                   |
-| T3  | 🔴     | Reference test strings + acceptance criteria                                                                                                |
+| T2  | 🟡     | **Host + serial test harness** — `play_melody.py` / **`play_scenarios.py`**; dual-track with **T3** / **I9** (**user lock 2026-06-13**) |
+| T3  | 🟢     | **Golden tiers + menu order** — Smoke → Smoke+ (Williams) → Feature → Torture; **`m` → `g`** STRICT (**user lock 2026-06-13**) |
 | T4  | 🔴     | **Normative EBNF** — standalone formal grammar (post spec-lock)                                                                             |
 | T5  | 🔴     | **Musician howto** — user guide + tiered example repertoire (see T5)                                                                        |
 | Q1  | 🔵     | Star Wars / triplet feel — v1 approximate; real tuplets → **D15**                                                                           |
@@ -2215,7 +2215,7 @@ typedef void (*play_resolve_fn_t)(play_session_t *px_session,
 **User direction (v1 minimum):**
 
 1. **In-ROM (flash) smoke tune** — one-shot trigger; start with a **simple C major scale** (interpreter smoke-test). **Star Wars** main-theme intro is a natural next preset but **not** the v1 gate.
-2. **Short typed PLAY string** — enter **< 128 characters**, dispatch to the PLAY interpreter after entry.
+2. **Short typed PLAY string** — top-level **`S`** or submenu **`s`**; up to **`PLAY_DEBUG_LINE_MAX`** (4096) heap-backed chars, dispatch after entry.
 3. **Keep** the existing keyboard/terminal note player — **does not** use the PLAY API.
 4. **Consolidate** all player-related bench items in one submenu titled `**--- Player tests and experiments ---`**. **Duplicate** the terminal `**p`** entry here (same handler as top menu); **do not remove** top-level `**p`**.
 
@@ -2270,7 +2270,8 @@ const char *psz_play_loop_test =
 **Locked `play_config.h`:**
 
 ```c
-#define PLAY_DEBUG_LINE_MAX      (128U)   /* max chars for playstr UART entry (incl. NUL room in buffer) */
+#define PLAY_DEBUG_MENU_HOOK_KEY ('S')   /* main-menu automation hook */
+#define PLAY_DEBUG_LINE_MAX      (4096U) /* playstr UART entry; heap buffer in debug menu */
 #define PLAY_INSTANCE_MAX        (1U)     /* v1: one voice; raise for v2+ polyphony (S1) */
 ```
 
@@ -2319,21 +2320,35 @@ bool b_play_is_running(play_handle_t px_handle);
 - **ESC / RETURN** → `**v_play_stop(px_active_play)**` · `**px_active_play = PLAY_HANDLE_NULL**` before leaving submenu.
 - `**p**` → `**v_note_player_run()**` — refuse or `**v_play_stop(px_active_play)**` first if `**b_play_is_running(px_active_play)**`.
 
-**Post-v1 extensions (not v1 menu requirements — track separately):**
+**Post-v1 / near-term extensions (track separately):**
 
 
 | Item                                          | Notes                                           |
 | --------------------------------------------- | ----------------------------------------------- |
-| ROM **Star Wars** / richer **T3** presets     | Submenu `**2`…`** or flash table                |
+| **`m` → `g` golden (T3 Smoke+)**              | STRICT run; **John Williams** excerpt presets + pass/fail banner |
+| **`m` → `l` LED viz (I8 demo)**               | 3×10 strip “piano” on resolve hook — experimental |
+| ROM **Williams** / richer **T3** presets      | `**play_presets.c**` table · submenu **`3`…`N`** or cycle inside **`g`** |
 | `**playstop` / `playstatus` / `playverbose`** | Extended bench; **I8** trace toggle             |
 | `**playparse` dry-run**                       | **S7d** label dump without audio                |
 | `**playfile`**                                | LittleFS (**I1** out)                           |
-| Host `**play_melody.py`** retarget            | T2 phase 4 — script `**m**` + `**1**` / `**s**` |
+| Host `**play_scenarios.py`** (**T2**)          | **`play_test_client.py`** — menu feed + UART witness · **P0–P3** scenarios |
+| `**playverbose`** / **`PLAY GOLDEN …`** banner | **T2-4** / **`m` → `g`** — structured feedback for runner diff              |
 
 
 **Cross-refs:** **I1** (const-string + `**playstr`** bench) · minimal `**play.h**` at v1 implement · **I8** (optional verbose later) · **T2/T3** (Star Wars + golden strings)
 
 **Resolution:** **Locked 2026-06-11 (amended).** v1 submenu under top `**m`**: `**1**` = `**psz_play_smoke_test**`, `**s**` = `**playstr**`, `**p**` = terminal player dup. `**play_handle_t**` opaque; `**play_instance_t**` exposed for bench cast/read. Top `**p**` retained.
+
+**Near-term bench roadmap (user lock 2026-06-13 — implement in order):**
+
+| Step | Menu / script | Deliverable |
+| ---- | ------------- | ----------- |
+| 1 | **`g`** + **`play_scenarios.py` P0/P1** | **T3** golden runner on-device **and** host-fed **`playstr`** · PASS/FAIL banner · shared golden files |
+| 2 | **`l`** toggle (or auto with **`g`**) | **I8** consumer — 3×10 LED “piano” on **`PLAY_RESOLVE_NOTE`** (experimental demo) |
+| 3 | **`g` index / `play_scenarios.py` P2** | **Feature** tier micro-strings as **I10** gaps close |
+| 4 | same + **T2-5** trace diff | **Torture** tier + resolve golden traces when **I1** fence parses |
+
+Smoke+ presets land incrementally (**Star Wars** → **Raiders** → other Williams); each addition must pass **STRICT** on current firmware before merge.
 
 ---
 
@@ -2479,7 +2494,7 @@ Ordered to maximize score expressiveness per commit (aligns with bench `**playst
 5. **Pre-parse pass** — `**@`/`\@`**, title, labels → unblocks `**<` `>` `=` `/**` (**P1**)
 6. `**\"ctx:…"`** extension stub — zero-time context without `**R0Q**` (**P2**)
 7. **S7 tiering** — `**play_fault_policy_t**` dispatcher + **S7a** vs recoverable paths (**P2**)
-8. **Golden strings (T3)** + host parser phases (**T2**) — lock traces against **I8** hook
+8. **Golden strings (T3)** + **`play_scenarios.py` P0/P1** in parallel with **`m` → `g`** — then **T2-1** host parser · **T2-5** trace diff
 
 **Cross-refs:** **I1** fence · **I9** presets · [play-lead-char-cheat-sheet.md](play-lead-char-cheat-sheet.md) · **T3** acceptance strings (🔴)
 
@@ -2503,32 +2518,166 @@ Ordered to maximize score expressiveness per commit (aligns with bench `**playst
 
 ---
 
-### T2 — `play_melody.py` conformance phases
+### T2 — Host test harness (`play_melody.py` + serial scenarios)
 
-**Status:** 🔴
+**Status:** 🟡 · **Needs user:** no (dual-track model locked **2026-06-13**)
 
-**Proposed phases:**
+**User direction:** External runner that **feeds PLAY data** and **collects feedback** — same *spirit* as the mirror project’s **`hil_scenarios.py`** (compose stimuli, observe outcomes, assert properties). Runs **in conjunction with** on-device **`m` → `g`** golden tests (**T3** / **I9**), not instead of them.
 
-1. Inheritance + order-flex + K/S/U/T/O/^/v
-2. Duty + R + errors
-3. Dry-run timing print (S5 formula) without hardware
-4. Optional: serial RPC — script enters submenu `**m`**, preset `**1**` or `**s**` + line (**I9** 🟢)
+---
 
-**Resolution:** *(pending spec-lock — **S7** 🟢; **I1/I2/D16/D17** 🟢)*
+#### Dual-track model (locked)
+
+
+| Track | Where | Role |
+| ----- | ----- | ---- |
+| **A — On-device golden** | **`m` → `1` / `g`** (**I9**) | Fast bench loop; STRICT pass/fail on DUT; no host deps beyond serial monitor |
+| **B — Python scenario runner** | **`scripts/play_scenarios.py`** (+ client lib) | Regression matrix; feeds strings; parses UART witnesses; JUnit/CI-ready |
+| **C — Host parser dry-run** | **`tools/play_parse.py`** (split from legacy `play_melody.py`) | Parse/timing/trace **without** hardware; shares **S5** formula + golden files with **B** |
+
+Tracks **A** and **B** use the **same T3 golden strings** (ROM preset or host file — one source of truth in `**App/Test/play_golden/**` or `**scripts/play_golden/**` TBD). Track **C** catches parser drift before flash; **B** catches firmware/integration drift on hardware.
+
+**Mirror analogy (ST3074 HIL):**
+
+
+| Mirror | G474 PLAY harness |
+| ------ | ----------------- |
+| `hil_acceptance.py` — wire surface | **`play_acceptance.py`** (optional later) — menu path + fault strings + every executive once |
+| `hil_scenarios.py` — composed behavior | **`play_scenarios.py`** — composed PLAY strings + cross-checks |
+| HIL opcodes + observers | Debug UART **feed** (`playstr`) + **witness** lines (below) |
+| `St3074HilClient` | **`PlayBenchClient`** — menu nav, send, await markers |
+
+**v1 does not require new binary opcodes** on the debug link. The harness drives the **existing debug menu** (like `smoke_capture.py` ESC-unwind + key injection). Structured **`PLAY …`** log lines are the feedback channel; optional **`playverbose`** mode later emits one line per **I8** resolve for trace diff.
+
+---
+
+#### Feedback channel (witness lines — firmware today)
+
+
+| UART pattern | Meaning |
+| ------------ | ------- |
+| `PLAY fault: … @ off=N` | **S7a** fatal — scenario **FAIL** |
+| `PLAY warn: … @ off=N` | Recoverable — **FAIL** under STRICT; OK under NORMAL |
+| `PLAY ended @ off=N` | Normal completion — required for pass |
+| `PLAY GOLDEN PASS` / `FAIL` | *(planned **`m` → `g`** banner — optional convenience for runner)* |
+| `PLAY + … @off=N` | *(planned **`playverbose`** — structured resolve trace for golden diff)* |
+
+Runner **opens COM first**, then (optionally) ST-Link reset — same discipline as **`smoke_capture.py`** so early lines are not missed.
+
+---
+
+#### `scripts/play_scenarios.py` (deliverable sketch)
+
+**Usage (target):**
+
+```text
+python scripts/play_scenarios.py --port COM9
+python scripts/play_scenarios.py --port COM9 --scenario P1 --reset
+python scripts/play_scenarios.py --port COM9 --tier smoke_plus --stlink-sn SN
+```
+
+**Scenarios (initial roster — maps to **T3** tiers):**
+
+
+| ID | Tier | Asserts |
+| -- | ---- | ------- |
+| **P0** | Smoke | Scale preset via **`m`/`1`** or injected string · **`PLAY ended`** · no **`PLAY fault`** |
+| **P1** | Smoke+ | Each Williams excerpt string · STRICT policy · **`PLAY ended`** |
+| **P2** | Feature | Micro-strings per **I10** row (inheritance, `%`, duty, …) · grows with fw |
+| **P3** | Invariants | Short random-safe walks over implemented executives (mirror **S1** spirit) |
+
+**Client helpers (`scripts/play_test_client.py` or module in same file):**
+
+1. `unwind_to_main_menu()` — 3× ESC @ 50 ms (reuse smoke pattern)
+2. `play_string(s, strict=True)` — top-level **`S`** → wait `PLAY>` → **100 ms settle** → **16-char / 20 ms** paced bursts + CR → drain until **`PLAY ended`** or **`PLAY fault`**
+3. `run_preset('1'|'g'|…)` — optional: `m` submenu + single-key menu fires (presets only)
+4. `stop_play()` — `'q'` in player submenu if needed
+
+**Exit code:** 0 all pass; 1 any fail (mirror **`hil_scenarios.py`**).
+
+---
+
+#### Phased implementation (locked order)
+
+
+| Phase | Deliverable | Hardware? |
+| ----- | ----------- | --------- |
+| **T2-1** | Host parser + **S5** tick math in **`tools/play_parse.py`**; unit tests on **T3** strings | No |
+| **T2-2** | **`play_test_client.py`** + **`play_scenarios.py` P0** (smoke string feed + log scrape) | Yes |
+| **T2-3** | **P1** Smoke+ presets; share string files with ROM **`play_presets.c`** | Yes |
+| **T2-4** | Firmware **`m` → `g`** banner + optional **`playverbose`** resolve lines (**I8**) | Yes |
+| **T2-5** | Golden **trace diff** (host expected `.trace` vs UART) | Yes |
+| **T2-6** | **`play_acceptance.py`** — exhaustive executive smoke (mirror acceptance) | Yes |
+
+**Legacy `tools/play_melody.py`:** stays the **terminal piano (`p`)** driver — **not** the PLAY interpreter harness. New PLAY test code lives under **`scripts/`** beside **`smoke_capture.py`**.
+
+---
+
+#### Agent skills (locked **2026-06-11**; hook **2026-06-11**)
+
+Thin wrappers over **`scripts/play_bench.py`**. **Automation path:** ESC×3 → main menu → top-level **`S`** (`PLAY_DEBUG_MENU_HOOK_KEY`) → `PLAY>` → paced line feed (not **`m` → `s`**). Submenu **`s`** remains for manual bench.
+
+| Skill | Example | Maps to |
+| ----- | ------- | ------- |
+| **`/playstr`** | `/playstr "CQ4DEFGABC5 *"` | `play_bench.py str "…"` |
+| **`/playfile`** | `/playfile scripts\play_golden\smoke.play` | `play_bench.py file <path>` |
+| **`/playtest`** | `/playtest smoke` · `/playtest list` | `play_bench.py test <name>` · `list` |
+
+**UART feed discipline (host):** until **`uart_stream`** lands, scripts send the PLAY body in **16-char bursts** with **20 ms** between bursts and **100 ms** settle after `PLAY>` before the first byte (HW FIFO @ **921600** still overruns if fired too fast).
+
+**Line buffer:** **`PLAY_DEBUG_LINE_MAX`** = **4096**; heap **`malloc`** in debug menu (reused across sessions). Source pointer must stay valid for the PLAY session.
+
+Skill files: **`.grok/skills/playstr|playfile|playtest/SKILL.md`**. Registry: **`scripts/play_golden/tests.json`**.
+
+**Scenario batch:** **`python scripts/play_scenarios.py --scenario P0`** or **`scripts/run_play_tests.ps1`**.
+
+---
+
+#### CI / local dev
+
+- **`scripts/bench.defaults.json`** — default COM + ST-Link SN (already checked in)
+- Wrapper: **`scripts/run_play_tests.ps1`** — `verify-env` → build (optional) → **`play_scenarios.py`**
+- JUnit XML output optional (mirror **`hil_acceptance.py`**) for future CI
+
+**Cross-refs:** **T3** tiers · **I9** menu keys · **I8** resolve hook · **I10** feature gating · mirror **`hil_scenarios.py`** / **`hil_acceptance.py`** · **`smoke_capture.py`** port-open-first pattern
+
+**Resolution:** **Dual-track locked** — implement **T2-2** in parallel with **`m` → `g`**; share golden strings; external runner is first-class, not a substitute for on-device golden.
 
 ---
 
 ### T3 — Reference test strings
 
-**Status:** 🔴
+**Status:** 🟢 · **Needs user:** no (tier structure + menu order locked **2026-06-13**)
 
-**Candidates:** Twinkle / Chopsticks (smoke) · feature micro-examples · Star Wars / Raiders excerpts · Sousa / Elgar demo excerpts · Chopin op. 66 / Bumblebee stress (post-v1 hardening) · inheritance chain · repeat + goto · malformed recovery · resolve-hook golden traces (I8)
+**Tiered on-target acceptance (bench, not host CI initially):**
+
+
+| Tier | Menu / trigger | Purpose | Pass criteria |
+| ---- | -------------- | ------- | ------------- |
+| **Smoke** | `**m` → `1`** | C-major scale — parser alive | **NORMAL** · ends **ENDED** |
+| **Smoke+** | `**m` → `g`** (golden) | **Musician demo + notation exercise** — few bars each of favorite **John Williams** themes **plus** implemented-executive micro-features | **`PLAY_FAULT_POLICY_STRICT`** · **ENDED** · zero fatals |
+| **Feature** | `**m` → `g` N** or flash table | Per-capability micro-strings (inheritance, `%`, duty, `[ ]:`, …) | STRICT when fw supports token |
+| **Torture** | post-**I10** | Full **I1** fence + GOSUB/labels/**K**/**&** | STRICT · grows with bring-up |
+
+**Smoke+ repertoire (locked 2026-06-13 — user direction):** **A few bars** of each — monophonic reduction, ROM presets in `**play_presets.c**`, not full arrangements. Woven with notation variations the interpreter already supports (compact runs, `%`, duty, `@` titles, `?`, repeats where useful).
+
+| Excerpt | Source | Planning notes |
+| ------- | ------ | -------------- |
+| **Main-title opening** | *Star Wars* | **Q1** — triplet feel **approximated** with even **I/Q** until **D15**; `@` author note required |
+| ***Raider’s March*** opening | *Raiders of the Lost Ark* | March rhythm + range; good **`T` / `%` / inheritance** exercise |
+| **Additional Williams** (roster TBD) | Author picks — e.g. *Jurassic Park*, *Superman*, *E.T.* fanfare | Same rules: **few bars**, monophonic, v1 durations only |
+
+**Smoke+ is not a v1 ship gate** — it is the **fun + regression** layer once **I10** can parse the executives each excerpt needs. Star Wars may land first (**Q1** WIP); Raiders next; others as arranging time allows.
+
+**Other T3 candidates (outside Smoke+):** Twinkle / Chopsticks (Tier 0 teach) · Sousa / Elgar demo excerpts · Chopin op. 66 / Bumblebee stress (post-v1 hardening) · inheritance chain · repeat + goto · malformed recovery · resolve-hook golden traces (**I8**)
 
 **Note:** Full **T5 repertoire** (below) is **not** an implementation gate — grows as parser + arranger time allow. **T3** may reuse the same `.play` text with machine-oriented expected traces.
 
-**Feeds:** **T2** regression · **T5** example source material (same strings, different docs).
+**Feeds:** **T2** host + serial scenarios · **T5** example source material (same strings, different docs) · **I8** LED piano demo (listen + watch the same presets)
 
-**Resolution:** *(pending S5, S7)*
+**Shared golden storage (leaning):** one directory (e.g. **`scripts/play_golden/*.play`**) included or copied into **`play_presets.c`** at build time — avoid divergent string copies..
+
+**Resolution:** **Tier order + pass criteria locked.** Implement **`m` → `g`** then **`l`** LED demo (**I9** roadmap). **Smoke+** Williams roster (Star Wars, Raiders, +TBD) locked; individual `.play` text lands incrementally as **I10** + arranger allow. Host **T2** traces follow once on-target golden passes stabilize.
 
 ---
 
@@ -2662,12 +2811,15 @@ Teach features first with **small** excerpts; grow into the **repertoire roadmap
 
 **Tier 4 — Generational film themes (author, theatre-release era):**
 
+*John Williams excerpts are the **Smoke+** golden roster (**T3**) — few bars each, on-device **`m` → `g`**, not T5 chapter blockers.*
+
 
 | Piece (excerpt)                                    | Notes                                                                                           |
 | -------------------------------------------------- | ----------------------------------------------------------------------------------------------- |
-| **Star Wars — main-title opening**                 | **Q1** / **D15** — author WIP `CH GH F? E? D? CH5 G4 …`; durations TBD under **S5**             |
-| **Raiders of the Lost Ark — *Raider’s March***     | Same era; march rhythm + range; monophonic arr.                                                 |
-| **Star Trek (TOS) — Alexander Courage main theme** | Opening fanfare; broadcast-era TV (author: infant in ’60s — grew up with reruns/later releases) |
+| **Star Wars — main-title opening**                 | **Q1** / **D15** — **T3 Smoke+** · author WIP `CH GH F? E? D? CH5 G4 …`; durations TBD under **S5** |
+| **Raiders of the Lost Ark — *Raider’s March***     | **T3 Smoke+** · march rhythm + range; monophonic arr.                                           |
+| **Other Williams (TBD)**                           | **T3 Smoke+** roster — *Jurassic Park*, *Superman*, *E.T.*, … — author arranges few bars each   |
+| **Star Trek (TOS) — Alexander Courage main theme** | **T5** heritage · not Williams — optional later tier                                            |
 
 
 **Arranger / player constraints (all tiers):**
@@ -2731,7 +2883,7 @@ T120 K"C" … IQ IQ IQ …   ; FQ EQ DQ groups as even eighths — not mathemati
 12. ~~**I9** — player tests submenu~~ **🟢 2026-06-11**
 13. **I10** — close firmware gaps vs **I1** (see suggested bring-up order in **I10**)
 14. **T1** — trim `PLAY_language_design.md`; link T4/T5
-15. **T3 → T2** — golden strings then host parser phases
+15. **T3 + T2** — golden strings · **`play_scenarios.py`** serial harness · host parser (**T2-1**)
 
 ### Spec-lock gate (start T4/T5 / implementation)
 

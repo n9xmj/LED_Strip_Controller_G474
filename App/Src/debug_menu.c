@@ -428,7 +428,25 @@ static void v_debug_led_strip4_off(void)
 
 static play_handle_t px_active_play = PLAY_HANDLE_NULL;
 
-static char ac_play_debug_line[PLAY_DEBUG_LINE_MAX + 1U];
+/** @brief Heap line buffer for playstr; kept for reuse across bench sessions. */
+static char *sp_play_line_buf = NULL;
+
+static char *psz_play_line_buf_acquire(void)
+{
+    if (sp_play_line_buf == NULL)
+    {
+        sp_play_line_buf = (char *)malloc((size_t)PLAY_DEBUG_LINE_MAX + 1U);
+        if (sp_play_line_buf == NULL)
+        {
+            printf("PLAY playstr: out of memory (%u bytes)\r\n",
+                   (unsigned)PLAY_DEBUG_LINE_MAX + 1U);
+            return NULL;
+        }
+    }
+
+    sp_play_line_buf[0] = '\0';
+    return sp_play_line_buf;
+}
 
 static const char *psz_play_dur_suffix(uint8_t u8_dur_x2, bool b_dotted)
 {
@@ -599,26 +617,34 @@ static void v_debug_play_loop(void)
 
 static void v_debug_play_playstr(void)
 {
+    char *p_c_line;
+
     if (b_play_is_running(px_active_play))
     {
         printf("PLAY already running — stop first\r\n");
         return;
     }
 
+    p_c_line = psz_play_line_buf_acquire();
+    if (p_c_line == NULL)
+    {
+        return;
+    }
+
     printf("PLAY> ");
-    if (i_getline(ac_play_debug_line, (uint16_t)sizeof(ac_play_debug_line)) < 0)
+    if (i_getline(p_c_line, (uint16_t)PLAY_DEBUG_LINE_MAX) < 0)
     {
         printf("Input cancelled\r\n");
         return;
     }
 
-    if (ac_play_debug_line[0] == '\0')
+    if (p_c_line[0] == '\0')
     {
         printf("Empty line\r\n");
         return;
     }
 
-    (void)b_debug_play_start(ac_play_debug_line, "playstr", "PLAY started");
+    (void)b_debug_play_start(p_c_line, "playstr", "PLAY started");
 }
 
 static void v_debug_play_terminal_piano(void)
@@ -931,6 +957,12 @@ static const menu_item_t x_debug_top_menu[] =
         .c_key = 'm',
         .p_c_text = "Player tests and experiments (PLAY)",
         .p_x_menu = x_player_tests_submenu
+    },
+    {
+        .x_type = MENU_ITEM_FUNCTION,
+        .c_key = PLAY_DEBUG_MENU_HOOK_KEY,
+        .p_c_text = "PLAY string entry (automation hook; top-level, <=4096 chars)",
+        .pfn_function = v_debug_play_playstr
     },
     {
         .x_type = MENU_ITEM_FUNCTION,

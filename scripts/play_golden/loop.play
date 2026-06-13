@@ -1,0 +1,2 @@
+# Scale x8 with ^ octave step — sync with App/Src/play_presets.c psz_play_loop_test
+@ loop scale x8 @ T120 O1 [CQDQEQFQGQAQBQ ?"Next octave\r\n" ^]:8 *
