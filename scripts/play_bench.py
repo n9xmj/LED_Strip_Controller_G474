@@ -2,9 +2,10 @@
 """
 PLAY bench runner — feed PLAY strings to the G474 debug menu and assert UART witnesses.
 
-Subcommands (also exposed as agent skills /playstr, /playfile, /playtest):
+Subcommands (also exposed as agent skills /playstr, /playfile, /playtest, /replay):
 
   python scripts/play_bench.py str "CQ4DEFGABC5 *"
+  python scripts/play_bench.py replay
   python scripts/play_bench.py file scripts/play_golden/smoke.play
   python scripts/play_bench.py test smoke
   python scripts/play_bench.py list
@@ -27,6 +28,21 @@ from play_test_client import (
     read_play_file,
     resolve_test_name,
 )
+
+LAST_PLAYSTR_PATH = Path(__file__).resolve().parent / ".play_bench_last"
+
+
+def v_play_bench_save_last_playstr(play_src: str) -> None:
+    """Persist the last inline PLAY string from play_bench.py str (for replay)."""
+    LAST_PLAYSTR_PATH.write_text(play_src, encoding="utf-8")
+
+
+def psz_play_bench_load_last_playstr() -> str | None:
+    """Return last saved /playstr body, or None if never run."""
+    if not LAST_PLAYSTR_PATH.is_file():
+        return None
+    text = LAST_PLAYSTR_PATH.read_text(encoding="utf-8")
+    return text if text else None
 
 
 def _bench_args(defaults: dict, args: argparse.Namespace) -> tuple[str, int, str | None]:
@@ -87,10 +103,26 @@ def cmd_str(args: argparse.Namespace) -> int:
     if not play_src:
         print("ERROR: empty PLAY string", file=sys.stderr)
         return 2
+    v_play_bench_save_last_playstr(play_src)
     timeout = args.timeout
 
     def run(client: PlayBenchClient):
         print(f"Feeding PLAY string ({len(play_src)} chars)...")
+        return client.play_string(play_src, timeout_s=timeout)
+
+    return _run_client(run, args)
+
+
+def cmd_replay(args: argparse.Namespace) -> int:
+    play_src = psz_play_bench_load_last_playstr()
+    if not play_src:
+        print("ERROR: no saved PLAY string — run /playstr first", file=sys.stderr)
+        return 2
+    timeout = args.timeout
+
+    def run(client: PlayBenchClient):
+        print(f"Replaying last PLAY string ({len(play_src)} chars)...")
+        print(f"  {play_src}")
         return client.play_string(play_src, timeout_s=timeout)
 
     return _run_client(run, args)
@@ -156,6 +188,9 @@ def build_parser() -> argparse.ArgumentParser:
     p_str = sub.add_parser("str", help="Feed inline PLAY via top-level S hook (paced UART)")
     p_str.add_argument("play_string", help='PLAY source, e.g. "CQ4DEFGABC5 *"')
     p_str.set_defaults(func=cmd_str)
+
+    p_replay = sub.add_parser("replay", help="Re-feed the last play_bench.py str argument")
+    p_replay.set_defaults(func=cmd_replay)
 
     p_file = sub.add_parser("file", help="Feed a .play file (comments and blank lines stripped)")
     p_file.add_argument("path", help="Path to .play file")

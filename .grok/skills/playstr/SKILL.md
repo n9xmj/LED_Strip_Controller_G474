@@ -23,4 +23,6 @@ python scripts/play_bench.py str "USER_STRING_HERE"
 
 Pass = `PLAY ended @ off=…` and no `PLAY fault:`.
 
-Related: `/playfile` · `/playtest` · plan **T2** in [`Docs/planning/play-v1-implementation-plan.md`](Docs/planning/play-v1-implementation-plan.md).
+Saves the string to `scripts/.play_bench_last` for **`/replay`**.
+
+Related: `/replay` · `/playfile` · `/playtest` · plan **T2** in [`Docs/planning/play-v1-implementation-plan.md`](Docs/planning/play-v1-implementation-plan.md).

@@ -1,0 +1,6 @@
+# T3 Smoke+ — Raiders opening (Bb major, concert pitch)
+# Motif: Bb Bb D Eb F | Eb D Bb … (Williams *Raiders March*)
+# Keep in sync with App/Src/play_presets.c psz_play_raiders_test
+@ Raiders Smoke+ @
+T104 O4 %Q
+Bb4I Bb4I D5I Eb5I F5Q ~ Eb5I D5I Bb4I Bb4I D5I Eb5I F5 Ab4Q ~ ~ *

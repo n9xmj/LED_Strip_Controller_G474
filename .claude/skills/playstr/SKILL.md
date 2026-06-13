@@ -10,3 +10,5 @@ python scripts/play_bench.py str "YOUR_STRING"
 ```
 
 Automation: ESC×3 → **`S`** → `PLAY>` (not `m` → `s`). Paced 16-char bursts, 20 ms gap, 100 ms pre-send.
+
+Saves the string to `scripts/.play_bench_last` for **`/replay`**.

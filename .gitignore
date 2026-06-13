@@ -23,3 +23,6 @@ not-in-project/
 
 # Per-machine bench overrides (see scripts/bench.defaults.json)
 scripts/bench.defaults.local.json
+
+# Last /playstr body for play_bench.py replay (machine-local)
+scripts/.play_bench_last

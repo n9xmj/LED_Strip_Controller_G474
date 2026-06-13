@@ -1,0 +1,319 @@
+# PLAY v1 — Chatbot & author brief
+
+**Purpose:** Copy-paste this file into ChatGPT, Grok, Google Gemini, Claude, etc. when you want a **correct, bounded** mental model of the PLAY music language — more detail than the [cheat sheet](play-lead-char-cheat-sheet.md), far less than the full [implementation plan](play-v1-implementation-plan.md) or [language design](../PLAY_language_design.md).
+
+**Living document:** Update this file whenever `App/Src/play.c` gains or loses behavior. **Firmware truth:** `App/Src/play.c` + bench presets in `App/Src/play_presets.c`.
+
+**Last updated:** 2026-06-13 (audited against firmware — inheritance, order-flex, `%`, S7i, duty, `~` note-repeat, top-level **`S`** playstr hook)
+
+---
+
+## What PLAY is
+
+PLAY is a **single-line, monophonic** music macro language for embedded firmware. One ASCII string → one note at a time → sine-wave output (today). There is **no AST** in RAM: a streaming parser walks the string and schedules notes on a 1 ms tick.
+
+- **Notes:** uppercase **`A`–`G`** only at pitch start (not lowercase).
+- **One voice** per interpreter instance (v1).
+- **Whitespace** between tokens is optional and ignored.
+- **String ends** at NUL; EOF behaves like **`*`** (END).
+
+---
+
+## How to read the status columns
+
+| Status | Meaning |
+|--------|---------|
+| **YES** | Implemented and exercised on the STM32G474 bench (or trivial subset proven). |
+| **PARTIAL** | Parsed or partially wired; spec behavior incomplete — see notes. |
+| **NO** | Not in firmware — usually `PLAY warn: unsupported executive` (NORMAL) or fault (STRICT). |
+| **DEFERRED** | Locked out of v1 scope by design — do not use in “v1-safe” scores. |
+
+---
+
+## Session defaults (apply at every `play_start`)
+
+These seed **sticky note memory** before the first token (no need to spell them unless changing):
+
+| Field | Default | Explicit override |
+|-------|---------|-------------------|
+| Tempo | **120 BPM** | `T120` |
+| Beat unit | **Quarter = 1 beat** | `%Q` (also `%W` `%H` `%I`) |
+| Octave | **4** | `O4` |
+| Duration | **Quarter (`Q`)** | on first note or via memory |
+| Duty | **Legato 8/8** | `_` (implicit in template) |
+| Volume | **50%** | `V50` — **NO** (executive not parsed; default applied internally) |
+| Voice | **Sine (`P0`)** | `P0` — **NO** (always sine audio in v1) |
+| Key | **C major (`K"C"`)** | **NO** (not applied to pitch) |
+
+Template name in spec: **`Cn4Q_`** — first note may omit duration/octave and inherit **Q** + **O4**.
+
+---
+
+## Note & rest tokens (core grammar)
+
+### Token boundary (critical for LLMs)
+
+- A **note/rest token** starts with **`A`–`G`** or **`R`** (rest).
+- After the **first pitch letter** of a note, the next **`A`–`G`** starts a **new** note — not a continuation of the same cluster.
+- Example: `CQ4DEFGABC5` = C₄ quarter, then D E F G A B C₅ each inheriting duration/octave from the previous note.
+
+### Inheritance (**YES**)
+
+After each note or rest **commits**, these fields live in **note memory** and carry forward until overridden:
+
+- Duration (`W` `H` `Q` `I` + optional dot)
+- Octave digit (`0`–`8`)
+- Duty (`_` `!` `;` `;n`)
+
+**Letter-only** tokens inherit everything above: `DEFGAB` after `C4Q` plays six quarters at the current octave.
+
+### Order-flex (**YES**)
+
+Within one note/rest token, suffix pieces may appear in **any order** after the lead letter:
+
+- `C4Q` = `CQ4` = `Q4C` = `4QC` (same semantics)
+
+### Rests (**YES**)
+
+- **`R`** uses the **same suffix grammar** as notes (duration, dot, duty, octave inheritance).
+- Examples: `RQ` `RI.` `R4Q` `RI` (eighth rest if prior note had `I`).
+
+### Pitch & accidentals
+
+| Feature | Status | Notes |
+|---------|--------|-------|
+| White-key **`A`–`G`** + octave | **YES** | Equal-temperament Hz from letter + octave |
+| **`#` `+` `b` `-` `n`** in note | **YES** — explicit accidentals shift pitch; **`K"C"`** LUT not wired yet |
+| **`K"C"`** key signature | **NO** | Needed for correct sharps/flats in scored keys |
+| **`&+n` / `&-n` / `&0`** transpose | **NO** | |
+| **`N60`** absolute MIDI-like semitone | **NO** | Distinct from natural **`n`** accidental |
+
+**Bare vs explicit accidental (locked policy — see implementation plan *Pitch resolve pipeline*):**
+
+- **Bare letter** (no `#`/`+`/`b`/`-`/`n` in the note cluster): apply **`K"…"` key LUT** per letter when `K` ships (default C major = naturals only today).
+- **Explicit accidental** in the cluster: **ignore key signature**; use only the requested sharp/flat/natural for that token.
+- **`n`** = natural pitch class of the letter (e.g. in B♭ major: bare `E` → E♭; `En` → E natural).
+- Accidentals **do not inherit** from the previous note.
+
+**Math note for implementers:** `% 12` applies only while **normalizing pitch class** (with octave borrow/carry) and in **out-of-range salvage** — **not** after `&` transpose on in-range notes (linear absolute semitone must preserve octave jumps).
+
+**Authoring workaround until `K` ships:** spell accidentals explicitly (`Eb`, `Ab`, …) or transpose the piece to C major; do not rely on bare letters for non-C keys.
+
+### Durations inside notes
+
+| Symbol | Meaning | Status |
+|--------|---------|--------|
+| `W` | Whole | **YES** |
+| `H` | Half | **YES** |
+| `Q` | Quarter | **YES** |
+| `I` | Eighth | **YES** |
+| `.` | Dotted (×1.5) | **YES** |
+| `X` | Sixteenth | **DEFERRED** (D4 — not v1) |
+| `Y` | Thirty-second | **DEFERRED** (D4 — not v1) |
+
+### Duty inside notes (**YES**)
+
+| Symbol | Meaning |
+|--------|---------|
+| `_` | Legato (full note sounding) |
+| `!` | Staccato |
+| `;` | Normal (6/8 of note time) |
+| `;n` | n of 8 quanta sounding (n = 0…8) |
+
+Duty affects **sound vs gap** within the note’s time slot; default legato **8/8**.
+
+---
+
+## Top-level executives (column 0)
+
+These start a new statement at the top level (after whitespace), not inside a note suffix.
+
+| Lead | Syntax | Purpose | Status |
+|------|--------|---------|--------|
+| **`A`–`G`** | note cluster | Play pitch | **YES** |
+| **`R`** | rest cluster | Silence | **YES** |
+| **`T`** | `T120` | Tempo BPM (1…240) | **YES** |
+| **`%`** | `%Q` `%W` `%H` `%I` | Which note value = **one beat** (not a time signature) | **YES** |
+| **`O`** | `O4` | Default octave in note memory | **YES** |
+| **`^` / `v`** | | Octave up / down one (clamped 1…8) | **YES** |
+| **`?`** | `?"text"` or bare `?` | Debug print (`\n` `\r` `\\` `\"` escapes); bare `?` → CRLF | **YES** |
+| **`[` / `]`** | `[ … ]:N` | Repeat block **N** times | **YES** (see caveat below) |
+| **`*`** | | END — stop playback | **YES** (NUL at EOF = implicit `*`) |
+| **`@`** | `@ … @` | Comment block (skipped at runtime) | **PARTIAL** — no title capture; inner `@` not escaped |
+| **`L`** | `L"…"` | External library (future) | **PARTIAL** — warn + skip quoted payload |
+| **`~`** | | Repeat **last completed note** | **YES** |
+| **`K`** | `K"C"` | Key signature | **NO** |
+| **`&`** | `&+2` `&-3` `&0` | Transpose semitones | **NO** |
+| **`V`** | `V80` | Volume 0…100 | **NO** (50% default still applied) |
+| **`P`** | `P0` | Voice/timbre index | **NO** (audio always sine) |
+| **`\`** | `\"ctx:4Q"` | Extension / context load | **NO** |
+| **`<` / `>`** | `<"lbl"` `>"lbl"` | Label define / goto | **NO** |
+| **`=` / `/`** | `="name"` `/` | GOSUB / RETURN | **NO** |
+| **`:`** | | Optional statement terminator (D12) | **NO** — stray `:` warns |
+
+### Repeat blocks — caveat (**YES** with spec drift)
+
+Syntax: `[ body ]:N` (e.g. `[CQDQEQ]:4`).
+
+- **YES:** open `[`, close `]:N`, loop body, nested depth limit.
+- **Spec drift:** on `]` re-entry, the **`[` snapshot is not restored** — mutations inside the loop **persist** across iterations (plan amended 2026-06-13). Put **`^`** / **`O`** changes where you intend them.
+
+---
+
+## Comments & titles
+
+```text
+@ optional title or comment @
+T132
+CQ4DEFGABC5 *
+```
+
+- **`@ … @`**: skipped during playback (**YES**).
+- **First `@` block as title (D10):** **NO** — not stored.
+- **Literal `@` inside comment (`\@`):** **NO** — inner `@` ends block early.
+
+---
+
+## END (`*`) semantics
+
+- At **root**: **`*`** = hard stop (ends sequence).
+- **NUL** at end of string = implicit **`*`** (**YES**).
+- Inside future **`=`** subroutines: **`*`** may mean RETURN when `b_stop_is_return` — **NO** (GOSUB not shipped).
+
+---
+
+## Error handling (**YES** — S7i)
+
+| Policy | Recoverable error | Use |
+|--------|-------------------|-----|
+| **NORMAL** (default) | `PLAY warn:` + continue | Bench |
+| **STRICT** | warn → **fatal stop** | Golden tests |
+| **LAZY** | silent skip | Low-noise |
+
+**Fatals always stop** (bad tempo, unclosed `@`, repeat stack overflow, etc.) in every mode.
+
+---
+
+## Copy-paste examples that work TODAY
+
+**Smoke scale (bench preset):**
+
+```text
+@ smoke scale @ CQ4DEFGABC5 *
+```
+
+**Compact run + tempo + beat unit:**
+
+```text
+@ demo @ T120 O4 %Q C4Q DEFGAB C5Q *
+```
+
+**Loop with octave step (from bench loop preset):**
+
+```text
+@ loop @ T120 O1 [CQDQEQFQGQAQBQ ?"Next octave\r\n" ^]:8 *
+```
+
+**Eighth-note figure with rests and ~ (v1-safe):**
+
+```text
+@ rhythm @ T132 O4 %Q RI. C4I E G C4Q G4I E G A4Q ~
+```
+
+**Tilde smoke:**
+
+```text
+@ tilde @ C4Q ~ ~ *
+```
+
+**Explicit everything (always safe):**
+
+```text
+T120 O4
+C4Q D4Q E4Q F4Q G4Q A4Q B4Q C5Q *
+```
+
+---
+
+## Do NOT generate these (common LLM mistakes)
+
+| Bad pattern | Why |
+|-------------|-----|
+| `R I.` with spaces | Use **`RI.`** — one rest token |
+| `X` / `Y` durations | **DEFERRED** — use `I` or `Q` |
+| `C#4` / `Fb3` expecting pitch change | Accidentals **not applied** — use natural letter in C major or wait for **K** |
+| `K"C"` then expect correct key | **NO** — key executive not wired |
+| lowercase `c4q` | Invalid — **uppercase letters only** |
+| MML / ABC / JSON / MIDI | Wrong language — PLAY only |
+| Spaces required between notes | Optional — `CDEFGAB` is valid |
+
+---
+
+## NOT IMPLEMENTED (v1 spec exists; firmware missing)
+
+Group checklist for authors and chatbots — **do not rely on these in scores meant to run on current firmware:**
+
+**Pitch & memory meta**
+
+- `K"…"` key signature  
+- `&±n` transpose  
+- `N<n>` absolute semitone  
+- Accidentals changing pitch (only parse-skip today)  
+
+**Mix & timbre**
+
+- `V<n>` volume executive (default volume only)  
+- `P<n>` voice selection (sine only)  
+
+**Structure**
+
+- `<` / `>` labels and gotos  
+- `=` GOSUB / `/` RETURN  
+- Startup label pre-scan (S7d)  
+- `:` as statement terminator  
+
+**Extensions**
+
+- `\"cmd:args"` expansion dispatch  
+- `L"…"` library call (reserved; warn + skip)  
+
+**Comment/title polish**
+
+- Title from first `@` block  
+- `\@` inside comments  
+
+---
+
+## DEFERRED (not v1 — not “missing firmware bugs”)
+
+- **`X` / `Y`** sixteenth / thirty-second note durations (D4)  
+- **Tuplets** / triplet syntax (D15) — approximate with even `I`/`Q`  
+- **Polyphony** / inline chords / `|"` sync (S3)  
+- **LittleFS / file loader** on device (I7) — host feeds string via UART today  
+- **VIB / TRM / ADSR** PLAY syntax (D13)  
+
+---
+
+## Bench / host feeding (optional context)
+
+On the G474 debug build, a **4096-character** PLAY string can be fed from the host:
+
+1. Unwind to main menu (ESC×3).  
+2. Top-level **`S`** → `PLAY>` prompt.  
+3. Send body in **short UART bursts** (16 chars, ~20 ms gap) until CR.  
+
+See `scripts/play_bench.py` and `/playstr` skill. This is **transport**, not part of the language grammar.
+
+---
+
+## Related documents
+
+| Doc | Role |
+|-----|------|
+| [play-lead-char-cheat-sheet.md](play-lead-char-cheat-sheet.md) | One-screen lead-char reference |
+| [play-v1-implementation-plan.md](play-v1-implementation-plan.md) | Full decision log + **The Big Board** |
+| [PLAY_language_design.md](../PLAY_language_design.md) | Original language design (being trimmed for v1) |
+
+---
+
+**Maintenance rule:** When merging PLAY firmware work, update the **Status** columns and **Last updated** stamp here in the **same PR** as `play.c` changes. When in doubt, grep `App/Src/play.c` for the lead character in `b_play_exec_next` / `b_play_parse_pitch_token`.

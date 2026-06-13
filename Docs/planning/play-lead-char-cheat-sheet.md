@@ -1,6 +1,6 @@
 # PLAY — lead-char cheat sheet
 
-Planning snapshot · detail: [play-v1-implementation-plan.md](play-v1-implementation-plan.md) · firmware tracker: **I10**  
+Planning snapshot · detail: [play-v1-implementation-plan.md](play-v1-implementation-plan.md) · **LLM brief:** [play-v1-chatbot-brief.md](play-v1-chatbot-brief.md) (living fw status) · firmware detail: **I10** in plan  
 **Last updated:** 2026-06-13 (S10 defaults lock · `*` rationale · inheritance **fw**)
 
 **Legend:** 🟢 spec locked · 🔵 deferred · **fw** = shipped in `App/Src/play.c` today · *(blank)* = spec only, not in firmware yet
@@ -76,7 +76,7 @@ API: `b_play_start()` → NORMAL · `b_play_start_policy(src, PLAY_FAULT_POLICY_
 | **[** | **Repeat** open — `]:N` close 🟢; re-entry **without** `[` snapshot restore | **fw** |
 | **<** | **Label** define — `<n` or `<"name"` (≤**16**, max **10** labels/**I2**) 🟢 | |
 | **>** | **Goto** — `>n` / `>"name"`; fwd keep ctx, back restore 🟢; missing → **fatal** | |
-| **~** | **Repeat last note** — top-level only 🟢 | |
+| **~** | **Repeat last note** — top-level only 🟢 | **fw** |
 | **=** | **GOSUB** — `="name"` 🟢; **`/`** returns; **`*`** in callee = hard END unless **`b_stop_is_return`** (**D23**) | |
 | **/** | **RETURN** — pop **`=`** stack; **fatal** if empty at root 🟢 | |
 | **L** | **Library** — `L"…"` (**D23** 🔵); sets **`b_stop_is_return`** for descendants | warn + skip |

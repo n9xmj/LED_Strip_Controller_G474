@@ -8,5 +8,6 @@
 
 extern const char *psz_play_smoke_test;
 extern const char *psz_play_loop_test;
+extern const char *psz_play_raiders_test;
 
 #endif /* PLAY_PRESETS_H */

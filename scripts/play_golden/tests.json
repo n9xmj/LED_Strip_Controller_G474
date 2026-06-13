@@ -16,5 +16,19 @@
     "tier": "smoke",
     "menu_key": "1",
     "aliases": ["P0-menu"]
+  },
+  "tilde": {
+    "description": "Top-level ~ replays last completed note (D2)",
+    "tier": "feature",
+    "file": "tilde.play",
+    "policy": "strict",
+    "aliases": ["tilde-repeat", "D2"]
+  },
+  "raiders": {
+    "description": "Raiders Smoke+ opening — march rhythm + ~ (T3 Smoke+)",
+    "tier": "smoke+",
+    "file": "raiders.play",
+    "policy": "strict",
+    "aliases": ["raiders-march", "smoke-plus"]
   }
 }

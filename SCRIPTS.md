@@ -25,7 +25,8 @@ All automation lives in the `scripts/` directory at the project root.
 | flash using a specific ST-Link | `scripts/flash.ps1 --stlink-sn 066AFF123456789012345678` |
 | smoke test (reset + capture console) | `scripts/smoke-test.ps1` |
 | smoke test with explicit hardware | `scripts/smoke-test.ps1 --stlink-sn XXX --port COM15 --baud 921600` |
-| PLAY inline string on board | `python scripts/play_bench.py str "CQ4DEFGABC5 *"` (skill: `/playstr`) |
+| PLAY inline string on board | `python scripts/play_bench.py str "CQ4DEFGABC5 *"` (skill: `/playstr`; saves last body for replay) |
+| Replay last `/playstr` | `python scripts/play_bench.py replay` (skill: `/replay`) |
 | PLAY from `.play` file | `python scripts/play_bench.py file scripts/play_golden/smoke.play` (skill: `/playfile`) |
 | PLAY golden test by name | `python scripts/play_bench.py test smoke` (skill: `/playtest`) |
 | List PLAY golden tests | `python scripts/play_bench.py list` |

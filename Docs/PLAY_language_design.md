@@ -219,7 +219,12 @@ A musician reasonably assumes that once a setting like key signature, tempo, vol
 - Instrument/waveform selection (from future command)
 - And other command-driven state as it is added (the exact list will be refined during implementation)
 
-**Accidentals do not inherit by default.** A bare note letter always uses the current key signature's default accidental (if any). Explicit # / + / b / - in the note descriptor always override.
+**Accidentals do not inherit by default.** Per note token:
+
+- **Bare letter** (no `#` / `+` / `b` / `-` / `n` in the descriptor cluster): apply the current **K** key-signature LUT for that letter.
+- **Explicit accidental** (any of `#` `+` `b` `-` `n` present in the cluster): **ignore key signature entirely**; resolve from letter + explicit accidental only. **`n`** requests the natural pitch class of the letter (e.g. bare `E` in B♭ major → E♭; `En` → E natural).
+
+Full resolve order, linear absolute semitone, and **mod-12 vs transpose** rules: [play-v1-implementation-plan.md](planning/play-v1-implementation-plan.md) section **Pitch resolve pipeline** (after **D21**).
 
 **Note-repeat idea (under consideration)**: A special punctuation character (examples: `\`, `$`, `&`, or other TBD punctuation — not a letter) means "play the immediately previous note again". This is strictly a **note** repeat — it does not repeat the last *command*. The token inherits almost all (or all) note context from the prior note, including:
 - Duration, octave, accidental
@@ -342,11 +347,11 @@ All of these are state updates in `play_state_t` (current_volume, vibrato_params
 - A signed numeric parser is only required for transposition (S). Other numeric commands may accept an optional leading + or - for parser simplicity / robustness, but the sign should be ignored (or treated as an error) except for S.
 - Reusing a common decimal-numeric subroutine across commands that need numbers is effective for code size. Reusing note-descriptor parsing logic for command constructs that only look superficially similar (e.g., key signature) is usually a source of complexity and should be avoided.
 - The player maintains a small set of current note characteristics (duration, octave, volume, key signature, transposition, instrument, note/rest ratio, etc.). After parsing a note, any explicitly provided attributes or modifiers (including `_` / `!` for legato/staccato ratio) update the current set. Subsequent notes inherit current values for omitted attributes (see Inheritance Model section above for current list and wiggle room). Legato/staccato ratios (100% / ~25% duty) are explicitly part of the inheritable state.
-- Accidentals never inherit implicitly. Bare notes use the current K key signature LUT; explicit accidentals override.
+- Accidentals never inherit implicitly. Bare notes use the current K key signature LUT; explicit accidentals in the cluster override key signature entirely (**Pitch resolve pipeline**).
 - A future "repeat last note" punctuation token (TBD char such as `\`, `$`, etc.) repeats the immediately prior **note** (not a command). It inherits almost all note context from the prior note, including accidental, legato/staccato, note/rest ratio, and other inheritable characteristics ("the whole smash").
 - Commands (T, O, K, S, R, [, *, >, etc.) are processed immediately and update parser/player state (including the current characteristics struct).
 - Because jumps and loops can affect inherited note state, the implementation may associate saved snapshots of the note characteristics (plus related state such as tempo, volume, key signature) with labels and repeat markers. On jump/return the appropriate snapshot is restored.
-- When parsing a bare note letter (no explicit accidental), the current K key signature LUT supplies the default accidental for that pitch class. Explicit #/+/b/- in the note descriptor always override the key signature default. Any active transposition (S) is then applied to the final computed pitch.
+- When parsing a bare note letter (no explicit accidental in the cluster), the current K key signature LUT supplies the default alteration for that letter. Any explicit `#`/`+`/`b`/`-`/`n` in the cluster **fully supersedes** the key signature for that note. Transposition (`&` per v1 plan; legacy `S` retired) is a **linear** semitone add on the resolved absolute pitch — **not** a `% 12` on the normal path. See **Pitch resolve pipeline** in the implementation plan.
 
 **Code-reuse lesson from prior implementation**: Reusing the core note-descriptor parser for command constructs that look superficially similar (e.g., key signature sharing "note name + accidental" traits) created unnecessary complexity. Numeric parsing for commands (T, O, V, etc.) reused successfully. The current design deliberately keeps note descriptors and most commands syntactically distinct at the lead-character level to make clean reuse easier without forcing awkward shared sub-parsers.
 - `*<n>` defines a goto-label: record the current source position (offset) in a small label table. n can be >9; a reasonable upper limit will be chosen (e.g. 256 or 1024) to keep the table small.

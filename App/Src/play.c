@@ -59,6 +59,18 @@ typedef struct
     uint8_t  u8_duty_num;
     uint8_t  u8_duty_den;
 } play_ctx_snapshot_t;
+/** @brief Last completed note/rest — replay source for top-level ~ (D2/S10). */
+typedef struct
+{
+    char     c_letter;
+    int8_t   i8_semi;
+    uint8_t  u8_octave;
+    uint8_t  u8_dur_x2;
+    bool     b_dotted;
+    uint8_t  u8_duty_num;
+    uint8_t  u8_duty_den;
+    bool     b_is_rest;
+} play_completed_snapshot_t;
 typedef struct
 {
     uint32_t            u32_body_start;
@@ -77,9 +89,10 @@ typedef struct
     play_note_memory_t    x_note_mem;
     play_fault_policy_t   e_fault_policy;
     uint8_t               u8_repeat_depth;
-    play_repeat_frame_t   ax_repeat[PLAY_STACK_MAX_DEPTH];
-    bool                  b_has_completed_note;
-    float                 f_current_hz;
+    play_repeat_frame_t        ax_repeat[PLAY_STACK_MAX_DEPTH];
+    play_completed_snapshot_t  x_last_completed;
+    bool                       b_has_completed_note;
+    float                      f_current_hz;
     float                 f_current_level;
 } play_runtime_t;
 /* =============================================================================
@@ -104,6 +117,7 @@ static bool b_play_skip_comment(play_runtime_t *px_rt);
 static bool b_play_breaks_note_token(char c_ch, bool b_after_letter);
 static bool b_play_x2_from_duration_letter(char c_letter, uint8_t *pu8_x2);
 static int8_t i8_play_semitone_for_letter(char c_letter);
+static void v_play_normalize_pitch(uint8_t *pu8_octave, int8_t *pi8_semi);
 static float f_play_calc_hz(uint8_t u8_octave, int8_t i8_semitone);
 static uint32_t u32_play_calc_note_ticks(uint16_t u16_tempo_bpm,
                                          uint8_t u8_beat_unit_x2,
@@ -265,7 +279,7 @@ static void v_play_note_mem_init_defaults(play_note_memory_t *px_mem)
         return;
     }
     px_mem->u8_octave = PLAY_DEFAULT_OCTAVE;
-    px_mem->u8_dur_x2 = 0U;
+    px_mem->u8_dur_x2 = PLAY_DEFAULT_DUR_X2;
     px_mem->b_dotted = false;
     px_mem->u8_duty_num = PLAY_DEFAULT_DUTY_NUM;
     px_mem->u8_duty_den = PLAY_DEFAULT_DUTY_DEN;
@@ -444,6 +458,37 @@ static int8_t i8_play_semitone_for_letter(char c_letter)
         default:  return -1;
     }
 }
+static void v_play_normalize_pitch(uint8_t *pu8_octave, int8_t *pi8_semi)
+{
+    if (pu8_octave == NULL || pi8_semi == NULL)
+    {
+        return;
+    }
+    while (*pi8_semi < 0)
+    {
+        *pi8_semi = (int8_t)(*pi8_semi + 12);
+        if (*pu8_octave > 1U)
+        {
+            (*pu8_octave)--;
+        }
+        else
+        {
+            break;
+        }
+    }
+    while (*pi8_semi > 11)
+    {
+        *pi8_semi = (int8_t)(*pi8_semi - 12);
+        if (*pu8_octave < 8U)
+        {
+            (*pu8_octave)++;
+        }
+        else
+        {
+            break;
+        }
+    }
+}
 static float f_play_calc_hz(uint8_t u8_octave, int8_t i8_semitone)
 {
     if (u8_octave < 1U)
@@ -517,6 +562,7 @@ static bool b_play_parse_pitch_token(play_runtime_t *px_rt,
     bool b_saw_oct = false;
     bool b_saw_dot = false;
     bool b_saw_duty = false;
+    bool b_saw_acc = false;
     char c_letter = c_lead_letter;
     int8_t i8_semi = b_is_rest ? 0 : i8_play_semitone_for_letter(c_letter);
     if (!b_is_rest && i8_semi < 0)
@@ -651,10 +697,40 @@ static bool b_play_parse_pitch_token(play_runtime_t *px_rt,
             }
             case '#':
             case '+':
+                if (b_saw_acc &&
+                    px_rt->e_fault_policy == PLAY_FAULT_POLICY_STRICT)
+                {
+                    (void)b_play_fault(px_rt, PLAY_FAULT_CLASS_RECOVERABLE,
+                                       "duplicate accidental");
+                    return false;
+                }
+                i8_semi = (int8_t)(i8_semi + 1);
+                b_saw_acc = true;
+                px_rt->x_public.u32_src_offset++;
+                break;
             case 'b':
-            case 'n':
             case '-':
-                /* Accidentals parsed but not applied in Phase 1 — skip char. */
+                if (b_saw_acc &&
+                    px_rt->e_fault_policy == PLAY_FAULT_POLICY_STRICT)
+                {
+                    (void)b_play_fault(px_rt, PLAY_FAULT_CLASS_RECOVERABLE,
+                                       "duplicate accidental");
+                    return false;
+                }
+                i8_semi = (int8_t)(i8_semi - 1);
+                b_saw_acc = true;
+                px_rt->x_public.u32_src_offset++;
+                break;
+            case 'n':
+                if (b_saw_acc &&
+                    px_rt->e_fault_policy == PLAY_FAULT_POLICY_STRICT)
+                {
+                    (void)b_play_fault(px_rt, PLAY_FAULT_CLASS_RECOVERABLE,
+                                       "duplicate accidental");
+                    return false;
+                }
+                i8_semi = i8_play_semitone_for_letter(c_letter);
+                b_saw_acc = true;
                 px_rt->x_public.u32_src_offset++;
                 break;
             default:
@@ -677,6 +753,10 @@ static bool b_play_parse_pitch_token(play_runtime_t *px_rt,
     if (!b_saw_oct)
     {
         x_work.u8_octave = px_rt->x_note_mem.u8_octave;
+    }
+    if (!b_is_rest)
+    {
+        v_play_normalize_pitch(&x_work.u8_octave, &i8_semi);
     }
     px_rt->x_public.u8_octave = x_work.u8_octave;
     px_rt->x_note_mem = x_work;
@@ -709,6 +789,15 @@ static void v_play_start_note(play_runtime_t *px_rt,
     uint32_t u32_active = (u32_note_ticks * (uint32_t)u8_duty_num) /
                           (uint32_t)u8_duty_den;
     uint32_t u32_off = u32_token_start;
+    px_rt->x_last_completed.c_letter = c_letter;
+    px_rt->x_last_completed.i8_semi = i8_semi;
+    px_rt->x_last_completed.u8_octave = u8_octave;
+    px_rt->x_last_completed.u8_dur_x2 = u8_dur_x2;
+    px_rt->x_last_completed.b_dotted = b_dotted;
+    px_rt->x_last_completed.u8_duty_num = u8_duty_num;
+    px_rt->x_last_completed.u8_duty_den = u8_duty_den;
+    px_rt->x_last_completed.b_is_rest = b_is_rest;
+    px_rt->b_has_completed_note = true;
     if (!b_is_rest && u8_duty_num > 0U && u32_note_ticks >= 1U)
     {
         if (u32_active == 0U)
@@ -731,7 +820,6 @@ static void v_play_start_note(play_runtime_t *px_rt,
     px_rt->f_current_hz = f_play_calc_hz(u8_octave, i8_semi);
     px_rt->f_current_level = (float)px_rt->x_public.u8_volume_pct / 100.0f;
     v_synth_engine_set_tone(px_rt->f_current_hz, px_rt->f_current_level);
-    px_rt->b_has_completed_note = true;
     v_play_emit_resolve(px_rt, PLAY_RESOLVE_NOTE, u32_off, c_letter, u8_octave,
                         u8_dur_x2, b_dotted, false, px_rt->f_current_hz,
                         u32_note_ticks);
@@ -1071,6 +1159,49 @@ static bool b_play_exec_next(play_runtime_t *px_rt)
             v_play_emit_resolve(px_rt, PLAY_RESOLVE_META, u32_off, '%', 0U,
                                 u8_beat_x2, false, false, 0.0f, 0U);
             continue;
+        }
+        if (c_ch == '~')
+        {
+            uint32_t u32_off = px_rt->x_public.u32_src_offset;
+            char c_replay_letter;
+            int8_t i8_replay_semi;
+            uint8_t u8_replay_oct;
+            uint8_t u8_replay_dur;
+            bool b_replay_dot;
+            uint8_t u8_replay_duty_num;
+            uint8_t u8_replay_duty_den;
+            bool b_replay_rest;
+            px_rt->x_public.u32_src_offset++;
+            if (!px_rt->b_has_completed_note)
+            {
+                (void)b_play_fault(px_rt, PLAY_FAULT_CLASS_RECOVERABLE,
+                                   "tilde before any note");
+                c_replay_letter = 'C';
+                i8_replay_semi = 0;
+                u8_replay_oct = PLAY_DEFAULT_OCTAVE;
+                u8_replay_dur = PLAY_DEFAULT_DUR_X2;
+                b_replay_dot = false;
+                u8_replay_duty_num = PLAY_DEFAULT_DUTY_NUM;
+                u8_replay_duty_den = PLAY_DEFAULT_DUTY_DEN;
+                b_replay_rest = false;
+            }
+            else
+            {
+                c_replay_letter = px_rt->x_last_completed.c_letter;
+                i8_replay_semi = px_rt->x_last_completed.i8_semi;
+                u8_replay_oct = px_rt->x_last_completed.u8_octave;
+                u8_replay_dur = px_rt->x_last_completed.u8_dur_x2;
+                b_replay_dot = px_rt->x_last_completed.b_dotted;
+                u8_replay_duty_num = px_rt->x_last_completed.u8_duty_num;
+                u8_replay_duty_den = px_rt->x_last_completed.u8_duty_den;
+                b_replay_rest = px_rt->x_last_completed.b_is_rest;
+            }
+            v_play_emit_resolve(px_rt, PLAY_RESOLVE_META, u32_off, '~', u8_replay_oct,
+                                u8_replay_dur, b_replay_dot, b_replay_rest, 0.0f, 0U);
+            v_play_start_note(px_rt, u32_off, c_replay_letter, i8_replay_semi,
+                              u8_replay_oct, u8_replay_dur, b_replay_dot,
+                              u8_replay_duty_num, u8_replay_duty_den, b_replay_rest);
+            return true;
         }
         if (c_ch == 'R')
         {

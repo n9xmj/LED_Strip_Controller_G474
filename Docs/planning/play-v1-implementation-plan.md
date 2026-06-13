@@ -1,7 +1,7 @@
 # PLAY v1 — Implementation readiness plan
 
 **Parent spec:** [Docs/PLAY_language_design.md](../PLAY_language_design.md)  
-**Related:** [co5ths_key_signature_handoff.md](../co5ths_key_signature_handoff.md) · [tools/play_melody.py](../../tools/play_melody.py) · **[play-lead-char-cheat-sheet.md](play-lead-char-cheat-sheet.md)** (planning quick ref)  
+**Related:** [co5ths_key_signature_handoff.md](../co5ths_key_signature_handoff.md) · [tools/play_melody.py](../../tools/play_melody.py) · **[play-lead-char-cheat-sheet.md](play-lead-char-cheat-sheet.md)** (planning quick ref) · **[play-v1-chatbot-brief.md](play-v1-chatbot-brief.md)** (LLM / author copy-paste brief — **living fw status**)  
 **Branch:** `main` (planning on main until feature branch opened) · **Status:** PLANNING
 
 > **Goal:** Move PLAY from "early preview" to an **implementation-ready v1 contract**
@@ -15,7 +15,7 @@
 
 ---
 
-## Summary decision table
+## Summary decision table: **The Big Board**
 
 *D-items **D1–D22** listed in numeric order; detail sections below may still be out of order until T1 doc pass.*
 
@@ -79,7 +79,7 @@
 | I7  | 🔵     | **Module split** — deferred **v2+**; v1 = opaque `**play_handle_t**` + exposed `**play_instance_t**` (bench cast) + on-chip source (**I9**) |
 | I8  | 🟢     | **Resolve hook** — callback on every completed parse (Release-safe; verbose / test / GUI / LEDs)                                            |
 | I9  | 🟢     | **Player tests submenu** — **`1`/`2`/`s`/`q`/`p`** shipped; near-term **`g`** golden · **`l`** LED viz (**T3** / **I8**) |
-| I10 | 🔴     | **Firmware implementation gap** — live tracker vs **I1** fence (`App/Src/play.c`)                                                           |
+| I10 | 🟡     | **Firmware implementation gap** — live tracker vs **I1** fence (`App/Src/play.c`); P0 sub-FSM + **~** closed 2026-06-13 |
 | T1  | 🔴     | `PLAY_language_design.md` dedupe + implementer quick-ref (not user howto)                                                                   |
 | T2  | 🟡     | **Host + serial test harness** — `play_melody.py` / **`play_scenarios.py`**; dual-track with **T3** / **I9** (**user lock 2026-06-13**) |
 | T3  | 🟢     | **Golden tiers + menu order** — Smoke → Smoke+ (Williams) → Feature → Torture; **`m` → `g`** STRICT (**user lock 2026-06-13**) |
@@ -110,7 +110,7 @@ These are **already chosen** in the spec or firmware; v1 implementation should a
 - `**P<n>` voice selection (D1 🟢, D11 🟢)** — **canonical** command for synthesizable voice / timbre (not per-note; not polyphony routing). Updates `**u8_current_voice**` in unified note memory (inherits; label/repeat snapshots). **Default:** pure **sine** (CORDIC) — implicit `**P0**`. Range **0–255**; `**P1`, `P2`, …** map to future generators in the voice table. **No separate `M` command** — withdrawn from spec (D11). **v1 syntax:** `**P` + digits only**; `**P`-family modifier syntax may grow** as `synth_engine` gains params (ADSR per voice, detune, …) without adding parallel command letters.
 - **Title metadata (D10 🟢)** — the **first `@ … @` comment block** in the string (after leading whitespace skip) is the **piece/part title**, captured at **pre-parse**. Stored in `play_session_t` (not note memory). If no comment block precedes music, title is **empty**. No mandatory magic/version header.
 - `**@ … @` comment blocks (D9 🟢)** — bracketed skip regions; `\@` escape; unterminated block at EOF = load error. **First** block doubles as title (D10); later blocks are comments only.
-- **K + & pitch pipeline (D8 🟢, D21 🟢)** — **Default key: C major** until valid `**K"…"**`. Per note: letter + explicit `**#`/`b**` → **key LUT** → add sticky `**&**` semitone offset (direct sum). `**K"…"` only**; `**K**` without opening `**"**` → **WARNING**, keep key; bad keyspec inside quotes → **WARNING**; quote integrity → **FATAL** (**D8b**). Out-of-range pitch after sum → pitch class `**% 12**`, clamp octave to playable min/max → **WARNING**, continue. Bad `**&**` → **WARNING**, keep offset. `**&0**` clears offset (**S8** closed).
+- **K + & pitch pipeline (D8 🟢, D21 🟢, pitch-resolve contract)** — **Default key: C major** until valid `**K"…"**`. Per note: **bare letter** → apply `**K` LUT**; **explicit accidental** (`**#`/`+`/`b`/`-`/`n`** in descriptor cluster) → **skip `K` LUT entirely** → build **linear absolute semitone** → add sticky `**&**` offset (**no `% 12`** on normal path). `**K"…"` only**; `**K**` without opening `**"**` → **WARNING**, keep key; bad keyspec inside quotes → **WARNING**; quote integrity → **FATAL** (**D8b**). **Only** when absolute lies **outside playable min/max** after full sum → **D21 OOR salvage** (`pc` fold + octave clamp + WARNING) — not used for in-range transpose. Bad `**&**` → **WARNING**, keep offset. `**&0**` clears offset (**S8** closed). Full step list: **Pitch resolve pipeline** (after **D21**).
 - `**?"…"` debug print (D14 🟢)** — single-char `**?**` (BASIC `**PRINT**` shorthand). `**?"…"**` → emit **decoded** string (**C escapes**, no `**printf**` `%` formats); **no auto-CRLF** after quoted output (`**?""**` = emit nothing). **Bare `?**` alone → **CR/LF (`\r\n`)**. Quote integrity faults → **FATAL** (**D8b**); other `**?"…"**` faults → **WARNING**, continue.
 - **Streaming-first parser (not a REPL / not a general language)** — music is interpreted **at runtime** by a char-at-a-time walk; **no AST**, no token list in RAM. **Single-char executives** dominate (`T120`, `P1`, …). **Quoted-string metas (D8b):** `**K"…"**` (D8 — **only** form), `**?"…"**`, `**\"…"**`, `**<"…"**` / `**>"…"**` / `**="…"**` — all allow **optional WS before opening `"**`. **Block meta:** `**@ … @**` (D9).
 - **Error policy (S7 🟢, S7i 🟢)** — three **fault-policy modes** (`**play_fault_policy_t**`): **LAZY** (silent recoverable), **NORMAL** (default — WARNING + continue), **STRICT** (recoverable warnings/errors → **FATAL** stop, GCC `-Werror` analog). **S7a** fatals **always abort** in every mode. Recoverable = **S7b** carve-outs + **S7c** default bucket. Build default **`PLAY_FAULT_POLICY_DEFAULT = PLAY_FAULT_POLICY_NORMAL`** in `**play_config.h**`; debug `**playstr**` may select **STRICT** for authoring.
@@ -377,7 +377,7 @@ V<n>    ; n = 0..100 (logical range)
 | **Note letter**           | `**A`–`G` uppercase only** starts a note (top-level, or after prior descriptor is **complete**).                                                                                                              |
 | **Flat**                  | Lowercase `**b`** or `**-**` (single-char accidentals, anywhere in descriptor cluster). `**Bb4Q` = B♭.**                                                                                                      |
 | **Sharp**                 | `**#`** or `**+**`                                                                                                                                                                                            |
-| **Natural**               | Lowercase `**n`** only — explicit natural; pitch from letter + **K** LUT (cancels earlier `**#`/`b`/`+`/`-`** in same cluster). **Descriptor-only** — distinct from top-level `**N`** semitone cmd (**D22**). |
+| **Natural**               | Lowercase `**n`** only — explicit natural; **ignores `K` LUT** (natural pitch class of the letter). Cancels conflicting explicit `#`/`b` in same cluster per **S9**. **Descriptor-only** — distinct from top-level `**N`** semitone cmd (**D22**). |
 | **Incomplete descriptor** | Uppercase `**A`–`G`** before current note has its duration → **parse error** (not next note).                                                                                                                 |
 | **Whitespace**            | Optional (**D12**); readability between executives — not required when abut/`:` disambiguates.                                                                                                                |
 
@@ -780,19 +780,21 @@ T120 C4Q      ; plays — inherits oct 4, Q, duty from either path above
 
 | Step            | Rule                                                                                                                                                    |
 | --------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| **Order**       | Per played note: **letter** → **explicit `#`/`b`/`+`/`-`** (if any) → `**K` LUT accidental** → **add `i8_transpose_semitones`** from last valid `**&**` |
+| **Order**       | Per played note: see **Pitch resolve pipeline** (after this section) — **`&`** is a **linear** add on the final absolute semitone, **never** `% 12` in-range |
 | **Sticky**      | Stored in unified note memory; inherits until next `**&`**; included in label/repeat/GOSUB snapshots                                                    |
 | **Default**     | **0** at sequence start                                                                                                                                 |
 | **Invalid `&`** | Malformed token → **WARNING**, **keep current offset** (same class as bad `**K`**)                                                                      |
 
 
-**Out-of-range pitch (locked):**
+**Out-of-range pitch (locked — salvage only):**
 
-After the full semitone sum, if the result lies **outside playable boundaries** (product constants — e.g. min/max MIDI note for `synth_engine`):
+After the **full linear absolute semitone** (including `**&**`), if the result lies **outside playable boundaries** (product constants — e.g. min/max MIDI note for `synth_engine`):
 
-1. Preserve **pitch class**: `pc = semitone mod 12` (positive modulo).
+1. Preserve **pitch class**: `pc = absolute % 12` (positive modulo) — **OOR recovery only**, not the normal transpose path.
 2. **Clamp octave**: map `pc` to the **lowest** playable octave if below range, **highest** if above.
 3. **WARNING** once per offending note (or coalesced log); **continue playback** — not hard abort.
+
+**Do not** apply `% 12` to in-range results after `**&**` — that collapses octave jumps (e.g. `O0` + `B` + `&+2` must sound semitone **12**, not **0**).
 
 **Examples:**
 
@@ -809,6 +811,61 @@ C4Q            ; sounds ~G4 (letter still C in source — offset applied at pitc
 **Cross-ref:** **S8** closed via `**&0`**. **D3** octave `**^`/`v`/`O`** applies to **written octave digit**, before or after transpose in implementation — **lock at implement:** octave digit sets written octave, then LUT+`**&`** shift applied to absolute pitch (document in **S5** / freq helper).
 
 **Resolution:** `**&+n` / `&-n` / `&0`**; post-key direct semitone add; out-of-range → **pc wrap + octave clamp + WARNING**.
+
+---
+
+### Pitch resolve pipeline (implementation contract)
+
+**Status:** 🟢 · **Cross-ref:** **D7** accidentals · **D8** key LUT · **D21** transpose · **D22** `N<n>` bypass · **S5** freq helper · **I8** resolve hook
+
+**Goal:** One pure **`int16_t` signed** path from parsed note spell → **linear absolute semitone** → Hz → `synth_engine`. Parser keeps **spelling** (letter + explicit acc flags); resolve computes **sounding pitch**.
+
+#### Bare vs explicit accidental (locked)
+
+| Descriptor cluster | Rule |
+| ------------------ | ---- |
+| **Bare letter** — no `#` / `+` / `b` / `-` / `n` in the cluster | `pitch_class = letter_lut[letter] + key_lut[letter]` |
+| **Explicit accidental** — any of `#` `+` `b` `-` `n` present | `pitch_class = letter_lut[letter] + explicit_delta` — **`key_lut` is not consulted** |
+
+- **`n` (natural):** explicit — play the **natural pitch class** of the letter, **ignoring key signature** (e.g. bare `E` in B♭ major → E♭; `En` → E natural).
+- **Accidentals do not inherit** across tokens (**D7**). Each note token re-evaluates bare vs explicit from its own cluster only.
+- Redundant spellings (`Eb` in B♭ major same as bare `E`) are valid; **STRICT** may WARN on duplicate/conflicting acc (**S9**).
+
+#### Two domains — do not confuse them
+
+| Domain | Range / ops | `% 12`? |
+| ------ | ----------- | ------- |
+| **Pitch class** (within-octave spelling math) | `0..11` plus temporary under/overflow while adjusting letter + acc/key | **Yes — with octave borrow/carry** when normalizing spelling (e.g. `B#` → `C` bumps octave +1) |
+| **Absolute semitone** (sounding pitch index) | Linear `int16_t`; `absolute = pitch_class + octave_base(octave)` then `+= &` offset | **No** on the normal path |
+
+**Transpose (`&±n`) is a linear add on absolute semitone.** Never `% 12` after `&` when the result remains in playable range.
+
+**Worked example (`O0`, `&+2`):**
+
+```
+letter_lut[B] = 10
+Bare B,  O0  → absolute = 10 + octave_base(0) = 10
+B#,      O0  → pc 11 → absolute = 11
+&+2       → bare B sounds 12 (not 12%12=0); B# sounds 13 (not 13%12=1)
+```
+
+#### Resolve steps (normal path)
+
+1. `pc = letter_lut[letter]` — C=0, D=2, E=4, F=5, G=7, A=9, B=10 (**D7**).
+2. **If explicit accidental in cluster:** `pc += explicit_delta` (`#`/`+` → +1; `b`/`-` → −1; `n` → reset to `letter_lut[letter]` only).
+   **Else (bare):** `pc += key_lut[letter]` from current `K"…"` (default C major = all 0).
+3. **Normalize pitch class** — while `pc < 0`: `pc += 12`, `octave_carry--`; while `pc > 11`: `pc -= 12`, `octave_carry++`. *(This is the only `% 12` family step — it preserves total pitch via carry, not a final chop.)*
+4. `absolute = pc + octave_base(written_octave + octave_carry)` — `octave_base` convention locked in **`play_config.h`** / **S5** (document one canonical mapping).
+5. `absolute += i16_transpose` from sticky `**&**` (**linear**, no modulo).
+6. If `absolute` outside playable min/max → **D21 OOR salvage** (not normal playback math).
+7. Optional boundary WARN if policy requires; else proceed.
+8. `f_hz = ref_hz * 2^(absolute / 12.0f)` (float only here) → `synth_engine`.
+
+**`N<n>` path (**D22**):** digits set `absolute` primary field directly; suffix octave digit updates **memory only** unless policy says otherwise — acc/key/`&` interaction per **D22** locked rules.
+
+**Snapshots (`~`, repeats, labels):** store **resolved absolute semitone** (and spell for trace), not letter alone — avoids misleading echo labels.
+
+**Cross-ref:** [PLAY_language_design.md](../PLAY_language_design.md) inheritance · [play-v1-chatbot-brief.md](play-v1-chatbot-brief.md) author rules.
 
 ---
 
@@ -2354,11 +2411,11 @@ Smoke+ presets land incrementally (**Star Wars** → **Raiders** → other Willi
 
 ### I10 — Firmware implementation gap (vs I1 fence)
 
-**Status:** 🔴 · **Living tracker** — update as `**App/Src/play.c`** grows · **Last audited:** 2026-06-13 (Phase 1 skeleton; smoke + loop presets on bench)
+**Status:** 🟡 · **Living tracker** — update as `App/Src/play.c` grows · **Last audited:** 2026-06-13 (P0 sub-FSM + `~` D2 landed; Raiders golden filed)
 
 **Question:** What does the **on-device interpreter actually parse today**, versus the **I1 must-ship** column?
 
-**Authoritative code:** `[App/Src/play.c](../../App/Src/play.c)` (header: *Phase 1 skeleton — smoke-scale path*). Bench presets: `[App/Src/play_presets.c](../../App/Src/play_presets.c)`. Menu: `[App/Src/debug_menu.c](../../App/Src/debug_menu.c)`.
+**Authoritative code:** `App/Src/play.c` · Bench presets: `App/Src/play_presets.c` · Golden: `scripts/play_golden/`
 
 **Legend:**
 
@@ -2378,53 +2435,58 @@ Smoke+ presets land incrementally (**Star Wars** → **Raiders** → other Willi
 
 | Feature               | Notes                                                                                                |
 | --------------------- | ---------------------------------------------------------------------------------------------------- |
-| **Notes A–G**         | Letter + optional octave digit + **required** duration letter (`W/H/Q/I`) + dot                      |
-| `**T<n>`**            | Tempo BPM; capped `**PLAY_TEMPO_BPM_MAX**`                                                           |
-| `**%W/H/Q/I**`        | Beat unit — which note value = 1 beat (**D24**); default `%Q` at session start                         |
-| `**O<n>**`            | Default octave                                                                                       |
-| `**^` / `v**`         | Octave step ±1 (clamped 1..8)                                                                        |
-| `**R` + duration**    | 🟡 see gaps — schedules silence for `**RQ`**-style only                                              |
-| `**[ … ]:N**`         | Repeat stack; `**]**` re-entry **without** snapshot restore (mutations persist — amended 2026-06-13) |
-| `**?"…"` / bare `?`** | Debug print; C escapes; bare `**?**` → CRLF                                                          |
-| `***` END**           | Hard stop + synth off                                                                                |
-| `**@ … @`**           | Runtime skip (no title, no `**\@**`)                                                                 |
-| **I4 scheduler**      | 1 ms shared tick; integer tempo → tick math; legato default duty **8/8**                             |
-| **I8 resolve hook**   | Fires on successful note/rest/meta/structural resolve                                                |
-| **Session defaults**  | Tempo/octave/volume/beat-unit/duty at reset (**S10** subset)                                         |
-| **I9 bench**          | Submenu `**m` → `1`/`2`/`s`**; prints full score string before `**b_play_start**`                    |
+| **Notes A–G**         | Order-flex suffix; inheritance; compact runs (`CQ4DEFGAB`) |
+| **`T<n>`**            | Tempo BPM; capped `PLAY_TEMPO_BPM_MAX` |
+| **`%W/H/Q/I`**        | Beat unit (D24); default `%Q` at session start |
+| **`O<n>`**            | Default octave in note memory |
+| **`^` / `v`**         | Octave step ±1 (clamped 1..8) |
+| **`R` rest**          | Full sub-parser — same postfix as notes |
+| **`~` note-repeat**   | Replay last completed note/rest; S10 template + WARNING if none (D2) |
+| **Duty `_` `!` `;` `;n`** | Parsed on notes/rests; S9 last-wins in STRICT |
+| **`[ … ]:N`**         | Repeat stack; `]` re-entry **without** snapshot restore |
+| **`?"…"` / bare `?`** | Debug print; C escapes |
+| **`*` END**           | Hard stop + synth off; NUL = implicit `*` |
+| **`@ … @`**           | Runtime skip (no title, no `\@`) |
+| **`L"…"`**            | Warn + skip (D23 deferred) |
+| **S7i fault policy**  | `play_fault_policy_t` — LAZY / NORMAL / STRICT |
+| **S10 session defaults** | `PLAY_DEFAULT_DUR_X2` seeded at session start |
+| **I4 scheduler**      | 1 ms shared tick; legato default duty 8/8 |
+| **I8 resolve hook**   | Fires on successful resolve |
+| **I9 bench**          | Submenu `m` → `1`/`2`/`s` |
+| **T3 golden**         | `smoke` · `loop` · `tilde` · `raiders` in `scripts/play_golden/` |
 
 
 **Safe authoring today (copy-paste patterns):**
 
 ```text
 @ optional comment @
-T120 O4
-C4Q D4Q E4Q …                    ; explicit octave + duration per note
-[^CQDQEQFQGQAQBQ ?"msg\r\n"]:8   ; ^ at loop head (S4 restore)
+T120 O4 %Q
+CQ4DEFGABC5                    ; compact scale
+C4Q ~ ~                       ; tilde replay
+[^CQDQEQFQGQAQBQ]:8           ; repeat (mutations persist)
 *
 ```
 
 ---
 
-#### Note / rest sub-FSM gaps (❌ / 🟡 — highest impact)
+#### Note / rest sub-FSM — P0 closed (✅ 2026-06-13)
 
-These block “musician natural” scores (`CDEFGAB`, sharps, duty tweaks, full `**R**` grammar).
+| ID | Feature | Firmware |
+| -- | ------- | -------- |
+| — | **Characteristic inheritance** | ✅ |
+| — | **Order-flexible descriptors** | ✅ |
+| D5 | **Duty modifiers** | ✅ |
+| D20 | **`R` full sub-parser** | ✅ |
+| D2 | **`~` note-repeat** | ✅ |
+| — | **Last-note snapshot** | ✅ `play_completed_snapshot_t` |
+| S9 | **Per-note duty last-wins** | ✅ |
 
+**Still missing in pitch pipeline:**
 
-| ID  | Feature                                           | Spec                                                                  | Firmware                                                                                        | Priority hint                   |
-| --- | ------------------------------------------------- | --------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------- | ------------------------------- |
-| —   | **Characteristic inheritance**                    | Omitted duration, octave, duty inherit from unified note memory       | ❌ Every note must spell duration; `**O**` sets default octave only — no “carry forward `**Q**`” | **P0** — unlocks compact scores |
-| —   | **Order-flexible descriptors**                    | Accidental / octave / duration / dot / duty in any order after letter | ❌ Fixed: letter → optional digit → duration → optional dot                                      | **P0** — with sub-FSM rewrite   |
-| D7  | **Accidentals** `#`/`+`, `b`/`-`, natural `**n**` | Key LUT + explicit override                                           | ❌ White-key pitch only                                                                          | **P0** — needs **K** pipeline   |
-| D22 | `**N<n>**` absolute semitone                      | 1..3 digits + suffix                                                  | ❌                                                                                               | **P1**                          |
-| D5  | **Duty `_` `!` `;` `;n**` on notes                | Updates note memory + gap math                                        | 🟡 Default **8/8** legato only — modifiers not parsed                                           | **P1**                          |
-| D20 | `**R` full sub-parser**                           | Same postfix as `**C4Q;6**` → memory + silence                        | 🟡 `**R` + duration letter only** — no octave/duty/order-flex on rest                           | **P1**                          |
-| D2  | `**~` note-repeat**                               | Replay last completed note (**S10** template if none)                 | ❌ `**b_has_completed_note**` flag only — no replay snapshot                                     | **P1**                          |
-| —   | **Last-note snapshot**                            | For `**~**` + memory model                                            | ❌ Not stored                                                                                    | **P1** — with `**~**`           |
-| S9  | **Per-note duty “last wins”**                     | Last modifier on token wins                                           | ❌ N/A until duty parse exists                                                                   | **P1**                          |
-
-
-**Bench workaround (until inheritance):** explicit `**C4Q**`, `**CQ DQ …**`, `**O4**` before loops — see **I9** loop preset author notes.
+| ID | Feature | Priority |
+| -- | ------- | -------- |
+| D7 | Accidentals + **K** LUT | **P0** for keyed Williams excerpts |
+| D22 | **`N<n>`** absolute semitone | **P1** |
 
 ---
 
@@ -2456,8 +2518,8 @@ All below → `**PLAY fault: unsupported executive**` today.
 | D9     | `**\@` in comments**                 | Literal `**@**` inside comment body                                        | ❌ Inner `**@**` closes block early                                          |
 | D10    | **Title from first `@` block**       | Stored in session                                                          | ❌                                                                           |
 | I2     | **Label table**                      | Sparse table, caps, duplicate/missing rules                                | ❌                                                                           |
-| D12    | `**:` optional EOS**                 | Top-level statement boundary                                               | ❌                                                                           |
-| S7     | **Tiered error policy**              | **S7i** lazy/normal/strict + **S7a** fatals                              | 🟡 Mostly **hard fault** — no `play_fault_policy_t` dispatcher yet          |
+| S7     | **Tiered error policy**              | **S7i** lazy/normal/strict + **S7a** fatals                              | ✅ `play_fault_policy_t` in `b_play_fault` |
+| D12    | `:` optional EOS                 | Top-level statement boundary                                               | 🟡 Stray `:` warns only |
 | I3/S7e | **GOSUB call stack**                 | Separate from repeat stack                                                 | ❌ Repeat stack only                                                         |
 | —      | **Unified note memory in snapshots** | Key, transpose, voice, last note in repeat/label snaps                     | 🟡 Partial — tempo, octave, volume, beat unit, duty only                    |
 | I8/S7g | **Resolve on rejected tokens**       | Hook **does not** fire on rejects (**S7g** 🟢)                             | ✅ Matches spec — rejects use `**v_play_fault**` only                        |
@@ -2487,14 +2549,14 @@ Per **I1 Out** column — do not file as missing v1 work:
 
 Ordered to maximize score expressiveness per commit (aligns with bench `**playstr**` iteration):
 
-1. **Note/rest sub-FSM** — order-flex postfix, duty modifiers, **inheritance**, memory update on each event (**P0**)
-2. `**V`**, `**%**`, `**P**` — digit executives ( `**P**` state-only until voice table) (**P1**)
-3. `**K"…"` + `&` + pitch pipeline** — accidentals + LUT + transpose (**P0** for keyed music)
-4. `**~` + last-note snapshot** + **S10** default template (**P1**)
-5. **Pre-parse pass** — `**@`/`\@`**, title, labels → unblocks `**<` `>` `=` `/**` (**P1**)
-6. `**\"ctx:…"`** extension stub — zero-time context without `**R0Q**` (**P2**)
-7. **S7 tiering** — `**play_fault_policy_t**` dispatcher + **S7a** vs recoverable paths (**P2**)
-8. **Golden strings (T3)** + **`play_scenarios.py` P0/P1** in parallel with **`m` → `g`** — then **T2-1** host parser · **T2-5** trace diff
+1. ~~**Note/rest sub-FSM**~~ ✅
+2. ~~**`~` + last-note snapshot**~~ ✅
+3. **`K"…"` + `&` + pitch pipeline** — accidentals + LUT + transpose (**P0** for Williams fidelity)
+4. **`V`**, **`P`** executives (**P1**)
+5. **Pre-parse pass** — `@`/`\@`, title, labels → unblocks `<` `>` `=` `/` (**P1**)
+6. **`\"ctx:…"`** extension stub (**P2**)
+7. **`m` → `g`** STRICT golden runner on device (**I9** follow-on)
+8. **Golden host runner** — `play_scenarios.py` P0/P1
 
 **Cross-refs:** **I1** fence · **I9** presets · [play-lead-char-cheat-sheet.md](play-lead-char-cheat-sheet.md) · **T3** acceptance strings (🔴)
 
