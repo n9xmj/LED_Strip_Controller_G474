@@ -15,6 +15,14 @@
 
 typedef enum
 {
+    PLAY_FAULT_POLICY_UNKNOWN = 0,
+    PLAY_FAULT_POLICY_LAZY,
+    PLAY_FAULT_POLICY_NORMAL,
+    PLAY_FAULT_POLICY_STRICT
+} play_fault_policy_t;
+
+typedef enum
+{
     PLAY_STATE_IDLE = 0,
     PLAY_STATE_LOADING,
     PLAY_STATE_READY,
@@ -36,8 +44,24 @@ typedef enum
 
 typedef struct play_instance play_instance_t;
 
+/** @brief Payload for I8 resolve hook (Phase 1 subset). */
+typedef struct
+{
+    play_resolve_kind_t e_kind;
+    uint32_t            u32_src_offset;
+    uint16_t            u16_tempo_bpm;
+    uint8_t             u8_octave;
+    uint8_t             u8_volume_pct;
+    uint8_t             u8_dur_x2;
+    bool                b_dotted;
+    bool                b_is_rest;
+    char                c_letter;
+    float               f_hz;
+    uint32_t            u32_ticks;
+} play_resolve_event_t;
+
 typedef void (*play_resolve_fn_t)(play_instance_t *px_instance,
-                                  const void *pv_event,
+                                  const play_resolve_event_t *px_event,
                                   void *pv_user);
 
 typedef void *play_handle_t;
@@ -65,6 +89,10 @@ uint32_t u32_play_sched_tick_get(void);
 void v_play_poll(void);
 
 bool b_play_start(const char *psz_src, play_handle_t *px_out_handle);
+
+bool b_play_start_policy(const char *psz_src,
+                         play_fault_policy_t e_policy,
+                         play_handle_t *px_out_handle);
 
 void v_play_stop(play_handle_t px_handle);
 

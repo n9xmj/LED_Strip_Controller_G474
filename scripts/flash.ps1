@@ -72,7 +72,16 @@ if ($List) {
 }
 
 if (-not $StlinkSn) {
-    $StlinkSn = python "$PSScriptRoot\discover.py" --default-stlink
+    $StlinkSn = (python "$PSScriptRoot\discover.py" --default-stlink 2>$null).Trim()
+    if (-not $StlinkSn) {
+        Write-Error @"
+No ST-Link selected. Multiple probes may be connected.
+  scripts\discover.py --list          # see probes + bench defaults
+  scripts\flash.ps1 --stlink-sn SN    # explicit SN
+  scripts\bench.defaults.json         # set stlink_sn for this bench
+"@
+        exit 3
+    }
 }
 
 $artifact = Join-Path $repoRoot "$Config\${projectName}.elf"

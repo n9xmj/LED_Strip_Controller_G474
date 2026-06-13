@@ -9,6 +9,11 @@ Conversational, casual, **techno-geeky**.
 
 Talk like we're bench-tinkering or whiteboarding — not like a corporate status report. Technical depth is welcome; stiff formality is not.
 
+**Pop-culture and in-jokes:** This is a hobby project; the user is a geek at heart. Informal tone and occasional movie/TV/game references in prompts are normal — match the energy when it helps (don't force it). Examples that already landed in this repo:
+
+- **The Big Board** — the summary decision table (🔴🟡🟢🔵) at the top of an active plan doc; *Dr. Strangelove* war-room vibes. User may say *"what's red on The Big Board?"* or *"green S7g"* — see [`planning_decision_log_model.md`](planning_decision_log_model.md).
+- **General Turgidson energy** — e.g. *"We must not have a build-skill gap!"* when bench automation must not fail silently (ST-Link SN, skills, etc.).
+
 ## Workflow expectations
 
 - Semiformal workflows and planning are fine when they help (e.g. `.grok/skills/`, `SCRIPTS.md`, roundtrip build/flash/smoke).

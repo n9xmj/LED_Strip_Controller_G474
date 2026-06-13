@@ -64,7 +64,7 @@ For specs or features with many open decisions (e.g. PLAY meta-language v1), use
 **decision-log planning model**:
 
 - Mechanics: [`Docs/planning/decision-log-model.md`](Docs/planning/decision-log-model.md)
-- Summary table with IDs (**D** design, **S** semantics, **I** implementation, **T** tooling, **Q** user question) and status: 🔴 open · 🟡 leaning · 🟢 resolved · 🔵 deferred
+- **The Big Board** — summary decision table with IDs (**D** design, **S** semantics, **I** implementation, **T** tooling, **Q** user question) and status: 🔴 open · 🟡 leaning · 🟢 resolved · 🔵 deferred (*Dr. Strangelove* nickname; see [`.grok/memory/user_conversational_tone.md`](.grok/memory/user_conversational_tone.md))
 - User resolves in chat by ID (*"green D3"*, *"S2 option C"*); agent updates the plan doc same session
 - **Active plan:** [`Docs/planning/play-v1-implementation-plan.md`](Docs/planning/play-v1-implementation-plan.md) → parent spec [`Docs/PLAY_language_design.md`](Docs/PLAY_language_design.md)
 - **Deferred work briefs (read when tackling):**
@@ -79,10 +79,13 @@ Also indexed in [`.grok/memory/MEMORY.md`](.grok/memory/MEMORY.md). Loaded on `/
 ## Sources of Truth
 
 - **Automation (build / flash / smoke / probe / discover)**: `SCRIPTS.md` (general, bench-agnostic patterns and flags).  
-  Bench-specific defaults (COM port, ST-Link SN) live in the project-local skills under `.grok/skills/`.
+  **Bench ST-Link SN + COM port:** [`scripts/bench.defaults.json`](scripts/bench.defaults.json) (override locally via `scripts/bench.defaults.local.json`, gitignored).
 - **Project goals, status, hardware layout, roadmap**: `Docs/PROJECT.md`
 - **Versioning**: `App/Inc/platform.h` (`PROJECT_NAME`, `TARGET_MCU`, `FIRMWARE_VERSION`, `BUILD_NUMBER`). Scripts and skills report these.
-- **Project-local slash commands**: `.grok/skills/` (run `/myskills` to list them). Includes `/wrapup` (end-of-session handoff), `/read-the-docs`, `/build`, `/cleanbuild`, `/fullbuild`, `/fixme`, `/flash`, `/smoke`, `/probe`, `/roundtrip`, `/setver`, `/myskills`.
+- **Agent skills (build / flash / smoke / roundtrip):**
+  - **Cursor / Claude Code:** [`.claude/skills/`](.claude/skills/) — invoke matching skill before raw script calls.
+  - **Grok slash commands:** [`.grok/skills/`](.grok/skills/) (`/build`, `/flash`, `/smoke`, `/roundtrip`, …).
+  Both read the same `bench.defaults.json`.
 - **Hardware datasheets and reference material**: `Docs/` directory.
 - **Audio-reactive DSP ideas (future):** [Docs/PROJECT.md](Docs/PROJECT.md) § *Institutional memory* → [cayuse/color_organ](https://github.com/cayuse/color_organ) (scan when mic→LED work starts; not PLAY-related).
 
@@ -124,7 +127,7 @@ Major completed items (as of the skills + automation phase):
 Future major areas (see `Docs/PROJECT.md` for current TODO state): RTOS, I2S/analog mic input, gesture sensor, TFT, CMSIS-DSP experiments (CORDIC/FMAC already enabled in CubeMX), PLAY v1 sequencer, **ANSI terminal piano UI** (TRS-80 heritage + `uart_stream`), **H7 GM synth wishlist** (companion to future FM), etc.
 
 ## Additional Notes
-- This is a hobby project. Good engineering practices apply, but it is not safety-critical.
+- This is a hobby project. Good engineering practices apply, but it is not safety-critical. Informal tone and occasional pop-culture references in prompts are normal — see [`.grok/memory/user_conversational_tone.md`](.grok/memory/user_conversational_tone.md).
 - The `not-in-project/` directory is permanently gitignored and must never be committed or pushed.
 - When in doubt about generated code or Core/ changes, stop and ask the user.
 

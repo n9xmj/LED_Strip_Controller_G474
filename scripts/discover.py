@@ -241,16 +241,42 @@ def get_com_ports() -> List[Dict]:
         p["accessibility"] = access
     return ports
 
-def find_default_stlink(stlinks: List[Dict]) -> Optional[str]:
+def load_bench_defaults() -> Dict:
+    """Load scripts/bench.defaults.json (+ optional local override)."""
+    script_dir = os.path.dirname(os.path.abspath(__file__))
+    merged: Dict = {}
+    for name in ("bench.defaults.json", "bench.defaults.local.json"):
+        path = os.path.join(script_dir, name)
+        if not os.path.isfile(path):
+            continue
+        try:
+            with open(path, "r", encoding="utf-8") as fh:
+                data = json.load(fh)
+            if isinstance(data, dict):
+                merged.update(data)
+        except (OSError, json.JSONDecodeError):
+            pass
+    return merged
+
+
+def find_default_stlink(stlinks: List[Dict], bench: Optional[Dict] = None) -> Optional[str]:
+    bench = bench or load_bench_defaults()
+    preferred = str(bench.get("stlink_sn") or "").strip().upper()
+    if preferred:
+        return preferred
     if not stlinks:
         return None
     if len(stlinks) == 1:
         return stlinks[0].get("serial")
-    # Could check .stlink-sn dotfile here for last-used
     return None
 
-def find_default_port(ports: List[Dict], stlinks: List[Dict]) -> Optional[str]:
-    """Try to pick a sensible debug port. Prefers ports that look like STLink VCP."""
+
+def find_default_port(ports: List[Dict], stlinks: List[Dict], bench: Optional[Dict] = None) -> Optional[str]:
+    """Try to pick a sensible debug port. Prefers bench.defaults com_port, then STLink VCP heuristics."""
+    bench = bench or load_bench_defaults()
+    preferred = str(bench.get("com_port") or "").strip()
+    if preferred:
+        return preferred
     if not ports:
         return None
     st_ports = [p for p in ports if "stlink" in (p.get("friendly_name", "") + p.get("description", "")).lower()]
@@ -273,14 +299,25 @@ def main():
     args = parser.parse_args()
 
     programmer = find_programmer_cli()
+    bench = load_bench_defaults()
     stlinks = get_stlink_list(programmer)
     ports = get_com_ports()
 
     if args.list:
-        data = {"stlinks": stlinks, "ports": ports}
+        data = {"bench_defaults": bench, "stlinks": stlinks, "ports": ports}
         if args.json:
             print(json.dumps(data, indent=2))
             return
+        print("=== Bench defaults (scripts/bench.defaults.json) ===")
+        sn = bench.get("stlink_sn") or "(not set)"
+        com = bench.get("com_port") or "(not set)"
+        baud = bench.get("baud") or "(not set)"
+        print(f"  ST-Link SN: {sn}")
+        print(f"  COM port:   {com}")
+        print(f"  Baud:       {baud}")
+        if len(stlinks) > 1 and bench.get("stlink_sn"):
+            print("  (Multi-probe bench — scripts use the SN above when --stlink-sn omitted.)")
+        print("")
         print("=== ST-Links ===")
         if not stlinks:
             print("  (none detected or programmer CLI not found)")
@@ -309,12 +346,12 @@ def main():
         return
 
     if args.default_stlink:
-        sn = find_default_stlink(stlinks)
+        sn = find_default_stlink(stlinks, bench)
         print(sn or "")
         return
 
     if args.default_port:
-        port = find_default_port(ports, stlinks)
+        port = find_default_port(ports, stlinks, bench)
         print(port or "")
         return
 

@@ -35,9 +35,11 @@ issue-tied work). Name pattern: `<topic>-plan.md` (e.g.
 - **Working mode** one-liner: resolve OPEN items in chat; update table + detail
   sections as decisions land.
 
-### 2. Summary decision table (the sidebar view)
+### 2. Summary decision table — **The Big Board**
 
-Single table — easy to scan in the editor:
+Single table at the top of each plan — easy to scan in the editor (nickname from
+*Dr. Strangelove*: the war-room status board). In chat the user may say *"The Big
+Board"*, *"what's still red?"*, or reference a row by ID (*"green S7g"*).
 
 | ID | Status | Subject (one line) |
 |----|--------|-------------------|

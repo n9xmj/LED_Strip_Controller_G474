@@ -7,5 +7,6 @@
 #define PLAY_PRESETS_H
 
 extern const char *psz_play_smoke_test;
+extern const char *psz_play_loop_test;
 
 #endif /* PLAY_PRESETS_H */

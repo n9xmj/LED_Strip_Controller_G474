@@ -7,7 +7,10 @@ argument-hint: ""
 
 # Flash Skill
 
-**Bench defaults (source of truth for this local setup):**
+**Bench defaults (source of truth):** [`scripts/bench.defaults.json`](../scripts/bench.defaults.json)  
+Local override: `scripts/bench.defaults.local.json` (gitignored). Values below match the committed file.
+
+**Bench defaults (this setup):**
 - COM port: COM9
 - ST-Link SN: 003C00193137510C39383538
 

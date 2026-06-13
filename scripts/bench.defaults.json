@@ -1,0 +1,6 @@
+{
+  "_comment": "G474 LED bench defaults. Override per machine via bench.defaults.local.json (gitignored).",
+  "stlink_sn": "003C00193137510C39383538",
+  "com_port": "COM9",
+  "baud": 921600
+}

@@ -6,4 +6,8 @@
 #include "play_presets.h"
 
 const char *psz_play_smoke_test =
-    "@ smoke scale @ T120 O4 C4Q D4Q E4Q F4Q G4Q A4Q B4Q C5Q *";
+    "@ smoke scale @ CQ4DEFGABC5 *";
+
+/** @brief Repeat + octave-step bench tune — O1..O8 via trailing ^ each pass. */
+const char *psz_play_loop_test =
+    "@ loop scale x8 @ T120 O1 [CQDQEQFQGQAQBQ ?\"Next octave\\r\\n\" ^]:8 *";

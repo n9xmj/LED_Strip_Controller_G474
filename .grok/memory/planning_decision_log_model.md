@@ -7,7 +7,7 @@
 
 For multi-session design (PLAY v1, etc.):
 
-1. Create `Docs/planning/<topic>-plan.md` with a **summary table**: ID · status · one-line subject.
+1. Create `Docs/planning/<topic>-plan.md` with **The Big Board** — the summary decision table at the top: ID · status · one-line subject. (*Dr. Strangelove* nickname; user may refer to it that way in chat.)
 2. **ID prefixes:** D=design, S=semantics, I=implementation, T=tooling/docs, Q=user question.
 3. **Status:** 🔴 open · 🟡 leaning · 🟢 resolved · 🔵 deferred.
 4. Below the table: **detail section per ID** (question, options, leaning, resolution).

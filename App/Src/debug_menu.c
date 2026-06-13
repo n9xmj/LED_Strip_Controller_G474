@@ -430,6 +430,129 @@ static play_handle_t px_active_play = PLAY_HANDLE_NULL;
 
 static char ac_play_debug_line[PLAY_DEBUG_LINE_MAX + 1U];
 
+static const char *psz_play_dur_suffix(uint8_t u8_dur_x2, bool b_dotted)
+{
+    switch (u8_dur_x2)
+    {
+        case 8U: return b_dotted ? "W." : "W";
+        case 4U: return b_dotted ? "H." : "H";
+        case 2U: return b_dotted ? "Q." : "Q";
+        case 1U: return b_dotted ? "I." : "I";
+        default: return "?";
+    }
+}
+
+static void v_debug_play_resolve(play_instance_t *px_instance,
+                                 const play_resolve_event_t *px_event,
+                                 void *pv_user)
+{
+    (void)pv_user;
+
+    if (px_instance == NULL || px_event == NULL)
+    {
+        return;
+    }
+
+    switch (px_event->e_kind)
+    {
+        case PLAY_RESOLVE_NOTE:
+            printf("PLAY + %c%u%s %.1fHz %lums @%lu\r\n",
+                   px_event->c_letter,
+                   (unsigned)px_event->u8_octave,
+                   psz_play_dur_suffix(px_event->u8_dur_x2, px_event->b_dotted),
+                   (double)px_event->f_hz,
+                   (unsigned long)(px_event->u32_ticks *
+                                   (PLAY_SCHED_TICK_US / 1000U)),
+                   (unsigned long)px_event->u32_src_offset);
+            break;
+
+        case PLAY_RESOLVE_REST:
+            printf("PLAY + R%s %lums @%lu\r\n",
+                   psz_play_dur_suffix(px_event->u8_dur_x2, px_event->b_dotted),
+                   (unsigned long)(px_event->u32_ticks *
+                                   (PLAY_SCHED_TICK_US / 1000U)),
+                   (unsigned long)px_event->u32_src_offset);
+            break;
+
+        case PLAY_RESOLVE_META:
+            if (px_event->c_letter == 'T')
+            {
+                printf("PLAY + T%u @%lu\r\n",
+                       (unsigned)px_event->u16_tempo_bpm,
+                       (unsigned long)px_event->u32_src_offset);
+            }
+            else if (px_event->c_letter == 'O')
+            {
+                printf("PLAY + O%u @%lu\r\n",
+                       (unsigned)px_event->u8_octave,
+                       (unsigned long)px_event->u32_src_offset);
+            }
+            else if (px_event->c_letter == '%')
+            {
+                printf("PLAY + %%%s @%lu\r\n",
+                       psz_play_dur_suffix(px_event->u8_dur_x2, false),
+                       (unsigned long)px_event->u32_src_offset);
+            }
+            else if (px_event->c_letter == '^' || px_event->c_letter == 'v')
+            {
+                printf("PLAY + %c -> O%u @%lu\r\n",
+                       px_event->c_letter,
+                       (unsigned)px_event->u8_octave,
+                       (unsigned long)px_event->u32_src_offset);
+            }
+            break;
+
+        case PLAY_RESOLVE_DEBUG:
+            printf("PLAY + ? @%lu\r\n",
+                   (unsigned long)px_event->u32_src_offset);
+            break;
+
+        case PLAY_RESOLVE_STRUCTURAL:
+            if (px_event->c_letter == '*')
+            {
+                printf("PLAY + * @%lu\r\n",
+                       (unsigned long)px_event->u32_src_offset);
+            }
+            else if (px_event->c_letter == '[')
+            {
+                printf("PLAY + [:N=%lu @%lu\r\n",
+                       (unsigned long)px_event->u32_ticks,
+                       (unsigned long)px_event->u32_src_offset);
+            }
+            else if (px_event->c_letter == ']')
+            {
+                printf("PLAY + ] rem=%lu @%lu\r\n",
+                       (unsigned long)px_event->u32_ticks,
+                       (unsigned long)px_event->u32_src_offset);
+            }
+            break;
+
+        default:
+            break;
+    }
+}
+
+static void v_debug_play_begin(const char *psz_label)
+{
+    v_play_set_resolve_hook(v_debug_play_resolve, NULL);
+    printf("PLAY trace on (%s)\r\n", psz_label);
+}
+
+static bool b_debug_play_start(const char *psz_src, const char *psz_trace_label,
+                               const char *psz_started_msg)
+{
+    printf("%s\r\n", psz_src);
+    if (b_play_start(psz_src, &px_active_play))
+    {
+        v_debug_play_begin(psz_trace_label);
+        printf("%s\r\n", psz_started_msg);
+        return true;
+    }
+
+    printf("PLAY start failed\r\n");
+    return false;
+}
+
 static void v_debug_play_stop(void)
 {
     if (px_active_play != PLAY_HANDLE_NULL)
@@ -437,6 +560,19 @@ static void v_debug_play_stop(void)
         v_play_stop(px_active_play);
         px_active_play = PLAY_HANDLE_NULL;
     }
+    v_play_set_resolve_hook(NULL, NULL);
+}
+
+static void v_debug_play_stop_cmd(void)
+{
+    if (!b_play_is_running(px_active_play))
+    {
+        printf("PLAY not running\r\n");
+        return;
+    }
+
+    v_debug_play_stop();
+    printf("PLAY stopped\r\n");
 }
 
 static void v_debug_play_smoke(void)
@@ -447,14 +583,18 @@ static void v_debug_play_smoke(void)
         return;
     }
 
-    if (b_play_start(psz_play_smoke_test, &px_active_play))
+    (void)b_debug_play_start(psz_play_smoke_test, "smoke", "PLAY smoke started");
+}
+
+static void v_debug_play_loop(void)
+{
+    if (b_play_is_running(px_active_play))
     {
-        printf("PLAY smoke started\r\n");
+        printf("PLAY already running — stop first\r\n");
+        return;
     }
-    else
-    {
-        printf("PLAY start failed\r\n");
-    }
+
+    (void)b_debug_play_start(psz_play_loop_test, "loop", "PLAY loop test started");
 }
 
 static void v_debug_play_playstr(void)
@@ -478,14 +618,7 @@ static void v_debug_play_playstr(void)
         return;
     }
 
-    if (b_play_start(ac_play_debug_line, &px_active_play))
-    {
-        printf("PLAY started\r\n");
-    }
-    else
-    {
-        printf("PLAY start failed\r\n");
-    }
+    (void)b_debug_play_start(ac_play_debug_line, "playstr", "PLAY started");
 }
 
 static void v_debug_play_terminal_piano(void)
@@ -508,7 +641,12 @@ static const menu_item_t x_player_tests_submenu[] =
     {
         .x_type = MENU_ITEM_HELP,
         .c_key = '?',
-        .p_c_text = "Help"
+        .p_c_text = NULL
+    },
+    {
+        .x_type = MENU_ITEM_HELP_HIDDEN,
+        .c_key = '\r',
+        .p_c_text = NULL
     },
     {
         .x_type = MENU_ITEM_FUNCTION,
@@ -518,9 +656,21 @@ static const menu_item_t x_player_tests_submenu[] =
     },
     {
         .x_type = MENU_ITEM_FUNCTION,
+        .c_key = '2',
+        .p_c_text = "PLAY loop test (scale x8, ^ octave step)",
+        .pfn_function = v_debug_play_loop
+    },
+    {
+        .x_type = MENU_ITEM_FUNCTION,
         .c_key = 's',
         .p_c_text = "PLAY string entry (<=128 chars)",
         .pfn_function = v_debug_play_playstr
+    },
+    {
+        .x_type = MENU_ITEM_FUNCTION,
+        .c_key = 'q',
+        .p_c_text = "Stop PLAY",
+        .pfn_function = v_debug_play_stop_cmd
     },
     {
         .x_type = MENU_ITEM_FUNCTION,

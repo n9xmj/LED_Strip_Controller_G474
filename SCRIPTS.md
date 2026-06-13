@@ -33,6 +33,25 @@ All automation lives in the `scripts/` directory at the project root.
 
 **Do not rely on `STM32_PRG_PATH`** unless the user explicitly has it. The scripts prefer the stock `STM32_PROGRAMMER_CLI`.
 
+## Bench defaults (multi-ST-Link setups)
+
+When more than one ST-Link is connected, auto-selection **cannot** guess which probe is your board. This project pins the local bench in:
+
+- **`scripts/bench.defaults.json`** — committed defaults for this workspace
+- **`scripts/bench.defaults.local.json`** — optional per-machine override (gitignored)
+
+Current G474 bench values:
+
+| Key | Value |
+|-----|-------|
+| `stlink_sn` | `003C00193137510C39383538` |
+| `com_port` | `COM9` |
+| `baud` | `921600` |
+
+`discover.py --default-stlink` and `--default-port` read these files. Flash/smoke scripts call discover when `--stlink-sn` / `--port` are omitted.
+
+Agent skills: `.claude/skills/` (Cursor) and `.grok/skills/` (Grok) both reference the same file.
+
 ## Discovery (the key for multi-probe benches)
 
 Run this to see everything the machine can see:
