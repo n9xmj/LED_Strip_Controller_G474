@@ -134,6 +134,14 @@
 
 
 
+/** @brief Playable absolute semitone range (O1..O8, pc 0..11) — D21 OOR salvage bounds. */
+
+#define PLAY_ABS_SEMITONE_MIN        (0)
+
+#define PLAY_ABS_SEMITONE_MAX        (95)
+
+
+
 /** @brief Legato duty — full note sounding (8/8, `_` shorthand). */
 
 #define PLAY_DUTY_LEGATO_NUM         (8U)

@@ -4,7 +4,7 @@
 
 **Living document:** Update this file whenever `App/Src/play.c` gains or loses behavior. **Firmware truth:** `App/Src/play.c` + bench presets in `App/Src/play_presets.c`.
 
-**Last updated:** 2026-06-13 (audited against firmware — inheritance, order-flex, `%`, S7i, duty, `~` note-repeat, top-level **`S`** playstr hook)
+**Last updated:** 2026-06-13 (audited against firmware — inheritance, order-flex, `%`, S7i, duty, `~` note-repeat, `&` transpose, top-level **`S`** playstr hook)
 
 ---
 
@@ -85,7 +85,7 @@ Within one note/rest token, suffix pieces may appear in **any order** after the 
 | White-key **`A`–`G`** + octave | **YES** | Equal-temperament Hz from letter + octave |
 | **`#` `+` `b` `-` `n`** in note | **YES** — explicit accidentals shift pitch; **`K"C"`** LUT not wired yet |
 | **`K"C"`** key signature | **NO** | Needed for correct sharps/flats in scored keys |
-| **`&+n` / `&-n` / `&0`** transpose | **NO** | |
+| **`&+n` / `&-n` / `&0`** transpose | **YES** | Sticky linear semitone offset (D21) |
 | **`N60`** absolute MIDI-like semitone | **NO** | Distinct from natural **`n`** accidental |
 
 **Bare vs explicit accidental (locked policy — see implementation plan *Pitch resolve pipeline*):**
@@ -143,7 +143,7 @@ These start a new statement at the top level (after whitespace), not inside a no
 | **`L`** | `L"…"` | External library (future) | **PARTIAL** — warn + skip quoted payload |
 | **`~`** | | Repeat **last completed note** | **YES** |
 | **`K`** | `K"C"` | Key signature | **NO** |
-| **`&`** | `&+2` `&-3` `&0` | Transpose semitones | **NO** |
+| **`&`** | `&+2` `&-3` `&0` | Transpose semitones | **YES** |
 | **`V`** | `V80` | Volume 0…100 | **NO** (50% default still applied) |
 | **`P`** | `P0` | Voice/timbre index | **NO** (audio always sine) |
 | **`\`** | `\"ctx:4Q"` | Extension / context load | **NO** |
@@ -256,9 +256,7 @@ Group checklist for authors and chatbots — **do not rely on these in scores me
 **Pitch & memory meta**
 
 - `K"…"` key signature  
-- `&±n` transpose  
 - `N<n>` absolute semitone  
-- Accidentals changing pitch (only parse-skip today)  
 
 **Mix & timbre**
 

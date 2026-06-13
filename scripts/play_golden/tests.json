@@ -30,5 +30,12 @@
     "file": "raiders.play",
     "policy": "strict",
     "aliases": ["raiders-march", "smoke-plus"]
+  },
+  "transpose": {
+    "description": "Sticky &+7 transpose — second C4 sounds G4 (D21)",
+    "tier": "feature",
+    "file": "transpose.play",
+    "policy": "strict",
+    "aliases": ["transpose-plus7", "D21"]
   }
 }
