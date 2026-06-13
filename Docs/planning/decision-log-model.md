@@ -53,8 +53,10 @@ Board"*, *"what's still red?"*, or reference a row by ID (*"green S7g"*).
 | **I** | Implementation — v1 scope, RAM, modules, scheduler, limits |
 | **T** | Tooling / docs — Python driver, spec cleanup, test vectors |
 | **Q** | Question — explicitly needs **user** input to proceed |
+| **W** | Wish — v2+ backlog item (companion wish-list table only) |
+| **E** | Expression — musical performance / timbre beyond v1 (often v2+) |
 
-Number sequentially within each prefix (`D1`, `D2`, … `S1`, …).
+Number sequentially within each prefix (`D1`, `D2`, … `S1`, … `W1`, …).
 
 **Status column** (emoji indicators):
 
@@ -67,6 +69,20 @@ Number sequentially within each prefix (`D1`, `D2`, … `S1`, …).
 
 When status changes, update **both** the summary table **and** the matching
 detail section below.
+
+### 2b. Wish list (v2+ backlog) — optional companion table
+
+For long-running plans (e.g. PLAY), add a **second scan table** directly under
+**The Big Board**: deferred features, v2+ ideas, expression enhancements, and
+tooling not in v1 scope. Use **W** (wish) or **E** (expression) IDs; link to
+existing **D** / **S** / **I** / **T** rows when the item already has a decision
+ID.
+
+**Do not** duplicate the **I10 firmware gap tracker** — v1 must-ship items that
+are spec-locked but not coded yet belong there, not on the wish list.
+
+Add a one-line row when an idea surfaces in chat; promote to a full **D**/**S**
+row + detail section when design work starts.
 
 ### 3. LOCKED CONTEXT (optional but recommended)
 

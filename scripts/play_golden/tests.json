@@ -37,5 +37,19 @@
     "file": "transpose.play",
     "policy": "strict",
     "aliases": ["transpose-plus7", "D21"]
+  },
+  "grammar_torture": {
+    "description": "Full v1 grammar torture — one unpleasant STRICT string (T3 Torture / grammar HIL)",
+    "tier": "torture",
+    "file": "grammar_torture.play",
+    "policy": "strict",
+    "aliases": ["T3-torture", "grammar-all", "grammar-hil", "I1-torture"]
+  },
+  "grammar_torture_v11": {
+    "description": "v1.1 appendix — D4 X/Y durations (run after D4 ships)",
+    "tier": "torture",
+    "file": "grammar_torture_v11.play",
+    "policy": "strict",
+    "aliases": ["D4", "XY", "grammar-v11"]
   }
 }

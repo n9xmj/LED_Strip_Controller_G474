@@ -15,7 +15,7 @@ Planning snapshot · detail: [play-v1-implementation-plan.md](play-v1-implementa
 | Tempo | **120 BPM** | `T120` |
 | Beat unit | **Quarter = 1 beat** | `%Q` (implicit) |
 | Octave | **4** | `O4` |
-| Key | **C major** | `K"C"` *(not applied in fw yet)* |
+| Key | **C major** | `K"C"` *(default; LUT applied on bare letters)* |
 | Duty | **Legato 8/8** | `_` |
 | Volume | **50%** | `V50` |
 | Voice | **Sinewave** | `P0` |
@@ -39,7 +39,7 @@ Omitted suffix fields **inherit from note memory** after each note/rest commits 
 
 **First note in a score** may omit duration/octave when **S10** seeds apply (default **Q** + **O4**). Explicit `Q`/`O`/`T`/`V` executives override as usual.
 
-**Duty / dot:** `_` `!` `;` `;n` inherit like duration/octave (**fw** parses duty; **K** / accidentals not applied yet).
+**Duty / dot:** `_` `!` `;` `;n` inherit like duration/octave (**fw**). **K** LUT on bare letters; explicit `#`/`+`/`b`/`-`/`n` skips LUT.
 
 ---
 
@@ -66,12 +66,12 @@ API: `b_play_start()` → NORMAL · `b_play_start_policy(src, PLAY_FAULT_POLICY_
 | **T** | **Tempo** BPM (`T120`) | **fw** |
 | **O** | **Default octave** (`O4`) — sticky note memory | **fw** |
 | **^** **v** | Octave up / down one 🟢 | **fw** |
-| **K** | **Key** — **`K"…"` only** (e.g. `K"C"C4Q`) 🟢 | |
+| **K** | **Key** — **`K"…"` only** (e.g. `K"C"C4Q`) 🟢 | **fw** |
 | **&** | **Transpose** — `&+nn` / `&-nn` / `&0` 🟢 | |
 | **%** | **Beat unit** — `%W` `%H` `%Q` `%I` (which note = 1 beat; **not** a time signature) 🟢 | **fw** |
 | **V** | **Volume** 0–100 (`V80`); clamps >100 🟢 | |
 | **P** | **Voice/timbre** (`P0` = sine) 🟢 | |
-| **?** | **Print** — `?"…"` C escapes; bare `?` → CRLF 🟢 | **fw** |
+| **?** | **Print** — `?"…"` lyrics / text at playback time; C escapes; bare `?` → CRLF 🟢 | **fw** |
 | **\\** | **Extension** — `\"cmd:args"`; **`ctx:`** = instant note-memory 🟢 | |
 | **[** | **Repeat** open — `]:N` close 🟢; re-entry **without** `[` snapshot restore | **fw** |
 | **<** | **Label** define — `<n` or `<"name"` (≤**16**, max **10** labels/**I2**) 🟢 | |

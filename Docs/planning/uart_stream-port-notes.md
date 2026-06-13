@@ -1,6 +1,6 @@
 # `uart_stream` port notes (G474)
 
-**Status:** Design captured — **not implemented**. Read this before integrating non-blocking debug-UART TX (piano UI, verbose PLAY trace, logging migration).
+**Status:** Design captured — **not implemented**. **v1.1 stretch goal** (user lock 2026-06-13) — not required for PLAY v1/v1.1 grammar ship. Read this before integrating non-blocking debug-UART TX (piano UI, verbose PLAY trace, logging migration).
 
 **When to load:** User says *uart_stream*, *non-blocking console*, *USART2 ISR*, *HAL out of IRQ path*, or *virtual piano TX*.
 

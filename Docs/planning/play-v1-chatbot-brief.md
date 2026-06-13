@@ -2,9 +2,11 @@
 
 **Purpose:** Copy-paste this file into ChatGPT, Grok, Google Gemini, Claude, etc. when you want a **correct, bounded** mental model of the PLAY music language — more detail than the [cheat sheet](play-lead-char-cheat-sheet.md), far less than the full [implementation plan](play-v1-implementation-plan.md) or [language design](../PLAY_language_design.md).
 
+**Scope (G474 v1 ship):** Documents **what works today** + **v1/v1.1 target** on the current bench MCU. **v2+** (polyphony, loaders, richer synth) is planned for a likely **STM32H7** fork — out of scope here. After PLAY v1 ships (hobby milestone), project focus is expected to shift to mic input, DSP, and audio-reactive lighting per [PROJECT.md](../PROJECT.md).
+
 **Living document:** Update this file whenever `App/Src/play.c` gains or loses behavior. **Firmware truth:** `App/Src/play.c` + bench presets in `App/Src/play_presets.c`.
 
-**Last updated:** 2026-06-13 (audited against firmware — inheritance, order-flex, `%`, S7i, duty, `~` note-repeat, `&` transpose, top-level **`S`** playstr hook)
+**Last updated:** 2026-06-13 (audited against firmware — inheritance, order-flex, `%`, S7i, duty, `~`, `&` transpose, **`K"…"`** key LUT, top-level **`S`** playstr hook)
 
 ---
 
@@ -43,7 +45,7 @@ These seed **sticky note memory** before the first token (no need to spell them 
 | Duty | **Legato 8/8** | `_` (implicit in template) |
 | Volume | **50%** | `V50` — **NO** (executive not parsed; default applied internally) |
 | Voice | **Sine (`P0`)** | `P0` — **NO** (always sine audio in v1) |
-| Key | **C major (`K"C"`)** | **NO** (not applied to pitch) |
+| Key | **C major (`K"C"`)** | **YES** — LUT on bare letters; default all naturals |
 
 Template name in spec: **`Cn4Q_`** — first note may omit duration/octave and inherit **Q** + **O4**.
 
@@ -83,21 +85,21 @@ Within one note/rest token, suffix pieces may appear in **any order** after the 
 | Feature | Status | Notes |
 |---------|--------|-------|
 | White-key **`A`–`G`** + octave | **YES** | Equal-temperament Hz from letter + octave |
-| **`#` `+` `b` `-` `n`** in note | **YES** — explicit accidentals shift pitch; **`K"C"`** LUT not wired yet |
-| **`K"C"`** key signature | **NO** | Needed for correct sharps/flats in scored keys |
+| **`#` `+` `b` `-` `n`** in note | **YES** — explicit accidentals shift pitch; skip key LUT |
+| **`K"C"`** key signature | **YES** — `K"…"` only; Co5ths LUT on bare letters |
 | **`&+n` / `&-n` / `&0`** transpose | **YES** | Sticky linear semitone offset (D21) |
 | **`N60`** absolute MIDI-like semitone | **NO** | Distinct from natural **`n`** accidental |
 
 **Bare vs explicit accidental (locked policy — see implementation plan *Pitch resolve pipeline*):**
 
-- **Bare letter** (no `#`/`+`/`b`/`-`/`n` in the note cluster): apply **`K"…"` key LUT** per letter when `K` ships (default C major = naturals only today).
+- **Bare letter** (no `#`/`+`/`b`/`-`/`n` in the note cluster): apply **`K"…"` key LUT** per letter (default C major = all naturals).
 - **Explicit accidental** in the cluster: **ignore key signature**; use only the requested sharp/flat/natural for that token.
 - **`n`** = natural pitch class of the letter (e.g. in B♭ major: bare `E` → E♭; `En` → E natural).
 - Accidentals **do not inherit** from the previous note.
 
 **Math note for implementers:** `% 12` applies only while **normalizing pitch class** (with octave borrow/carry) and in **out-of-range salvage** — **not** after `&` transpose on in-range notes (linear absolute semitone must preserve octave jumps).
 
-**Authoring workaround until `K` ships:** spell accidentals explicitly (`Eb`, `Ab`, …) or transpose the piece to C major; do not rely on bare letters for non-C keys.
+**Authoring:** use **`K"Db"`** / **`K"F#m"`** etc. for scored keys; spell accidentals explicitly when you want to override the key (e.g. `Ab` in F major).
 
 ### Durations inside notes
 
@@ -136,13 +138,13 @@ These start a new statement at the top level (after whitespace), not inside a no
 | **`%`** | `%Q` `%W` `%H` `%I` | Which note value = **one beat** (not a time signature) | **YES** |
 | **`O`** | `O4` | Default octave in note memory | **YES** |
 | **`^` / `v`** | | Octave up / down one (clamped 1…8) | **YES** |
-| **`?`** | `?"text"` or bare `?` | Debug print (`\n` `\r` `\\` `\"` escapes); bare `?` → CRLF | **YES** |
+| **`?`** | `?"text"` or bare `?` | **Lyrics / spoken text** at playback time (UART); also trace. C escapes; bare `?` → CRLF | **YES** |
 | **`[` / `]`** | `[ … ]:N` | Repeat block **N** times | **YES** (see caveat below) |
 | **`*`** | | END — stop playback | **YES** (NUL at EOF = implicit `*`) |
 | **`@`** | `@ … @` | Comment block (skipped at runtime) | **PARTIAL** — no title capture; inner `@` not escaped |
 | **`L`** | `L"…"` | External library (future) | **PARTIAL** — warn + skip quoted payload |
 | **`~`** | | Repeat **last completed note** | **YES** |
-| **`K`** | `K"C"` | Key signature | **NO** |
+| **`K`** | `K"C"` | Key signature | **YES** |
 | **`&`** | `&+2` `&-3` `&0` | Transpose semitones | **YES** |
 | **`V`** | `V80` | Volume 0…100 | **NO** (50% default still applied) |
 | **`P`** | `P0` | Voice/timbre index | **NO** (audio always sine) |
@@ -241,8 +243,8 @@ C4Q D4Q E4Q F4Q G4Q A4Q B4Q C5Q *
 |-------------|-----|
 | `R I.` with spaces | Use **`RI.`** — one rest token |
 | `X` / `Y` durations | **DEFERRED** — use `I` or `Q` |
-| `C#4` / `Fb3` expecting pitch change | Accidentals **not applied** — use natural letter in C major or wait for **K** |
-| `K"C"` then expect correct key | **NO** — key executive not wired |
+| `C#4` / `Fb3` without key context | Use **`K"…"`** or explicit accidentals in each note cluster |
+| `K"C"` then bare letters in that key | **YES** — LUT applies until next valid `K"…"` |
 | lowercase `c4q` | Invalid — **uppercase letters only** |
 | MML / ABC / JSON / MIDI | Wrong language — PLAY only |
 | Spaces required between notes | Optional — `CDEFGAB` is valid |
@@ -255,7 +257,6 @@ Group checklist for authors and chatbots — **do not rely on these in scores me
 
 **Pitch & memory meta**
 
-- `K"…"` key signature  
 - `N<n>` absolute semitone  
 
 **Mix & timbre**

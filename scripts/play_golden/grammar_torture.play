@@ -1,0 +1,48 @@
+# PLAY v1 grammar torture — full I1 fence in one STRICT run (T3 Torture tier).
+# Not musical. Exercises every v1 executive + note/rest descriptor at least once.
+# Pass: PLAY_FAULT_POLICY_STRICT, zero fatals, PLAY ended.
+# Run: python scripts/play_bench.py test grammar_torture
+# v1.1 X/Y appendix: grammar_torture_v11.play (run after D4 lands).
+#
+# Coverage map (v1):
+#   D9/D10 title+comment  D7 accidentals+order-flex  D5 duty  D20 R rest  D22 N
+#   D3 ^v  D21 &  D24 %  D6 V  D1 P  D2 ~  D18 \\"ctx + noop  D14 ?
+#   S4 [ ]:N  D16/D17 < > numeric+string labels  S2 backward restore
+#   D19 = / GOSUB  D12 : EOS  D23 L warn  D8b K optional WS before quote
+#
+@ PLAY v1 grammar torture @
+?"-- grammar torture v1 --\r\n"
+T240 O4 %Q V50 P0
+K"F" Ab4Q K "C"
+C4Q DEFGAB C5Q
+Eb4Q D#4Q En4Q F+4Q G-4Q An4Q 4QC Q4C
+C4W C4H. C4Q C4I. R4W R4H. R4Q R4I
+C4Q_ C4Q! C4Q; C4Q;6 RI;
+N60Q N48Q
+^ C5Q v C3Q O5 C5Q O4
+&+7 C4Q &0 C4Q
+%H C4H %W C4W %Q
+V80 T200 V50 T120
+C4Q ~ R4Q ~
+\"ctx:5Q;4\"
+\"noop:stub\"
+? 
+[ C4 D4 E4 ]:2
+C4Q D4E4
+>7 G4A4
+F4G4A4
+<7 G4A4B4C5Q
+<"bk" T100 O6
+>"bk" C5Q T120 O4
+<2 E4F4/
+C4Q =2 G4Q
+<"sub" E4F4/
+=\"sub\" C4Q G4Q
+<"inner" D4E4/
+<"outer" C4Q =\"inner\" /
+=\"outer\" F4G4
+[ [ C4Q ]:2 D4Q ]:2
+@ inner \@ marker @
+L"lib"
+K"C":T120
+*

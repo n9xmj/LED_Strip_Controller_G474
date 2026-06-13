@@ -156,7 +156,13 @@
 
 
 
-/** @brief Default key when K executive ships — C major (implicit K"C"; not wired in fw yet). */
+/** @brief Max decoded bytes for K"…" keyspec payload (incl. NUL). */
+
+#define PLAY_KEYSPEC_MAX             (8U)
+
+
+
+/** @brief Default key at session start — C major (implicit K"C"; all LUT entries 0). */
 
 
 

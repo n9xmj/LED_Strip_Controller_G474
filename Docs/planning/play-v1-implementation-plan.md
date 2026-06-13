@@ -1,8 +1,8 @@
 # PLAY v1 — Implementation readiness plan
 
 **Parent spec:** [Docs/PLAY_language_design.md](../PLAY_language_design.md)  
-**Related:** [co5ths_key_signature_handoff.md](../co5ths_key_signature_handoff.md) · [tools/play_melody.py](../../tools/play_melody.py) · **[play-lead-char-cheat-sheet.md](play-lead-char-cheat-sheet.md)** (planning quick ref) · **[play-v1-chatbot-brief.md](play-v1-chatbot-brief.md)** (LLM / author copy-paste brief — **living fw status**)  
-**Branch:** `main` (planning on main until feature branch opened) · **Status:** PLANNING
+**Related:** [co5ths_key_signature_handoff.md](../co5ths_key_signature_handoff.md) · [tools/play_melody.py](../../tools/play_melody.py) · **[play-lead-char-cheat-sheet.md](play-lead-char-cheat-sheet.md)** (planning quick ref) · **[play-v1-chatbot-brief.md](play-v1-chatbot-brief.md)** (LLM / author copy-paste brief — **living fw status**) · [decision-log-model.md](decision-log-model.md) (**Big Board** + **wish list** mechanics)  
+**Branch:** `main` · **Status:** IN PROGRESS (G474 bench — v1 / v1.1 ship target)
 
 > **Goal:** Move PLAY from "early preview" to an **implementation-ready v1 contract**
 > — charset locked, semantics unambiguous, v1 scope fenced, host + on-device paths
@@ -12,6 +12,41 @@
 > Mark 🟢 and record outcome in detail sections + LOCKED CONTEXT. Sync
 > `PLAY_language_design.md` when a batch of decisions lands. Agent proposes 🟡
 > leanings; user locks 🟢 (or says *"your call on D4"*).
+
+> **Ship posture:** Hobby / bench project — **"v1 ship"** means **feature-complete for
+> the author's goals**, not a commercial release. After PLAY v1 (+ v1.1) lands on this
+> G474 tree, focus is expected to shift to other **master-plan** threads (see
+> **Session & product roadmap** below), not deep PLAY v2 work here.
+
+---
+
+## Session & product roadmap (user lock 2026-06-13)
+
+**This session / this MCU (STM32G474):**
+
+| Tier | Target | Deliverables |
+| ---- | ------ | ------------ |
+| **v1** | Feature-complete on bench | **I1** must-ship interpreter in `App/Src/play.c` — close **I10** gaps (labels, **K**, **V**, GOSUB, pre-scan, …) |
+| **v1.1** | Same tree, additive code | **D4** `X`/`Y` durations (**W1**) — **only required** v1.1 PLAY item. **D5b** raw-percent `;nn` (**W2**) **STET** same release: ~easy (1 digit = n/8, 2 digits = percent 0–100) |
+| **v1.1 stretch** | Infra (not PLAY grammar) | **`uart_stream` on USART2** (**W27**) — non-blocking debug console; unlocks terminal piano / bursty ANSI · brief: [uart_stream-port-notes.md](uart_stream-port-notes.md) |
+| **Docs (in progress)** | Ship with v1 | [play-lead-char-cheat-sheet.md](play-lead-char-cheat-sheet.md) · [play-v1-chatbot-brief.md](play-v1-chatbot-brief.md) (living fw status) · **T1** implementer trim of parent spec |
+| **Stretch (v1)** | Nice-to-have, not gate | **T4** normative EBNF · **T5** musician howto + tiered repertoire |
+
+**v2 and beyond:**
+
+- Likely on an **STM32H7xx** target (more RAM/CPU for polyphony, loaders, richer synth) — **not** the current G474 bring-up board.
+- Wish-list items (**W3** onward) stay backlog until/unless an H7 PLAY fork is opened; see **PLAY wish list** below.
+
+**After PLAY v1 (+ v1.1) — expected project pivot:**
+
+PLAY score playback is one slice of the **vTree+ Mk 5** master plan (see [Docs/PROJECT.md](../PROJECT.md) *vTree lineage*). Once v1/v1.1 is "good enough," author intent is to turn to:
+
+- **I2S mic input** (INMP441 path; deferred after logging + CORDIC work)
+- **Analog audio path** and bench audition
+- **DSP / analysis** — **vTree** auto-leveling heritage + cross-check [cayuse/color_organ](https://github.com/cayuse/color_organ) (Mk 4) for ESP32-C3 patterns
+- **Audio-reactive lighting** — mic → bands → LED strips (orthogonal to PLAY sequencing)
+
+Cross-ref: [Docs/PROJECT.md](../PROJECT.md) long-term goals · deferred briefs under `Docs/planning/` (uart_stream port, terminal piano, …).
 
 ---
 
@@ -39,7 +74,7 @@
 | D11 | 🟢     | No separate `M` cmd — `P` is canonical voice selection                                                                                      |
 | D12 | 🟢     | **Lexical boundaries** — WS readability; `**:**` = optional EOS (BASIC-like); `**;**` = duty only (not C-EOS)                               |
 | D13 | 🔵     | Envelope / ADSR PLAY syntax — post-v1 (after synth + duty ship)                                                                             |
-| D14 | 🟢     | `**?"…"**` debug print — C escapes in string; no auto-CRLF; bare `**?**` → CRLF                                                             |
+| D14 | 🟢     | `**?"…"**` print — lyrics + trace; C escapes; no auto-CRLF; bare `**?**` → CRLF                                                             |
 | D15 | 🔵     | **Tuplet / triplet timing** — syntax + duration math (v2+; not v1 blocker)                                                                  |
 | D16 | 🟢     | **String goto labels** — `<"name"` / `>"name"` (max `**PLAY_LABEL_MAX_LEN**`, default 16)                                                   |
 | D17 | 🟢     | **Label define `<` / goto `>**` — replace `*` define; `<`/`>` symmetry (**S2** semantics unchanged)                                         |
@@ -83,12 +118,55 @@
 | T1  | 🔴     | `PLAY_language_design.md` dedupe + implementer quick-ref (not user howto)                                                                   |
 | T2  | 🟡     | **Host + serial test harness** — `play_melody.py` / **`play_scenarios.py`**; dual-track with **T3** / **I9** (**user lock 2026-06-13**) |
 | T3  | 🟢     | **Golden tiers + menu order** — Smoke → Smoke+ (Williams) → Feature → Torture; **`m` → `g`** STRICT (**user lock 2026-06-13**) |
-| T4  | 🔴     | **Normative EBNF** — standalone formal grammar (post spec-lock)                                                                             |
-| T5  | 🔴     | **Musician howto** — user guide + tiered example repertoire (see T5)                                                                        |
+| T4  | 🔴     | **Normative EBNF** — standalone formal grammar (**stretch** for v1 ship)                                                                  |
+| T5  | 🔴     | **Musician howto** — user guide + tiered repertoire (**stretch** for v1 ship)                                                               |
 | Q1  | 🔵     | Star Wars / triplet feel — v1 approximate; real tuplets → **D15**                                                                           |
 
 
 *Status key: 🔴 unaddressed · 🟡 leaning / in discussion · 🟢 resolved · 🔵 deferred*
+
+---
+
+## PLAY wish list (v2+ backlog)
+
+*Companion to **The Big Board** — locked decisions and OPEN rows live there. This table is a **scan-friendly inventory** of enhancements, deferred features, and session-captured ideas **not required for v1 ship**. **v1 firmware gaps** (what I1 says must ship but `play.c` lacks yet) stay in the **I10** tracker below — **not here** (e.g. **`K"…"`** key signature = **D8**, **I10 P0**, not a wish-list row).*
+
+***v2+ target MCU:** author leaning **STM32H7xx** (see **Session & product roadmap** above) — G474 remains the v1/v1.1 monophonic ship tree.*
+
+*Add rows when an idea surfaces in chat; assign **W** IDs sequentially. Promote to **D** / **S** / **I** / **T** / **E** and open a detail section when design work starts.*
+
+| ID | Target | Item | Notes |
+| --- | ------ | ---- | ----- |
+| W1 | v1.1 | **`X` / `Y` durations** (D4) | **Required** v1.1 code — sixteenth / thirty-second; parser + `PLAY_DUR_*_X2` + S5 timing |
+| W2 | v1.1 | **Raw-percent duty `;nn`** (D5b) | **STET v1.1** (~easy): **1 digit** → n/8 (D5c); **2 digits** → percent 0–100 (e.g. `;60` = 60%). Disambiguates `;6` vs `;60` |
+| W3 | v2 | **Pizzicato shorthand** (D5d) | Likely needs envelope shape, not duty alone |
+| W4 | v2 | **Tuplets / triplets** (D15, Q1) | “N notes in time of M”; Raiders / Star Wars swing; no v1 syntax |
+| W5 | v2 | **VIB / TRM / ADSR PLAY syntax** (D13) | Modulation in `synth_engine`; post duty + v1 sine ship |
+| W6 | v2 | **`L"…"` library GOSUB** (D23) | Nested **L** stack; callee `*` / NUL = return |
+| W7 | v2+ | **Polyphony** (S1 follow-on) | Multiple `play_instance_t`; one string = one voice today |
+| W8 | v2+ | **Sync barriers `\|"name"`** (S3) | Multi-voice rendezvous; blocked on **S11** staging model |
+| W9 | v2+ | **NVM / FS `playfile` loader** (I7) | LittleFS / SD / host upload; async load + readiness (**S11**) |
+| W10 | v2+ | **Module split** (I7) | e.g. `play_pitch.c`, loader, multi-file instance pool |
+| W11 | v2+ | **Binary compiled scores** (I6) | Event stream vs interpreted ASCII; flash/RAM tradeoff |
+| W12 | tooling | **Optional LINT scanner** (S7h) | Pre-play strict pass; host CLI or menu `play lint` |
+| W13 | tooling | **`play_acceptance.py`** | Wire-surface regression (every executive once) — mirror HIL style; **v1 substitute:** `grammar_torture.play` on bench |
+| W14 | tooling | **`playverbose` resolve trace** | One UART line per **I8** resolve for golden diff |
+| W15 | tooling | **Normative EBNF** (T4) | Standalone formal grammar post spec-lock |
+| W16 | tooling | **Musician howto** (T5) | User guide + tiered example repertoire |
+| W17 | tooling | **`?"…"` `%` formats** (D14 ext) | Runtime data in debug print — deferred from v1 |
+| W18 | expr | **Slur / legato grouping** (E1) | Connect notes without reattack; extends scheduler + duty |
+| W19 | expr | **Portamento** (E2) | Short pitch slide between written notes; synth freq ramp |
+| W20 | expr | **Glissando** (E3) | Continuous sweep over interval/time; trombone hand-slide feel |
+| W21 | expr | **Extra timbres `P1…`** (D1 ext) | FM / PWM / filtered waves beyond v1 CORDIC sine |
+| W22 | expr | **Runtime duty tuning** | Today `#define` only (**S6**); live tweak from menu/NVM |
+| W23 | bench | **LED strip score viz** (I9 `l`) | Optional live pitch/level on WS2812 during PLAY |
+| W24 | spec | **Per-voice RAM budget line** (I5) | Documented cap for multi-instance v2+ planning |
+| W25 | revisit | **Repeat `[` snapshot on re-entry** | Spec drift: loop body mutations persist; restore optional? |
+
+| W26 | post-v1 | **vTree+ Mk 5 audio-reactive stack** | I2S mic · analog path · DSP leveling · LED mapping; see **Session & product roadmap** + PROJECT.md lineage |
+| W27 | v1.1 stretch | **`uart_stream` (USART2)** | Non-blocking debug UART — register ISR, HAL init-only; **not** PLAY grammar · [uart_stream-port-notes.md](uart_stream-port-notes.md) · enables terminal piano (**I9** / **I8**) |
+
+*Last wish-list pass: 2026-06-13 (v1.1: X/Y + D5b; stretch **W27** uart_stream; vTree Mk 5).*
 
 ---
 
@@ -101,7 +179,7 @@ These are **already chosen** in the spec or firmware; v1 implementation should a
 - **Lead vs metadata chars** — first char of token disambiguates note vs command; W/H/Q/I/X/Y, `.`, `_`, `!`, `**;` duty**, only valid **after** note letter **A–G** or after `**N` semitone digits** (**D22**). Lowercase `**n**` = natural accidental (**D7**) — not `**N**` command.
 - **Order-flexible note descriptors** — after the lead letter, accidental / octave / duration / dot / duty modifier may appear in any order; exactly one duration required per note token.
 - **Note duty (D5 🟢, D5c 🟢, S9 🟢)** — one `**duty_ratio**` in note memory (inherited). Shorthands `**_**`, `**!**`, bare `**;**`, `**;n**` (see D5 detail). More duty shorthands (e.g. pizzicato, D5d 🔵) are **non-blocking** — same modifier pattern. **Envelope / ADSR PLAY surface** deferred (**D13 🔵**); v1 uses existing `synth_engine` linear attack/decay only.
-- **Command letters (current):** `R` rest · `**N` absolute semitone (**D22** 🟢) · `T` tempo · `O` octave · `**^` / `v` octave step (D3 🟢)** · `K` key · `**&` transpose (D21 🟢)** · `**%` beat unit (**D24** 🟢)** · `**V` volume (D6 🟢)** · `**P` voice selection (D1 🟢)** · `**?` debug print (D14 🟢)** · `**\` expansion hook (D18 🟢)** · `[ ]:` repeat · **`<` label (D17 🟢)** · **`>` goto** · **`=` GOSUB (D19 🟢)** · **`/` RETURN** · **`*` END** · **`~` note-repeat (D2 🟢)** · **`L"…"` library GOSUB (**D23** 🔵 — **lead reserved**, not in v1)**. _(Legacy **`S`** retired; **`U`** beat-unit draft → **`%`** **D24**; **`T`** = tempo only.)_
+- **Command letters (current):** `R` rest · `**N` absolute semitone (**D22** 🟢) · `T` tempo · `O` octave · `**^` / `v` octave step (D3 🟢)** · `K` key · `**&` transpose (D21 🟢)** · `**%` beat unit (**D24** 🟢)** · `**V` volume (D6 🟢)** · `**P` voice selection (D1 🟢)** · `**?` print / lyrics (D14 🟢)** · `**\` expansion hook (D18 🟢)** · `[ ]:` repeat · **`<` label (D17 🟢)** · **`>` goto** · **`=` GOSUB (D19 🟢)** · **`/` RETURN** · **`*` END** · **`~` note-repeat (D2 🟢)** · **`L"…"` library GOSUB (**D23** 🔵 — **lead reserved**, not in v1)**. _(Legacy **`S`** retired; **`U`** beat-unit draft → **`%`** **D24**; **`T`** = tempo only.)_
 - **Expansion hook (D18 🟢)** — top-level `**\` + quoted string** only: **`\"cmd:args"`** (payload pattern **`cmd:args`**, colon-separated). Core parser extracts decoded payload → **`play_extension_fn_t`** dispatch table; **v1 default stub** echoes payload to debug UART (**same spirit as D14 `?"…"`**, for bench-test). Reserved **`ctx:`** cmd → **zero-time note-memory load** (see **D18** / **D20**). Unknown **`cmd`** → stub path (WARNING optional per **S7**). Not valid inside note descriptors. **`\@**` remains comment-escape only (**D9**).
 - `**R` rest (D20 🟢)** — `**R**` accepts the **full notation sub-parser** (same postfix set as `**C4Q**`: octave, duration, dot, duty — order-flexible; **one duration required**). **All applicable fields update unified note memory**; **schedule timed silence** only (no pitch). `**#`/`b`/`+`/`-` on `R`:** parsed but **no rest audio effect** and **not stored** (no accidental-inheritance field). **Timed context bump** (octave + duration + duty in one token): use `**R4Q;6**`. **Zero-time context-only** (no wall-clock gap): use `**\"ctx:4Q;6"**` (**D18**) — **no dedicated SET lead** (rejected).
 - `**~` note-repeat (D2 🟢, S10 🟢)** — **top-level only**. Replays **last completed note** snapshot (“whole smash”). **Before any completed note:** replay **session default note template** (`**Cn4Q_**`, **S10**) + **WARNING**. Distinct from labels / sync.
@@ -111,7 +189,7 @@ These are **already chosen** in the spec or firmware; v1 implementation should a
 - **Title metadata (D10 🟢)** — the **first `@ … @` comment block** in the string (after leading whitespace skip) is the **piece/part title**, captured at **pre-parse**. Stored in `play_session_t` (not note memory). If no comment block precedes music, title is **empty**. No mandatory magic/version header.
 - `**@ … @` comment blocks (D9 🟢)** — bracketed skip regions; `\@` escape; unterminated block at EOF = load error. **First** block doubles as title (D10); later blocks are comments only.
 - **K + & pitch pipeline (D8 🟢, D21 🟢, pitch-resolve contract)** — **Default key: C major** until valid `**K"…"**`. Per note: **bare letter** → apply `**K` LUT**; **explicit accidental** (`**#`/`+`/`b`/`-`/`n`** in descriptor cluster) → **skip `K` LUT entirely** → build **linear absolute semitone** → add sticky `**&**` offset (**no `% 12`** on normal path). `**K"…"` only**; `**K**` without opening `**"**` → **WARNING**, keep key; bad keyspec inside quotes → **WARNING**; quote integrity → **FATAL** (**D8b**). **Only** when absolute lies **outside playable min/max** after full sum → **D21 OOR salvage** (`pc` fold + octave clamp + WARNING) — not used for in-range transpose. Bad `**&**` → **WARNING**, keep offset. `**&0**` clears offset (**S8** closed). Full step list: **Pitch resolve pipeline** (after **D21**).
-- `**?"…"` debug print (D14 🟢)** — single-char `**?**` (BASIC `**PRINT**` shorthand). `**?"…"**` → emit **decoded** string (**C escapes**, no `**printf**` `%` formats); **no auto-CRLF** after quoted output (`**?""**` = emit nothing). **Bare `?**` alone → **CR/LF (`\r\n`)**. Quote integrity faults → **FATAL** (**D8b**); other `**?"…"**` faults → **WARNING**, continue.
+- `**?"…"` print (D14 🟢)** — single-char `**?**` (BASIC `**PRINT**` shorthand). **Primary use:** embed **spoken lyrics** in the score — text prints **at parse time** in near-real-time with the music (UART today; future TFT/karaoke sink). **Also:** bench trace / author notes. `**?"…"**` → emit **decoded** string (**C escapes**, no `**printf**` `%` formats); **no auto-CRLF** after quoted output (`**?""**` = emit nothing). **Bare `?**` alone → **CR/LF (`\r\n`)**. Quote integrity faults → **FATAL** (**D8b**); other `**?"…"**` faults → **WARNING**, continue.
 - **Streaming-first parser (not a REPL / not a general language)** — music is interpreted **at runtime** by a char-at-a-time walk; **no AST**, no token list in RAM. **Single-char executives** dominate (`T120`, `P1`, …). **Quoted-string metas (D8b):** `**K"…"**` (D8 — **only** form), `**?"…"**`, `**\"…"**`, `**<"…"**` / `**>"…"**` / `**="…"**` — all allow **optional WS before opening `"**`. **Block meta:** `**@ … @**` (D9).
 - **Error policy (S7 🟢, S7i 🟢)** — three **fault-policy modes** (`**play_fault_policy_t**`): **LAZY** (silent recoverable), **NORMAL** (default — WARNING + continue), **STRICT** (recoverable warnings/errors → **FATAL** stop, GCC `-Werror` analog). **S7a** fatals **always abort** in every mode. Recoverable = **S7b** carve-outs + **S7c** default bucket. Build default **`PLAY_FAULT_POLICY_DEFAULT = PLAY_FAULT_POLICY_NORMAL`** in `**play_config.h**`; debug `**playstr**` may select **STRICT** for authoring.
 - **Startup pre-parse (still runtime at load, not compile-time — S7d 🟢)** — **not** a full syntax scanner or LINTer. One **linear pass** for **hard failures that are unresolvable before playback can start**, plus **label table build + reference check**. Everything else is handled **during streaming interpret** under the active **S7i** policy (**S7b** / **S7c**). Optional **strict LINT pass** deferred (**S7h** 🔵).
@@ -239,9 +317,9 @@ v    ; current_octave -= 1
 
 **Question:** Include `X` and `Y` in v1 or defer?
 
-**Leaning:** **Defer from v1 interpreter** (🔵). Spec keeps letters reserved; v1 accepts W/H/Q/I only (+ dot). Reduces parser + test surface for first ship. Add X/Y in v1.1 when monophonic playback is boring.
+**Leaning:** **v1.1 ship item** (🔵 → implement after v1). Spec keeps letters reserved; v1 accepts W/H/Q/I only (+ dot).
 
-**Resolution:** *(treat as deferred unless user wants v1)*
+**Resolution:** **Deferred from v1; locked for v1.1** — only **required** firmware delta on the code side for v1.1 (with **D5b** as the small optional companion).
 
 ---
 
@@ -272,15 +350,17 @@ v    ; current_octave -= 1
 
 ---
 
-### D5b — Raw-percent `;nn` encoding (optional, deferred)
+### D5b — Raw-percent `;nn` encoding (v1.1)
 
-**Status:** 🔵 · **Needs user:** only if 10× scale is too limiting
+**Status:** 🟡 · **Needs user:** no (v1.1 STET 2026-06-13 — easy disambiguation)
 
 **Question:** Allow `**;60`** meaning 60% directly (two-digit percent)?
 
-**Leaning:** **Defer** — `**;6` vs `;60`** ambiguous without a fixed max digit count. v1 uses `**;n` with n/N** only (D5c).
+**Leaning (2026-06-13):** **Ship in v1.1** with **cayuse/mokus0 not involved** — small parser branch only. v1 keeps `**;n` single-digit → n/8** (D5c). v1.1 adds: read **one** digit → unchanged n/8; read **two** digits → **percent** 0–100 (`duty_num = nn`, `duty_den = 100`). Thus `**;6**` = 6/8, `**;60**` = 60% — no ambiguity.
 
-**Resolution:** **Deferred (v1.1+).**
+**Implementation size:** ~same order as adding one duration letter — extend the existing `;` digit-run in `b_play_parse_pitch_token`, no new executive.
+
+**Resolution:** **v1.1 STET** (user: move to v2 only if scope tightens; agent assessment = easy enough to keep).
 
 ---
 
@@ -516,11 +596,11 @@ K"C":T120        ; : hard end-of-command (D12) — same semantics
 
 ---
 
-### D14 — `?"…"` debug print (BASIC `PRINT` shorthand)
+### D14 — `?"…"` print (BASIC `PRINT` shorthand)
 
-**Status:** 🟢 · **Needs user:** no (resolved 2026-06-11; amended — `?` not `print`; C escapes; bare-`?`-only CRLF)
+**Status:** 🟢 · **Needs user:** no (resolved 2026-06-11; amended — `?` not `print`; C escapes; bare-`?`-only CRLF; **lyrics intent** user lock 2026-06-13)
 
-**User direction:** Debug string emit for sequence tracing (vs silent `**@` comments**). Formally part of v1 spec. **Single-char lead `?`**. **Not `printf`** — no `**%**` conversion specifiers; runtime data insertion deferred to a later PLAY version.
+**User direction:** Runtime text emit **in the score stream** — not only a test hook. **Primary intent (2026-06-13):** **spoken lyrics for vocal music** — place `**?"…"**` tokens beside notes so words appear on the debug console (or a future display) **in near-real-time** as playback reaches each line. **Secondary:** sequence tracing and bench diagnostics (vs silent `**@` comments**). Formally part of v1 spec. **Single-char lead `?`**. **Not `printf`** — no `**%**` conversion specifiers; runtime data insertion deferred to a later PLAY version.
 
 **Locked syntax:**
 
@@ -544,16 +624,16 @@ C4Q ?"after C4" E4Q
 | **C escapes (v1)**  | Inside `**?"…"`** payload, after `\`: `\` `"` `'` `?` `n` `r` `t` `0` `a` `b` `f` `v` — standard C character escapes. **Optional v1:** `\xHH` (hex, 1–2 digits) and `\ooo` (octal, 1–3 digits). Unknown `\X` → **WARNING**, emit `\` + `X` literally (fallback). |
 | **Not in v1**       | `**printf`-style `%d` / `%s` / field width** — explicitly out of scope; add in a later version if needed.                                                                                                                                                        |
 | **Source cap**      | Max **64 chars** inside quotes (source length before escape expansion) — truncate source + **WARNING** if exceeded (D10 cap precedent).                                                                                                                          |
-| **When**            | **Runtime** — interpreter reaches token during playback; emits then continues (no audio side effect).                                                                                                                                                            |
-| **Sink**            | Debug UART via project logging. Host `**play_melody.py`** should apply the same escape expansion when simulating.                                                                                                                                                |
-| **vs `@` comments** | Comments are **skipped** (never executed). `**?`** is **executed** at parse time in the stream.                                                                                                                                                                  |
+| **When**            | **Runtime** — interpreter reaches token during playback; emits then continues (no audio side effect). **Lyrics:** interleave with notes/rests so text tracks the sung line.                                                                                                                                                            |
+| **Sink**            | Debug UART via project logging (v1). Same executive may drive a future on-device lyric display. Host `**play_melody.py`** should apply the same escape expansion when simulating.                                                                                                                                                |
+| **vs `@` comments** | Comments are **skipped** (never executed, never shown). `**?`** is **executed** at parse time — visible output.                                                                                                                                                                  |
 | **Errors**          | **Quote integrity** (unterminated `**?"…`**, misaligned quotes) → **FATAL** (**D8b**). Garbage after closing `**"`**, unknown `\X`, source truncate → **WARNING**, continue.                                                                                     |
 | **Charset**         | `**?`** is a **top-level command lead only** — never valid inside note descriptors.                                                                                                                                                                              |
 
 
 **Rejected:** Multi-char `**print"…"`** · auto-CRLF after every `**?"…"**` · `**?""**` → CRLF (superseded) · `**printf**` formatting in v1.
 
-**Resolution:** `**?"…"`** with C escapes, no auto-CRLF; `**?""**` silent; bare `**?**` → `\r\n`; `**%` formats deferred.**
+**Resolution:** `**?"…"`** with C escapes, no auto-CRLF; `**?""**` silent; bare `**?**` → `\r\n`; `**%` formats deferred. **Authoring:** lyrics live in `**?"…"**` tokens paced with the melody — not in `**@**` comments.**
 
 ---
 
@@ -2204,7 +2284,7 @@ Reuse pitch math from `**note_player`** / shared helper in v1; extract to `**pla
 
 | Mechanism                   | Who controls it                                    | Purpose                                                                                                        |
 | --------------------------- | -------------------------------------------------- | -------------------------------------------------------------------------------------------------------------- |
-| `**?"…"` / bare `?` (D14)** | **Author** embeds debug text in the `.play` string | Intentional trace lines in the score                                                                           |
+| `**?"…"` / bare `?` (D14)** | **Author** embeds text in the `.play` string | **Lyrics** (vocal music) and intentional trace lines — emitted at playback time |
 | **Resolve hook (I8)**       | **Firmware / host tool** registers a callback      | Observe **every** executive the parser commits — including notes and metas the author never explicitly printed |
 
 
@@ -2411,7 +2491,7 @@ Smoke+ presets land incrementally (**Star Wars** → **Raiders** → other Willi
 
 ### I10 — Firmware implementation gap (vs I1 fence)
 
-**Status:** 🟡 · **Living tracker** — update as `App/Src/play.c` grows · **Last audited:** 2026-06-13 (P0 sub-FSM + `~` D2 landed; Raiders golden filed)
+**Status:** 🟡 · **Living tracker** — update as `App/Src/play.c` grows · **Last audited:** 2026-06-13 (**D8** `K"…"` shipped; P0 sub-FSM + `~` closed)
 
 **Question:** What does the **on-device interpreter actually parse today**, versus the **I1 must-ship** column?
 
@@ -2430,8 +2510,23 @@ Smoke+ presets land incrementally (**Star Wars** → **Raiders** → other Willi
 
 ---
 
-#### Shipped today (✅)
+#### v1 must-ship still open (quick scan — not on wish list)
 
+| ID | Feature | Firmware | Priority |
+| -- | ------- | -------- | -------- |
+| D6/D1 | **`V`**, **`P`** | ❌ | P1 |
+| D16–D19 | Labels, goto, GOSUB | ❌ (needs pre-scan) | P1 |
+| D18 | **`\"ctx:…"`** | ❌ | P2 |
+| D22 | **`N<n>`** | ❌ | P1 |
+| S7d/I2 | Pre-parse + label table | ❌ | P1 (unblocks control flow) |
+
+**Theory/LUT reference:** [co5ths_key_signature_handoff.md](../co5ths_key_signature_handoff.md) · locked wire = **D8** / **D8b** in this plan · **Pitch resolve pipeline** section.
+
+**Bench probe:** `grammar_torture.play` includes `K"F" Ab4Q` — **D8** shipped 2026-06-13.
+
+---
+
+#### Shipped today (✅)
 
 | Feature               | Notes                                                                                                |
 | --------------------- | ---------------------------------------------------------------------------------------------------- |
@@ -2440,11 +2535,13 @@ Smoke+ presets land incrementally (**Star Wars** → **Raiders** → other Willi
 | **`%W/H/Q/I`**        | Beat unit (D24); default `%Q` at session start |
 | **`O<n>`**            | Default octave in note memory |
 | **`^` / `v`**         | Octave step ±1 (clamped 1..8) |
+| **`&+n` / `&-n` / `&0`** | Sticky transpose (D21) |
+| **`K"…"`** key signature | Co5ths LUT on bare letters (D8); minor = relative major |
 | **`R` rest**          | Full sub-parser — same postfix as notes |
 | **`~` note-repeat**   | Replay last completed note/rest; S10 template + WARNING if none (D2) |
 | **Duty `_` `!` `;` `;n`** | Parsed on notes/rests; S9 last-wins in STRICT |
 | **`[ … ]:N`**         | Repeat stack; `]` re-entry **without** snapshot restore |
-| **`?"…"` / bare `?`** | Debug print; C escapes |
+| **`?"…"` / bare `?`** | Print / lyrics; C escapes |
 | **`*` END**           | Hard stop + synth off; NUL = implicit `*` |
 | **`@ … @`**           | Runtime skip (no title, no `\@`) |
 | **`L"…"`**            | Warn + skip (D23 deferred) |
@@ -2485,8 +2582,9 @@ C4Q ~ ~                       ; tilde replay
 
 | ID | Feature | Priority |
 | -- | ------- | -------- |
-| D7 | Accidentals + **K** LUT | **P0** for keyed Williams excerpts |
-| D22 | **`N<n>`** absolute semitone | **P1** |
+| D7 | **Explicit accidentals** (`#` `+` `b` `-` `n`) | ✅ shift pitch in note parser |
+| D8 | **`K"…"`** key LUT on **bare** letters | ✅ **2026-06-13** |
+| D22 | **`N<n>`** absolute semitone | ❌ P1 |
 
 ---
 
@@ -2497,8 +2595,8 @@ All below → `**PLAY fault: unsupported executive**` today.
 
 | ID      | Lead                     | Purpose                                                                            |
 | ------- | ------------------------ | ---------------------------------------------------------------------------------- |
-| D8      | `**K"…"**`               | Key signature + per-note LUT                                                       |
-| D21     | `**&+n` / `&-n` / `&0**` | Transpose offset (after key+acc pipeline)                                          |
+| D21     | `**&+n` / `&-n` / `&0**` | ✅ Transpose after pitch normalize (**2026-06-13**)                                |
+| D8      | `**K"…"**`               | ✅ Key signature + per-note LUT (**2026-06-13**)                                   |
 | D6      | `**V<n>**`               | Volume 0..100 — default **50%** applied; executive not parsed                      |
 | D1      | `**P<n>**`               | Voice index — always sine audio in v1                                              |
 | D18     | `**\"cmd:args"**`        | Extension dispatch; `**ctx:**` zero-time memory load                               |
@@ -2551,7 +2649,7 @@ Ordered to maximize score expressiveness per commit (aligns with bench `**playst
 
 1. ~~**Note/rest sub-FSM**~~ ✅
 2. ~~**`~` + last-note snapshot**~~ ✅
-3. **`K"…"` + `&` + pitch pipeline** — accidentals + LUT + transpose (**P0** for Williams fidelity)
+3. ~~**`K"…"` + pitch LUT**~~ — **done 2026-06-13** (D8 executive + Co5ths LUT on bare letters)
 4. **`V`**, **`P`** executives (**P1**)
 5. **Pre-parse pass** — `@`/`\@`, title, labels → unblocks `<` `>` `=` `/` (**P1**)
 6. **`\"ctx:…"`** extension stub (**P2**)
@@ -2719,7 +2817,8 @@ Skill files: **`.grok/skills/playstr|playfile|playtest/SKILL.md`**. Registry: **
 | **Smoke** | `**m` → `1`** | C-major scale — parser alive | **NORMAL** · ends **ENDED** |
 | **Smoke+** | `**m` → `g`** (golden) | **Musician demo + notation exercise** — few bars each of favorite **John Williams** themes **plus** implemented-executive micro-features | **`PLAY_FAULT_POLICY_STRICT`** · **ENDED** · zero fatals |
 | **Feature** | `**m` → `g` N** or flash table | Per-capability micro-strings (inheritance, `%`, duty, `[ ]:`, …) | STRICT when fw supports token |
-| **Torture** | post-**I10** | Full **I1** fence + GOSUB/labels/**K**/**&** | STRICT · grows with bring-up |
+| **Torture** | post-**I10** · `**grammar_torture.play**` | Full **I1** fence in one string — labels, GOSUB, repeat, **K**, **&**, … | STRICT · **`play_bench.py test grammar_torture`** |
+| **Torture v1.1** | post-**D4** · `**grammar_torture_v11.play**` | **X** / **Y** duration appendix only | STRICT · run after v1 torture green |
 
 **Smoke+ repertoire (locked 2026-06-13 — user direction):** **A few bars** of each — monophonic reduction, ROM presets in `**play_presets.c**`, not full arrangements. Woven with notation variations the interpreter already supports (compact runs, `%`, duty, `@` titles, `?`, repeats where useful).
 
@@ -2731,7 +2830,9 @@ Skill files: **`.grok/skills/playstr|playfile|playtest/SKILL.md`**. Registry: **
 
 **Smoke+ is not a v1 ship gate** — it is the **fun + regression** layer once **I10** can parse the executives each excerpt needs. Star Wars may land first (**Q1** WIP); Raiders next; others as arranging time allows.
 
-**Other T3 candidates (outside Smoke+):** Twinkle / Chopsticks (Tier 0 teach) · Sousa / Elgar demo excerpts · Chopin op. 66 / Bumblebee stress (post-v1 hardening) · inheritance chain · repeat + goto · malformed recovery · resolve-hook golden traces (**I8**)
+**Other T3 candidates (outside Smoke+):** Twinkle / Chopsticks (Tier 0 teach) · Sousa / Elgar demo excerpts · Chopin op. 66 / Bumblebee stress (post-v1 hardening) · inheritance chain · repeat + goto · malformed recovery · resolve-hook golden traces (**I8**) · **`scripts/play_golden/grammar_torture.play`** (v1 grammar HIL — not a full **T2** harness; one STRICT string via **`play_bench.py`**)
+
+**Grammar torture (2026-06-13):** Single on-target acceptance string for the whole **I1** fence — unpleasant by design, exercises every v1 executive and note/rest descriptor once. **`grammar_torture_v11.play`** adds **D4** **X**/**Y** when v1.1 lands. Does **not** replace a future **`play_acceptance.py`** wire runner (**W13**); avoids building **T2** host parity for v1 ship.
 
 **Note:** Full **T5 repertoire** (below) is **not** an implementation gate — grows as parser + arranger time allow. **T3** may reuse the same `.play` text with machine-oriented expected traces.
 
@@ -2972,9 +3073,9 @@ Minimum 🟢 before formal grammar + howto + coding:
 | 🟡 Observations / open design | **S11** |
 
 
-**Next suggested chat prompt:** *"Draft T4 EBNF outline or start v1 `play.h` / `play.c` skeleton (I9 + handle API)."*
+**Next suggested chat prompt:** *"Close next **I10** row (e.g. **K** or labels/pre-scan) and refresh cheat sheet + chatbot brief."*
 
-**Session handoff:** [play-v1-session-handoff-2026-06-11.md](play-v1-session-handoff-2026-06-11.md) — **S7/S7i** 🟢 (2026-06-13); **S11** still 🟡.
+**Session handoff:** [play-v1-session-handoff-2026-06-11.md](play-v1-session-handoff-2026-06-11.md) — roadmap lock 2026-06-13: **v1 + v1.1** on G474; **T4/T5** stretch; post-v1 → mic/DSP/audio-reactive per [PROJECT.md](../PROJECT.md).
 
 ### Cross-reference: punctuator roles (D2, S3, D16, D17, D18)
 

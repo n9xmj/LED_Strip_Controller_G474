@@ -94,6 +94,7 @@ typedef struct
     play_completed_snapshot_t  x_last_completed;
     bool                       b_has_completed_note;
     int16_t                    i16_transpose;
+    int8_t                     ai8_key_lut[7];
     float                      f_current_hz;
     float                 f_current_level;
 } play_runtime_t;
@@ -142,6 +143,13 @@ static bool b_play_parse_pitch_token(play_runtime_t *px_rt,
 static bool b_play_parse_c_quoted_string(play_runtime_t *px_rt,
                                          char *psz_out,
                                          uint16_t u16_out_max);
+static bool b_play_parse_k_quoted_string(play_runtime_t *px_rt,
+                                           char *psz_out,
+                                           uint16_t u16_out_max);
+static int8_t i8_play_key_lut_index(char c_letter);
+static void v_play_key_lut_from_fifths(play_runtime_t *px_rt, int8_t i8_fifths);
+static bool b_play_apply_keyspec(play_runtime_t *px_rt, const char *psz_keyspec);
+static bool b_play_exec_key(play_runtime_t *px_rt);
 static bool b_play_exec_question(play_runtime_t *px_rt);
 static bool b_play_open_repeat(play_runtime_t *px_rt);
 static bool b_play_close_repeat(play_runtime_t *px_rt);
@@ -468,6 +476,178 @@ static int8_t i8_play_semitone_for_letter(char c_letter)
         case 'B': return 11;
         default:  return -1;
     }
+}
+static int8_t i8_play_key_lut_index(char c_letter)
+{
+    switch (c_letter)
+    {
+        case 'C': return 0;
+        case 'D': return 1;
+        case 'E': return 2;
+        case 'F': return 3;
+        case 'G': return 4;
+        case 'A': return 5;
+        case 'B': return 6;
+        default:  return -1;
+    }
+}
+static int8_t i8_play_fifths_from_root_letter(char c_root)
+{
+    switch (c_root)
+    {
+        case 'C': return 0;
+        case 'G': return 1;
+        case 'D': return 2;
+        case 'A': return 3;
+        case 'E': return 4;
+        case 'B': return 5;
+        case 'F': return -1;
+        default:  return 0;
+    }
+}
+static int8_t i8_play_fifths_from_major_pc(int8_t i8_pc, bool b_flat_side)
+{
+    static const int8_t ai8_sharp[12] = {0, 7, 2, 9, 4, -1, 6, 1, 8, 3, 10, 5};
+    static const int8_t ai8_flat[12]  = {0, -5, 2, -3, 4, -1, -6, 1, -4, 3, -2, 5};
+    if (i8_pc < 0 || i8_pc > 11)
+    {
+        return 0;
+    }
+    return b_flat_side ? ai8_flat[i8_pc] : ai8_sharp[i8_pc];
+}
+static void v_play_key_lut_from_fifths(play_runtime_t *px_rt, int8_t i8_fifths)
+{
+    static const int8_t ai8_sharp_pc[7] = {5, 0, 7, 2, 9, 4, 11};
+    static const int8_t ai8_flat_pc[7]  = {11, 4, 9, 2, 7, 0, 5};
+    static const char     ac_letters[7] = {'C', 'D', 'E', 'F', 'G', 'A', 'B'};
+    int8_t                ai8_pc_acc[12];
+    int8_t                i8_n;
+    int8_t                i8_i;
+    if (px_rt == NULL)
+    {
+        return;
+    }
+    memset(ai8_pc_acc, 0, sizeof(ai8_pc_acc));
+    if (i8_fifths == 0)
+    {
+        memset(px_rt->ai8_key_lut, 0, sizeof(px_rt->ai8_key_lut));
+        return;
+    }
+    i8_n = i8_fifths;
+    if (i8_n < 0)
+    {
+        i8_n = (int8_t)(-i8_n);
+    }
+    if (i8_n > 7)
+    {
+        i8_n = 7;
+    }
+    if (i8_fifths > 0)
+    {
+        for (i8_i = 0; i8_i < i8_n; i8_i++)
+        {
+            ai8_pc_acc[ai8_sharp_pc[i8_i]] = 1;
+        }
+    }
+    else
+    {
+        for (i8_i = 0; i8_i < i8_n; i8_i++)
+        {
+            ai8_pc_acc[ai8_flat_pc[i8_i]] = -1;
+        }
+    }
+    for (i8_i = 0; i8_i < 7; i8_i++)
+    {
+        int8_t i8_pc = i8_play_semitone_for_letter(ac_letters[i8_i]);
+        px_rt->ai8_key_lut[i8_i] = ai8_pc_acc[i8_pc];
+    }
+}
+static bool b_play_apply_keyspec(play_runtime_t *px_rt, const char *psz_keyspec)
+{
+    char   c_root;
+    char   c_acc;
+    bool   b_has_acc;
+    bool   b_minor;
+    int8_t i8_pc;
+    int8_t i8_fifths;
+    if (px_rt == NULL || psz_keyspec == NULL || psz_keyspec[0] == '\0')
+    {
+        return false;
+    }
+    c_root = psz_keyspec[0];
+    if (c_root < 'A' || c_root > 'G')
+    {
+        return false;
+    }
+    c_acc = psz_keyspec[1];
+    b_has_acc = (c_acc == '#' || c_acc == '+' || c_acc == 'b' || c_acc == '-');
+    b_minor = false;
+    if (b_has_acc)
+    {
+        if (psz_keyspec[2] == 'm')
+        {
+            if (psz_keyspec[3] != '\0')
+            {
+                return false;
+            }
+            b_minor = true;
+        }
+        else if (psz_keyspec[2] != '\0')
+        {
+            return false;
+        }
+    }
+    else if (psz_keyspec[1] == 'm')
+    {
+        if (psz_keyspec[2] != '\0')
+        {
+            return false;
+        }
+        b_minor = true;
+    }
+    else if (psz_keyspec[1] != '\0')
+    {
+        return false;
+    }
+    i8_pc = i8_play_semitone_for_letter(c_root);
+    if (i8_pc < 0)
+    {
+        return false;
+    }
+    if (b_has_acc)
+    {
+        if (c_acc == '#' || c_acc == '+')
+        {
+            i8_pc = (int8_t)(i8_pc + 1);
+        }
+        else
+        {
+            i8_pc = (int8_t)(i8_pc - 1);
+        }
+        while (i8_pc < 0)
+        {
+            i8_pc = (int8_t)(i8_pc + 12);
+        }
+        while (i8_pc > 11)
+        {
+            i8_pc = (int8_t)(i8_pc - 12);
+        }
+    }
+    if (b_minor)
+    {
+        i8_pc = (int8_t)((i8_pc + 3) % 12);
+    }
+    if (!b_has_acc && !b_minor)
+    {
+        i8_fifths = i8_play_fifths_from_root_letter(c_root);
+    }
+    else
+    {
+        bool b_flat_side = b_has_acc && (c_acc == 'b' || c_acc == '-');
+        i8_fifths = i8_play_fifths_from_major_pc(i8_pc, b_flat_side);
+    }
+    v_play_key_lut_from_fifths(px_rt, i8_fifths);
+    return true;
 }
 static void v_play_normalize_pitch(uint8_t *pu8_octave, int8_t *pi8_semi)
 {
@@ -873,6 +1053,14 @@ static bool b_play_parse_pitch_token(play_runtime_t *px_rt,
     }
     if (!b_is_rest)
     {
+        if (!b_saw_acc)
+        {
+            int8_t i8_lut_idx = i8_play_key_lut_index(c_letter);
+            if (i8_lut_idx >= 0)
+            {
+                i8_semi = (int8_t)(i8_semi + px_rt->ai8_key_lut[i8_lut_idx]);
+            }
+        }
         v_play_normalize_pitch(&x_work.u8_octave, &i8_semi);
         if (b_play_apply_transpose_to_pitch(px_rt, &x_work.u8_octave, &i8_semi))
         {
@@ -1020,6 +1208,100 @@ static bool b_play_parse_c_quoted_string(play_runtime_t *px_rt,
     }
     (void)b_play_fault(px_rt, PLAY_FAULT_CLASS_FATAL, "unterminated string");
     return false;
+}
+static bool b_play_parse_k_quoted_string(play_runtime_t *px_rt,
+                                         char *psz_out,
+                                         uint16_t u16_out_max)
+{
+    const char *psz = px_rt->x_public.psz_src;
+    uint16_t    u16_out = 0U;
+    if (psz_out == NULL || u16_out_max < 1U)
+    {
+        return false;
+    }
+    if (psz[px_rt->x_public.u32_src_offset] != '"')
+    {
+        (void)b_play_fault(px_rt, PLAY_FAULT_CLASS_FATAL, "expected quote after K");
+        return false;
+    }
+    px_rt->x_public.u32_src_offset++;
+    while (psz[px_rt->x_public.u32_src_offset] != '\0')
+    {
+        char c_ch = psz[px_rt->x_public.u32_src_offset];
+        if (c_ch == '"')
+        {
+            px_rt->x_public.u32_src_offset++;
+            psz_out[u16_out] = '\0';
+            return true;
+        }
+        if (c_ch == '\\')
+        {
+            px_rt->x_public.u32_src_offset++;
+            char c_esc = psz[px_rt->x_public.u32_src_offset];
+            if (c_esc == '\0')
+            {
+                (void)b_play_fault(px_rt, PLAY_FAULT_CLASS_FATAL, "bad key string escape");
+                return false;
+            }
+            px_rt->x_public.u32_src_offset++;
+            if (c_esc == '"')
+            {
+                c_ch = '"';
+            }
+            else if (c_esc == '\\')
+            {
+                c_ch = '\\';
+            }
+            else
+            {
+                (void)b_play_fault(px_rt, PLAY_FAULT_CLASS_FATAL, "bad key string escape");
+                return false;
+            }
+        }
+        else
+        {
+            px_rt->x_public.u32_src_offset++;
+        }
+        if (u16_out + 1U >= u16_out_max)
+        {
+            (void)b_play_fault(px_rt, PLAY_FAULT_CLASS_FATAL, "key string too long");
+            return false;
+        }
+        psz_out[u16_out++] = c_ch;
+    }
+    (void)b_play_fault(px_rt, PLAY_FAULT_CLASS_FATAL, "unterminated string");
+    return false;
+}
+static bool b_play_exec_key(play_runtime_t *px_rt)
+{
+    const char *psz = px_rt->x_public.psz_src;
+    uint32_t    u32_off = px_rt->x_public.u32_src_offset;
+    char        ac_keyspec[PLAY_KEYSPEC_MAX + 1U];
+    px_rt->x_public.u32_src_offset++;
+    v_play_skip_ws(px_rt);
+    if (psz[px_rt->x_public.u32_src_offset] != '"')
+    {
+        (void)b_play_fault(px_rt, PLAY_FAULT_CLASS_RECOVERABLE,
+                           "K requires quoted keyspec");
+        return true;
+    }
+    if (!b_play_parse_k_quoted_string(px_rt, ac_keyspec,
+                                      (uint16_t)sizeof(ac_keyspec)))
+    {
+        return false;
+    }
+    if (!b_play_apply_keyspec(px_rt, ac_keyspec))
+    {
+        (void)b_play_fault(px_rt, PLAY_FAULT_CLASS_RECOVERABLE, "bad keyspec");
+        return true;
+    }
+    if (psz[px_rt->x_public.u32_src_offset] == ':')
+    {
+        px_rt->x_public.u32_src_offset++;
+    }
+    v_play_emit_resolve(px_rt, PLAY_RESOLVE_META, u32_off, 'K', 0U, 0U,
+                        false, false, 0.0f, 0U);
+    return true;
 }
 static bool b_play_exec_question(play_runtime_t *px_rt)
 {
@@ -1286,6 +1568,14 @@ static bool b_play_exec_next(play_runtime_t *px_rt)
         if (c_ch == '&')
         {
             if (!b_play_exec_transpose(px_rt))
+            {
+                return false;
+            }
+            continue;
+        }
+        if (c_ch == 'K')
+        {
+            if (!b_play_exec_key(px_rt))
             {
                 return false;
             }

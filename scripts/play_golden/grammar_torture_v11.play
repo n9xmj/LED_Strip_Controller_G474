@@ -1,0 +1,8 @@
+# PLAY v1.1 appendix — D4 sixteenth (X) and thirty-second (Y) durations.
+# Run after X/Y ship; chained after grammar_torture or standalone.
+# Pass: STRICT, zero fatals, PLAY ended.
+#
+@ PLAY v1.1 X Y appendix @
+T240 O4 %Q
+C4X C4Y C4X. C4Y. RX RY
+*

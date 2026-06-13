@@ -58,17 +58,32 @@ This is a hobby bare-metal STM32 firmware project with the following aspirations
 - **Networked / smart features:** Offload WiFi, Bluetooth, and MQTT (AWS or local) to an ESP32 coprocessor module communicating over bidirectional UART. Enables remote control, pattern upload, telemetry, and home-automation integration without burdening the real-time STM32 core.
 - Other ideas may be added over time.
 
-**Author background:** Strong experience with bare-metal STM32 (especially low/mid-range parts). Less experience with RTOS, DSP, audio signal chains, and TFT displays. Moderate electrical engineering background.
+**Author background:** Strong experience with bare-metal STM32 (especially low/mid-range parts). Less experience with RTOS, DSP, audio signal chains, and TFT displays. Moderate electrical engineering background. **Not a Haskell / functional-programming practitioner** — when mining **@mokus0**’s `Channel.hs` / vTree Haskell for Mk 5 DSP ideas, expect to **lean on AI agents** to decode algorithms into plain-language + embedded-friendly pseudocode; do not assume the author will read Haskell source directly.
+
+## Product lineage — vTree+ and PLAY (author lock 2026-06-13)
+
+This repo is **vTree Mk 5** (“vTree+”): LED strips + synthesis + (planned) audio-reactive DSP on STM32G4, in a long hobby arc that predates this hardware generation.
+
+| Mk | Era | What |
+|----|-----|------|
+| **1–2** | Late high school / university | **Author original** — analog + GLU “color organ” predecessors |
+| **3** | Follow-on hobby | 8-bit MCU + analog filtering + **incandescent** lamps, triac-switched low-frequency PWM |
+| **4** | Independent successor | [cayuse/color_organ](https://github.com/cayuse/color_organ) (ESP32-C3) — friend’s spiritual successor; **@mokus0**’s Haskell `Channel.hs` / vTree work refines the same **auto-leveling** ideas in software |
+| **5 (this tree)** | STM32G474 forward baseline | USART LED drive + CORDIC/PLAY sequencer + planned mic→FFT→strip path |
+
+**PLAY / player thread (same author):** first **commercial software sale** (end of high school) — **TRS-80 Model I** music player + user docs; lineage through **GW-BASIC `PLAY`**, a **failed AVR** experiment, and this **PLAY meta-language** on G474. Terminal piano UI reprise: [`Docs/planning/terminal-piano-and-player-notes.md`](planning/terminal-piano-and-player-notes.md).
+
+**Cross-reference, not authorship:** [cayuse/color_organ](https://github.com/cayuse/color_organ) is the informal **“cayuse project”** — useful algorithm patterns for Mk 5’s mic/DSP path; not a port target.
 
 ## Institutional memory — related projects
 
-Future work on **audio-reactive lighting** (mic → analysis → LED mapping) should not start from a blank page. Keep this pointer on file:
+Future work on **audio-reactive lighting** (mic → analysis → LED mapping) should not start from a blank page. Keep this pointer on file. In chat, **“the cayuse project”** means this row. **vTree** began with the author (Mk 1–3); cayuse/Mk 4 and mokus0’s Haskell work are **successor refinements**, not the origin.
 
 | Project | Link | Why look here |
 |---------|------|----------------|
-| **Color Organ** (cayuse) | [github.com/cayuse/color_organ](https://github.com/cayuse/color_organ) | Friend’s ESP32-C3 “color organ”: I2S capture → FFT → multi-band energy → adaptive leveling → attack/release → NeoPixel drive. Useful **signal-processing patterns** (band split, per-band normalization, envelope smoothing, auto-gain) even though the MCU and LED stack differ from this G474 tree. |
+| **Color Organ** (cayuse) | [github.com/cayuse/color_organ](https://github.com/cayuse/color_organ) | **vTree Mk 4** — friend’s ESP32-C3 color organ: I2S → FFT → multi-band energy → adaptive leveling → attack/release → NeoPixel drive. Mine **DSP patterns** (band split, normalization, envelopes) for Mk 5; MCU/LED stack differs. |
 
-**Lineage (from upstream README):** auto-leveling ideas trace to **@mokus0**’s vTree / Haskell `Channel.hs` work (rolling history, normal-CDF normalization, asymmetric attack/decay). **cayuse**’s repo is an independent ESP32-C3 bare-metal realization — not a drop-in port, but a credible place to mine algorithms when this project’s mic + DSP path is scheduled.
+**Lineage note:** **vTree originated with this author** (Mk 1–3). **@mokus0**’s Haskell `Channel.hs` / vTree and **cayuse**’s firmware are **later spiritual successors** that refined auto-leveling (rolling history, normal-CDF normalization, asymmetric attack/decay) — cross-check when Mk 5 DSP is scheduled, not a claim that mokus0 authored the original tree. **Author does not read Haskell** — agent-assisted translation required when those sources are mined.
 
 **Status (2026-06-11):** Link recorded only — **not reviewed or ported** yet. Deliberately orthogonal to current **PLAY v1** sequencer/synth planning; revisit when **audio-reactive lighting** moves off the backlog (see long-term goals above). Expected overlap: INMP441 / I2S in, CMSIS-DSP FFT on G474, mapping band energy → strip pixels — not PLAY score playback.
 
@@ -165,7 +180,7 @@ Items may be done out of order. Toggle boxes as work completes.
 - [ ] **General MIDI (GM) synthesizer (H7 wishlist).** Design a full GM synth engine as a **companion** to a future **FM** synth voice — not a G474 target. Would need substantially more CPU/RAM (likely **STM32H7** board already on the hardware roadmap). Open questions: locate a **free/open GM patch set** (SoundFont / sample bank / procedural patches — nothing vetted yet), polyphony budget, streaming samples from QSPI/SD, and how GM voices share the mix bus with FM + PLAY-driven voices. Motivation: “would be fun” — park here until PLAY + simpler synth voices are further along.
 
 - [ ] **ANSI terminal piano keyboard (“virtual synthboard”).** **Status: idea on paper only.** Agent brief: [`Docs/planning/terminal-piano-and-player-notes.md`](planning/terminal-piano-and-player-notes.md) (layout, **I8** consumer, **JOB_PIANO_DRAW**, depends on **`uart_stream`**).
-- [ ] **`uart_stream` (debug USART2).** Non-blocking console TX/RX for piano UI and bursty ANSI. Agent brief: [`Docs/planning/uart_stream-port-notes.md`](planning/uart_stream-port-notes.md). Reference drop: local **`not-in-project/uart_stream.{c,h}`** (gitignored). **Not v1 Phase 1** — port before piano UI.
+- [ ] **`uart_stream` (debug USART2).** Non-blocking console TX/RX for piano UI and bursty ANSI. Agent brief: [`Docs/planning/uart_stream-port-notes.md`](planning/uart_stream-port-notes.md). Reference drop: local **`not-in-project/uart_stream.{c,h}`** (gitignored). **v1.1 stretch** (after PLAY v1); port before terminal piano UI.
 
 See the historical IR options section that was carried forward from the L476 work if needed for reference.
 
@@ -183,7 +198,7 @@ Project-local slash commands (the convenient shorthand layer) are documented via
 - Project-local skills: `.grok/skills/`
 - PLAY meta-language design (player-piano / sequencer spec, parser plans, polyphony model, storage integration): [Docs/PLAY_language_design.md](Docs/PLAY_language_design.md)
 - PLAY v1 implementation readiness (decision-log plan, resolve D/S/I/T/Q IDs in chat): [Docs/planning/play-v1-implementation-plan.md](planning/play-v1-implementation-plan.md) · [planning model](planning/decision-log-model.md)
-- Audio-reactive lighting (future): [cayuse/color_organ](https://github.com/cayuse/color_organ) — see *Institutional memory* section above; DSP ideas from cayuse / mokus0, not yet reviewed
+- Audio-reactive lighting (future, **vTree+ Mk 5**): [cayuse/color_organ](https://github.com/cayuse/color_organ) — Mk 4 cross-ref; vTree Mk 1–3 author originals — see *Product lineage* + *Institutional memory*
 
 **This is a living document.** Update it as goals, status, or the roadmap evolve.
 

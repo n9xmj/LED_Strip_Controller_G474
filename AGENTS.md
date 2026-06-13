@@ -65,8 +65,9 @@ For specs or features with many open decisions (e.g. PLAY meta-language v1), use
 
 - Mechanics: [`Docs/planning/decision-log-model.md`](Docs/planning/decision-log-model.md)
 - **The Big Board** — summary decision table with IDs (**D** design, **S** semantics, **I** implementation, **T** tooling, **Q** user question) and status: 🔴 open · 🟡 leaning · 🟢 resolved · 🔵 deferred (*Dr. Strangelove* nickname; see [`.grok/memory/user_conversational_tone.md`](.grok/memory/user_conversational_tone.md))
+- **PLAY wish list** — companion table under the Big Board in the active plan: **W** / **E** IDs for v2+ backlog, deferred features, and session ideas (not v1 firmware gaps — those stay in **I10**)
 - User resolves in chat by ID (*"green D3"*, *"S2 option C"*); agent updates the plan doc same session
-- **Active plan:** [`Docs/planning/play-v1-implementation-plan.md`](Docs/planning/play-v1-implementation-plan.md) → parent spec [`Docs/PLAY_language_design.md`](Docs/PLAY_language_design.md)
+- **Active plan:** [`Docs/planning/play-v1-implementation-plan.md`](Docs/planning/play-v1-implementation-plan.md) → parent spec [`Docs/PLAY_language_design.md`](Docs/PLAY_language_design.md). **Session target (2026-06-13):** v1 + v1.1 feature-complete on **G474** (v1.1 PLAY ≈ **X/Y** + optional **D5b**; **stretch:** [`uart_stream`](Docs/planning/uart_stream-port-notes.md)); living docs; **T4/T5** stretch; post-v1 → **vTree+ Mk 5** mic/DSP ([PROJECT.md](Docs/PROJECT.md)); PLAY v2+ likely **H7**.
 - **Deferred work briefs (read when tackling):**
   - [`Docs/planning/uart_stream-port-notes.md`](Docs/planning/uart_stream-port-notes.md) — non-blocking **USART2** ISR port; HAL init-only
   - [`Docs/planning/terminal-piano-and-player-notes.md`](Docs/planning/terminal-piano-and-player-notes.md) — PLAY bench menu (**I9**), **I8** hook, ANSI piano UI wishlist
@@ -87,7 +88,7 @@ Also indexed in [`.grok/memory/MEMORY.md`](.grok/memory/MEMORY.md). Loaded on `/
   - **Grok slash commands:** [`.grok/skills/`](.grok/skills/) (`/build`, `/flash`, `/smoke`, `/roundtrip`, …).
   Both read the same `bench.defaults.json`.
 - **Hardware datasheets and reference material**: `Docs/` directory.
-- **Audio-reactive DSP ideas (future):** [Docs/PROJECT.md](Docs/PROJECT.md) § *Institutional memory* → [cayuse/color_organ](https://github.com/cayuse/color_organ) (scan when mic→LED work starts; not PLAY-related).
+- **Audio-reactive DSP ideas (future, vTree Mk 5):** **“The cayuse project”** = [github.com/cayuse/color_organ](https://github.com/cayuse/color_organ) (**vTree Mk 4**). **vTree Mk 1–3** = author originals. Full lineage: [Docs/PROJECT.md](Docs/PROJECT.md) § *Product lineage*. Post-PLAY pivot; not PLAY-related.
 
 ## How to Work in This Project (Agent Workflow)
 
@@ -128,6 +129,7 @@ Future major areas (see `Docs/PROJECT.md` for current TODO state): RTOS, I2S/ana
 
 ## Additional Notes
 - This is a hobby project. Good engineering practices apply, but it is not safety-critical. Informal tone and occasional pop-culture references in prompts are normal — see [`.grok/memory/user_conversational_tone.md`](.grok/memory/user_conversational_tone.md).
+- **Haskell / FP:** author does not read Haskell — when vTree/mokus0 sources matter, agents translate to plain language + embedded C; see [`.grok/memory/author_haskell_gap.md`](.grok/memory/author_haskell_gap.md).
 - The `not-in-project/` directory is permanently gitignored and must never be committed or pushed.
 - When in doubt about generated code or Core/ changes, stop and ask the user.
 
