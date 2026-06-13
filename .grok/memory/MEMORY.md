@@ -4,3 +4,5 @@ One-line index. Read the linked body files for full context (do not rely on this
 
 - [Preferred conversational tone + workflow lightness](user_conversational_tone.md) — casual techno-geeky chat; personal hobby archival git; hedged planning language = brief pushback if bad call, else close out.
 - [Decision-log planning model](planning_decision_log_model.md) — D/S/I/T/Q IDs, 🔴🟡🟢🔵 status table + detail sections; resolve in chat by label. Full doc: `Docs/planning/decision-log-model.md`. **Active plan:** `Docs/planning/play-v1-implementation-plan.md`. **Handoff:** newest `Docs/planning/play-v1-session-handoff-*.md` (via `/wrapup`).
+- [`uart_stream` port brief](../Docs/planning/uart_stream-port-notes.md) — USART2 register ISR, HAL out of IRQ path, LED DMA coexistence; reference in `not-in-project/`.
+- [Terminal piano + PLAY player bench](../Docs/planning/terminal-piano-and-player-notes.md) — I8/I9, smoke preset, virtual synthboard wishlist, implementation order.

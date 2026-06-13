@@ -67,6 +67,9 @@ For specs or features with many open decisions (e.g. PLAY meta-language v1), use
 - Summary table with IDs (**D** design, **S** semantics, **I** implementation, **T** tooling, **Q** user question) and status: 🔴 open · 🟡 leaning · 🟢 resolved · 🔵 deferred
 - User resolves in chat by ID (*"green D3"*, *"S2 option C"*); agent updates the plan doc same session
 - **Active plan:** [`Docs/planning/play-v1-implementation-plan.md`](Docs/planning/play-v1-implementation-plan.md) → parent spec [`Docs/PLAY_language_design.md`](Docs/PLAY_language_design.md)
+- **Deferred work briefs (read when tackling):**
+  - [`Docs/planning/uart_stream-port-notes.md`](Docs/planning/uart_stream-port-notes.md) — non-blocking **USART2** ISR port; HAL init-only
+  - [`Docs/planning/terminal-piano-and-player-notes.md`](Docs/planning/terminal-piano-and-player-notes.md) — PLAY bench menu (**I9**), **I8** hook, ANSI piano UI wishlist
 - **Session handoff (read on new chat):** newest [`Docs/planning/play-v1-session-handoff-*.md`](Docs/planning/) — updated by **`/wrapup`**
 
 Also indexed in [`.grok/memory/MEMORY.md`](.grok/memory/MEMORY.md). Loaded on `/bootstrap` / `/read-the-docs`.
@@ -118,7 +121,7 @@ Major completed items (as of the skills + automation phase):
 - Debug menu `@` key for fast banner reprint / identification.
 - SCRIPTS.md established as the general automation reference.
 
-Future major areas (see `Docs/PROJECT.md` for current TODO state): RTOS, I2S/analog mic input, gesture sensor, TFT, CMSIS-DSP experiments (CORDIC/FMAC already enabled in CubeMX), etc.
+Future major areas (see `Docs/PROJECT.md` for current TODO state): RTOS, I2S/analog mic input, gesture sensor, TFT, CMSIS-DSP experiments (CORDIC/FMAC already enabled in CubeMX), PLAY v1 sequencer, **ANSI terminal piano UI** (TRS-80 heritage + `uart_stream`), **H7 GM synth wishlist** (companion to future FM), etc.
 
 ## Additional Notes
 - This is a hobby project. Good engineering practices apply, but it is not safety-critical.

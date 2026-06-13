@@ -14,6 +14,8 @@
 #include "i2s_test_tone.h"
 #include "synth_engine.h"   // new non-blocking CORDIC synth (direct sine for v1)
 #include "note_player.h"    // interactive terminal piano / note player ('p' from top menu)
+#include "play.h"
+#include "play_presets.h"
 
 #include "debug_config.h"   // logging sugar (LOGCT etc.) for this module
 
@@ -422,6 +424,122 @@ static void v_debug_led_strip4_off(void)
 }
 
 //------------------------------------------------------------------------------
+// PLAY interpreter bench submenu (I9)
+
+static play_handle_t px_active_play = PLAY_HANDLE_NULL;
+
+static char ac_play_debug_line[PLAY_DEBUG_LINE_MAX + 1U];
+
+static void v_debug_play_stop(void)
+{
+    if (px_active_play != PLAY_HANDLE_NULL)
+    {
+        v_play_stop(px_active_play);
+        px_active_play = PLAY_HANDLE_NULL;
+    }
+}
+
+static void v_debug_play_smoke(void)
+{
+    if (b_play_is_running(px_active_play))
+    {
+        printf("PLAY already running — stop first\r\n");
+        return;
+    }
+
+    if (b_play_start(psz_play_smoke_test, &px_active_play))
+    {
+        printf("PLAY smoke started\r\n");
+    }
+    else
+    {
+        printf("PLAY start failed\r\n");
+    }
+}
+
+static void v_debug_play_playstr(void)
+{
+    if (b_play_is_running(px_active_play))
+    {
+        printf("PLAY already running — stop first\r\n");
+        return;
+    }
+
+    printf("PLAY> ");
+    if (i_getline(ac_play_debug_line, (uint16_t)sizeof(ac_play_debug_line)) < 0)
+    {
+        printf("Input cancelled\r\n");
+        return;
+    }
+
+    if (ac_play_debug_line[0] == '\0')
+    {
+        printf("Empty line\r\n");
+        return;
+    }
+
+    if (b_play_start(ac_play_debug_line, &px_active_play))
+    {
+        printf("PLAY started\r\n");
+    }
+    else
+    {
+        printf("PLAY start failed\r\n");
+    }
+}
+
+static void v_debug_play_terminal_piano(void)
+{
+    if (b_play_is_running(px_active_play))
+    {
+        printf("Stop PLAY first (ESC from this submenu)\r\n");
+        return;
+    }
+
+    v_note_player_run();
+}
+
+static const menu_item_t x_player_tests_submenu[] =
+{
+    {
+        .x_type = MENU_ITEM_HELP_TEXT_FIXED,
+        .p_c_text = "--- Player tests and experiments ---"
+    },
+    {
+        .x_type = MENU_ITEM_HELP,
+        .c_key = '?',
+        .p_c_text = "Help"
+    },
+    {
+        .x_type = MENU_ITEM_FUNCTION,
+        .c_key = '1',
+        .p_c_text = "PLAY smoke test (C major scale)",
+        .pfn_function = v_debug_play_smoke
+    },
+    {
+        .x_type = MENU_ITEM_FUNCTION,
+        .c_key = 's',
+        .p_c_text = "PLAY string entry (<=128 chars)",
+        .pfn_function = v_debug_play_playstr
+    },
+    {
+        .x_type = MENU_ITEM_FUNCTION,
+        .c_key = 'p',
+        .p_c_text = "Terminal note player (not PLAY)",
+        .pfn_function = v_debug_play_terminal_piano
+    },
+    {
+        .x_type = MENU_ITEM_RETURN_TO_PREVIOUS_MENU,
+        .c_key = 0x1B,
+        .p_c_text = "Return",
+        .pfn_function = v_debug_play_stop
+    },
+    {
+        .x_type = MENU_ITEM_END_OF_LIST,
+    }
+};
+
+//------------------------------------------------------------------------------
 // New non-blocking I2S synth engine wrappers (CORDIC direct sine, first iteration).
 // Menu functions initiate and return immediately. Explicit stop via 's' or
 // auto-stop on RETURN from this submenu (via pfn attached to RETURN item).
@@ -657,6 +775,12 @@ static const menu_item_t x_debug_top_menu[] =
         .c_key = 'i',
         .p_c_text = "I2S audio tests",
         .p_x_menu = x_i2s_audio_tests_submenu
+    },
+    {
+        .x_type = MENU_ITEM_CALL_MENU,
+        .c_key = 'm',
+        .p_c_text = "Player tests and experiments (PLAY)",
+        .p_x_menu = x_player_tests_submenu
     },
     {
         .x_type = MENU_ITEM_FUNCTION,

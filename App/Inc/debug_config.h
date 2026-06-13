@@ -76,6 +76,10 @@
 // Add more tags here as the project grows (e.g. LOG_APP, LOG_EFFECTS, LOG_MENU...)
 // Follow the pattern: LOG_FOO 0/1, LOG_FOO_TAG "FOO", LOG_FOO_COLOR LOGC_xxx
 
+#define LOG_PLAY                        1
+#define LOG_PLAY_TAG                    "PLAY"
+#define LOG_PLAY_COLOR                  LOGC_CYAN
+
 #endif  // DEBUG_LOGGING
 
 //------------------------------------------------------------------------------

@@ -10,6 +10,7 @@
 #include "led_strip_control.h"
 #include "i2s_audio_out.h"
 #include "synth_engine.h"
+#include "play.h"
 
 #include "debug_config.h"   // for RPRINTF + logging tags (banner uses RPRINTF)
 
@@ -149,6 +150,8 @@ static void v_periodic_timer_service(void)
 {
     static uint16_t u16_timer_1s_prescaler = 0;
 
+    v_play_sched_tick_inc();
+
     u16_timer_1s_prescaler++;
     if (u16_timer_1s_prescaler >= MS_IN_1S)     // Assumes periodic timer tick period = 1mS
     {
@@ -172,6 +175,8 @@ static void v_system_init(void)
 
     // Synth engine (CORDIC tone gen for debug audio tests)
     v_synth_engine_init();
+
+    v_play_init();
 }
 
 /******************************************************************************
@@ -218,6 +223,7 @@ void v_process_next_job(void)
 void v_app_polling_task(void)
 {
     v_process_next_job();
+    v_play_poll();
     v_synth_engine_service();   // cheap direct call for responsiveness (job also posts it)
 }
 

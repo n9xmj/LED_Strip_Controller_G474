@@ -53,6 +53,8 @@ This is a hobby bare-metal STM32 firmware project with the following aspirations
 - **Gesture / “theremin” interaction:** Hand gestures (e.g. VL53L5CX time-of-flight) to control lighting and possibly sound.
 - **Status UI:** Small TFT over SPI (ST7789-class or similar).
 - **DSP:** Use CMSIS-DSP (and G4 hardware accelerators CORDIC/FMAC) for audio processing.
+- **Audio synthesis trajectory:** G474 today — monophonic CORDIC sine + **PLAY** sequencer path. Longer term — richer voices (FM and beyond). **Wishlist:** a full **General MIDI (GM)** synthesizer as a **companion engine** to FM — fun project, but realistically needs **STM32H7-class** horsepower and a **free/open GM patch set** (research TBD; nothing selected yet).
+- **Terminal “virtual piano” UI (TRS-80 heritage):** Reprise of the author’s **TRS-80 Model I** player display on the debug UART (ANSI + UTF-8). Natural consumer of PLAY **I8** and the live **`p`** note player. **Not active work** — full brief: [`Docs/planning/terminal-piano-and-player-notes.md`](planning/terminal-piano-and-player-notes.md).
 - **Networked / smart features:** Offload WiFi, Bluetooth, and MQTT (AWS or local) to an ESP32 coprocessor module communicating over bidirectional UART. Enables remote control, pattern upload, telemetry, and home-automation integration without burdening the real-time STM32 core.
 - Other ideas may be added over time.
 
@@ -124,7 +126,7 @@ Horizontal lines, index **0** = left, **9** = right.
 - Implementation of a proper bordered startup banner that includes versioning and reset cause.
 - Full custom automation layer (PowerShell + shell scripts + Python helpers) for headless build, flash (with multi-probe discovery and accessibility checks), and smoke testing (including fast banner capture via concurrent reset or `--identify`).
 - Project-local Grok skills (`.grok/skills/`) providing convenient `/build`, `/cleanbuild`, `/roundtrip`, `/fixme`, `/flash`, `/smoke`, `/probe`, `/setver`, etc. commands that use local bench defaults.
-- Complete removal of proprietary reference material from the public remote history (reference copies remain only locally in the gitignored `not-in-project/` directory).
+- Complete removal of proprietary reference material from the public remote history (reference copies remain only locally in the gitignored `not-in-project/` directory — e.g. legacy mirror scripts, author’s **`uart_stream`** reference drop for future piano UI / non-blocking debug UART).
 - Addition of the `@` debug menu shortcut for quick banner reprint / board identification.
 
 ## TODO Checklist
@@ -159,6 +161,11 @@ Items may be done out of order. Toggle boxes as work completes.
 
 - [ ] Music sequencer / player-piano API. See [Docs/PLAY_language_design.md](Docs/PLAY_language_design.md) for the complete PLAY meta-language specification (note descriptors, durations W/H/Q/I/X/Y + dot, articulation, duty, commands R/T/O/K/V, repeats, labels/gotos, polyphony via independent voices + conductor model, EBNF, parser/scheduler, storage integration, etc.), design, and roadmap. The CORDIC synth engine and interactive note player are stepping stones.
 - [x] Interactive note player (experimental for-fun, 'p' from main debug menu). Monophonic sustained tones via terminal keys (1-8/a-g/A-G layout, octave/vol controls, status, script-friendly short responses). Uses the CORDIC synth engine (set_tone + set_level for live changes, quiet path). 2^(n/12) freq calc from C1 base (no LUT). Precursor / validation for the full sequencer. See Docs/Interactive noteplayer spec.txt and [Docs/PLAY_language_design.md](Docs/PLAY_language_design.md) for the planned PLAY meta-language sequenced playback.
+
+- [ ] **General MIDI (GM) synthesizer (H7 wishlist).** Design a full GM synth engine as a **companion** to a future **FM** synth voice — not a G474 target. Would need substantially more CPU/RAM (likely **STM32H7** board already on the hardware roadmap). Open questions: locate a **free/open GM patch set** (SoundFont / sample bank / procedural patches — nothing vetted yet), polyphony budget, streaming samples from QSPI/SD, and how GM voices share the mix bus with FM + PLAY-driven voices. Motivation: “would be fun” — park here until PLAY + simpler synth voices are further along.
+
+- [ ] **ANSI terminal piano keyboard (“virtual synthboard”).** **Status: idea on paper only.** Agent brief: [`Docs/planning/terminal-piano-and-player-notes.md`](planning/terminal-piano-and-player-notes.md) (layout, **I8** consumer, **JOB_PIANO_DRAW**, depends on **`uart_stream`**).
+- [ ] **`uart_stream` (debug USART2).** Non-blocking console TX/RX for piano UI and bursty ANSI. Agent brief: [`Docs/planning/uart_stream-port-notes.md`](planning/uart_stream-port-notes.md). Reference drop: local **`not-in-project/uart_stream.{c,h}`** (gitignored). **Not v1 Phase 1** — port before piano UI.
 
 See the historical IR options section that was carried forward from the L476 work if needed for reference.
 

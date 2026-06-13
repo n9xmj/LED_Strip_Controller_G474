@@ -1916,7 +1916,7 @@ typedef void (*play_resolve_fn_t)(play_session_t *px_session,
 
 1. **Verbose mode** — register cb that `printf`/`LOG` the **`psz_src` span** (and optionally one-line decoded summary). Human or CI log diff sees *what executed, in order*.
 2. **Automated test** — cb appends `(kind, src_span, key fields)` to a ring buffer or host capture; compare to golden trace **without mocking synth or I2S**.
-3. **Virtual synthboard (display)** — NOTE → highlight piano key; META → update tempo/voice/volume/key widgets from **`x_memory`**.
+3. **Virtual synthboard (display)** — NOTE → highlight piano key; META → update widgets from **`x_memory`**. **Agent brief:** [`Docs/planning/terminal-piano-and-player-notes.md`](terminal-piano-and-player-notes.md) · TX via [`uart_stream-port-notes.md`](uart_stream-port-notes.md).
 4. **LED strip animation** — NOTE → push hue/brightness timeline; META → global brightness or palette from **`V` / `P`**.
 
 **Testing tie-in:** Host-side parser (T2) and on-device interpreter should share **the same resolve points** so golden traces match. Injected clock (**I4** / test seam) makes “when” deterministic without audio hardware.
