@@ -22,6 +22,7 @@
 #include "stm32g4xx_it.h"
 /* Private includes ----------------------------------------------------------*/
 /* USER CODE BEGIN Includes */
+#include "uart_stream.h"
 /* USER CODE END Includes */
 
 /* Private typedef -----------------------------------------------------------*/
@@ -333,5 +334,10 @@ void DMA1_Channel8_IRQHandler(void)
 }
 
 /* USER CODE BEGIN 1 */
+
+void USART2_IRQHandler(void)
+{
+    v_uart_stream_isr_for(USART2);
+}
 
 /* USER CODE END 1 */

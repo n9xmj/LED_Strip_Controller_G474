@@ -11,6 +11,7 @@
 #include "i2s_audio_out.h"
 #include "synth_engine.h"
 #include "play.h"
+#include "uart_stream.h"
 
 #include "debug_config.h"   // for RPRINTF + logging tags (banner uses RPRINTF)
 
@@ -25,6 +26,10 @@ job_queue_t gx_job_queue;
 //------------------------------------------------------------------------------
 
 static job_t x_job_queue_buffer[JOB_QUEUE_SIZE];
+
+static uint8_t u8_debug_uart_rx_buf[512];
+static uint8_t u8_debug_uart_tx_buf[1024];
+static uart_stream_h_t h_debug_uart = UART_STREAM_HANDLE_INVALID;
 
 //------------------------------------------------------------------------------
 // Forward references
@@ -44,25 +49,21 @@ static void v_periodic_timer_service(void);
 
 int __io_putchar(int ch)
 {
-    /* Place your implementation of fputc here */
-    /* e.g. write a character to the USART1 and Loop until the end of transmission */
-    uint8_t u8_ch = ch;
-    HAL_UART_Transmit(&DEBUG_UART_HANDLE, &u8_ch, 1, 0xFFFF);
-
+    v_uart_stream_tx_byte_blocking(h_debug_uart, (uint8_t)ch);
     return ch;
 }
 
 int __io_getchar(void)
 {
-    uint8_t u8_ch;
-    HAL_StatusTypeDef x_status;
-    x_status = HAL_UART_Receive(&DEBUG_UART_HANDLE, &u8_ch, 1, 1);
-    if (x_status == HAL_OK)
+    int16_t i16_ch;
+
+    i16_ch = i16_uart_stream_rx_byte(h_debug_uart);
+    if (i16_ch < 0)
     {
-        return (int) u8_ch;
+        return 0;
     }
 
-    return 0;
+    return (int)i16_ch;
 }
 
 /******************************************************************************
@@ -165,10 +166,21 @@ static void v_periodic_timer_service(void)
  *
  ******************************************************************************/
 
+static void v_debug_uart_stream_init(void)
+{
+    h_debug_uart = x_uart_stream_init(&DEBUG_UART_HANDLE,
+                                      (uint16_t)sizeof(u8_debug_uart_rx_buf),
+                                      u8_debug_uart_rx_buf,
+                                      (uint16_t)sizeof(u8_debug_uart_tx_buf),
+                                      u8_debug_uart_tx_buf);
+}
+
 static void v_system_init(void)
 {
     // Initialize the main job queue
     v_job_queue_init(&gx_job_queue, x_job_queue_buffer, JOB_QUEUE_SIZE);
+
+    v_debug_uart_stream_init();
 
     // Start the periodic 1ms tick timer
     HAL_TIM_Base_Start_IT(&PERIODIC_TIMER_HANDLE);

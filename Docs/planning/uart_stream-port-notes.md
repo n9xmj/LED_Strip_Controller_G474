@@ -117,13 +117,14 @@ Place in **`/* USER CODE BEGIN 1 */`** — do not hand-edit other generated regi
 
 ## Port checklist (implementation session)
 
-1. Copy/adapt `uart_stream.{c,h}` into **`App/`** (not from gitignored tree at link time — **copy** the adapted source into the repo).
+1. Copy/adapt `uart_stream.{c,h}` and `queue.{c,h}` into **`App/uart-stream/`** (committed sources — do not link from gitignored `not-in-project/`).
 2. Replace G0 includes with G4; verify `USART_ISR_*` / `USART_CR1_*` symbol names on G474.
 3. Remove reference’s blanket `USART1/3/LPUART` IRQ stubs; add **USART2 only** in `stm32g4xx_it.c`.
-4. Static queue buffers preferred on embedded path (reference allows `malloc` — evaluate against project norms; G474 PLAY path may prefer static TX/RX rings).
-5. Wire init from `app_main.c` after `MX_USART2_UART_Init`.
-6. Smoke: enqueue a burst (ANSI cursor home + line) without blocking main loop.
-7. Document any logging migration plan separately — out of scope for first port.
+4. Static queue buffers preferred on embedded path (`b_queue_init` + caller-owned storage; no malloc on bind path).
+5. **CubeIDE / `.cproject`:** add `../App/uart-stream` to **Include paths** (Debug + Release) and **`App/uart-stream`** to **sourceEntries** (Release also needs full **`App`** tree — not `App/logging-api` alone).
+6. Wire init from `app_main.c` after `MX_USART2_UART_Init`; route `__io_putchar` / `__io_getchar` through uart_stream (blocking TX, non-blocking RX).
+7. Smoke: enqueue a burst (ANSI cursor home + line) without blocking main loop.
+8. Document any logging migration plan separately — out of scope for first port.
 
 ---
 

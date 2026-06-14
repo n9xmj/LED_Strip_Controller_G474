@@ -139,7 +139,7 @@ static int16_t i16_scale_wave_sample(int32_t i32_q31_peak, float f_level)
     return (int16_t)scaled;
 }
 
-static int16_t i16_scale_cordic_result(int32_t i32_cordic_out, float f_level)
+MAYBE_UNUSED static int16_t i16_scale_cordic_result(int32_t i32_cordic_out, float f_level)
 {
     return i16_scale_wave_sample(i32_cordic_out, f_level);
 }
