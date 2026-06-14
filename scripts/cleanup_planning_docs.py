@@ -58,6 +58,17 @@ def _parse_session_date(path: Path) -> datetime | None:
         return None
 
 
+def _parse_session_g_suffix(path: Path) -> int:
+    """Same-date tiebreak: -g10 beats -g9 (lex sort fails on g9 vs g10)."""
+    m = re.search(r"-g(\d+)\.md$", path.name, re.IGNORECASE)
+    return int(m.group(1)) if m else 0
+
+
+def _session_sort_key(path: Path) -> tuple[bool, datetime, int]:
+    dt = _parse_session_date(path)
+    return (dt is not None, dt or datetime.min, _parse_session_g_suffix(path))
+
+
 def _read_text(path: Path) -> str:
     return path.read_text(encoding="utf-8")
 
@@ -108,10 +119,7 @@ def inventory(keep_session_count: int = KEEP_SESSION_COUNT) -> list[DocItem]:
     sessions: list[tuple[datetime | None, Path]] = []
     for p in sorted(PLANNING.glob(SESSION_GLOB)):
         sessions.append((_parse_session_date(p), p))
-    sessions.sort(
-        key=lambda t: (t[0] is None, t[0] or datetime.min, t[1].name),
-        reverse=True,
-    )
+    sessions.sort(key=lambda t: _session_sort_key(t[1]), reverse=True)
 
     for i, (dt, p) in enumerate(sessions):
         if i < keep_session_count:

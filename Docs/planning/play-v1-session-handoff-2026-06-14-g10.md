@@ -6,7 +6,7 @@
 
 - [play-v1-implementation-plan.md](play-v1-implementation-plan.md) — master decision log
 - [play-v1-chatbot-brief.md](play-v1-chatbot-brief.md) — author-facing status
-- [duty-percent-handoff.md](duty-percent-handoff.md) — G10 feature brief (archive candidate)
+- [archive/duty-percent-handoff.md](archive/duty-percent-handoff.md) — G10 feature brief (archived)
 - [decision-log-model.md](decision-log-model.md)
 - [duty_percent.play](../../scripts/play_golden/duty_percent.play) — G10 golden
 
@@ -16,7 +16,7 @@
 | --- | --- |
 | [play-v1-implementation-plan.md](play-v1-implementation-plan.md) | **§ MSG v1.1** — closed; optional **G11** stretch |
 | [play-v1-chatbot-brief.md](play-v1-chatbot-brief.md) | `;nn` percent duty **YES** |
-| [duty-percent-handoff.md](duty-percent-handoff.md) | G10 implementation notes |
+| [archive/duty-percent-handoff.md](archive/duty-percent-handoff.md) | G10 implementation notes (archived) |
 
 ## Suggested opener
 
@@ -77,12 +77,8 @@ Docs: MSG G10 ✅, D5b 🟢, I10, chatbot brief, session handoff 2026-06-14-g10
 Next: v1.1 required MSG complete; optional G11 uart_stream stretch.
 ```
 
-## Known doc drift
-
-- Run **`/cleanup-docs`** — archive `duty-percent-handoff.md`; supersede `-g9` handoff.
-
 ## Git note
 
-WIP commit pending wrapup on `main`.
+Shipped on `main`: `d9a3330` (brief) · `b08fc90` (G10 firmware + golden + docs) · post-G10 cleanup pending push.
 
 **End of handoff**

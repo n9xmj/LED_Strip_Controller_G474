@@ -1,6 +1,6 @@
 # PLAY v1 — personal-account session handoff (2026-06-13)
 
-> **Continuity superseded (2026-06-14):** **G9** shipped (`8b3f621`/`d36b356`). Read **[play-v1-session-handoff-2026-06-14-g9.md](play-v1-session-handoff-2026-06-14-g9.md)** — **G10** (`;nn` duty) is the only remaining required v1.1 PLAY row.
+> **Continuity superseded (2026-06-14):** **G10** shipped (`b08fc90`). Read **[play-v1-session-handoff-2026-06-14-g10.md](play-v1-session-handoff-2026-06-14-g10.md)** — **v1.1 required PLAY firmware complete**.
 
 **Read this first** after switching Cursor to your **personal Pro** account and opening this repo fresh.
 

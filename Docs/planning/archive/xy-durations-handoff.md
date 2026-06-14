@@ -6,7 +6,7 @@
 **Bench:** COM9 @ 921600 · build #8 · ST-Link SN `003C00193137510C39383538`
 
 **Authoritative plan:** [play-v1-implementation-plan.md](play-v1-implementation-plan.md)  
-**Session handoff:** [play-v1-session-handoff-2026-06-14-g9.md](play-v1-session-handoff-2026-06-14-g9.md)
+**Session handoff:** [play-v1-session-handoff-2026-06-14-g10.md](../play-v1-session-handoff-2026-06-14-g10.md)
 
 ---
 
