@@ -8,7 +8,7 @@
 | --- | --- |
 | [play-v1-implementation-plan.md](play-v1-implementation-plan.md) | Big Board + **§ MSG** — only **G8** open on v1 firmware |
 | [play-v1-chatbot-brief.md](play-v1-chatbot-brief.md) | Author-facing status (labels **YES**) |
-| [labels-gosub-handoff.md](labels-gosub-handoff.md) | G5 brief — archive candidate after `/cleanup-docs` |
+| [archive/labels-gosub-handoff.md](archive/labels-gosub-handoff.md) | G5 brief — archived |
 | [decision-log-model.md](decision-log-model.md) | Decision-log workflow |
 
 ## Suggested opener
@@ -47,6 +47,6 @@ Read play-v1-implementation-plan.md G8 row + play_ctx_snapshot_t in App/Src/play
 
 ## Git note
 
-WIP commit on branch after `/wrapup` — see `git log -1`.
+Shipped on `main`: `a0ee2c4` (G5 firmware + goldens + plan/chatbot). Parent cleanup commit pending push.
 
 **End of handoff**

@@ -1,5 +1,7 @@
 # PLAY v1 — personal-account session handoff (2026-06-13)
 
+> **Continuity superseded (2026-06-14):** **G5** shipped (`a0ee2c4`). Read **[play-v1-session-handoff-2026-06-14.md](play-v1-session-handoff-2026-06-14.md)** for current MSG state (**G8** only open). This file remains for account-switch steps and parent/child workflow notes.
+
 **Read this first** after switching Cursor to your **personal Pro** account and opening this repo fresh.
 
 **Repo:** `LED_Strip_Controller_G474` · **Branch:** `main` · **Remote:** up to date (`7a20622`)  
@@ -12,15 +14,12 @@
 
 | Item | Status |
 | ---- | ------ |
-| **G1–G4, G6, G7** firmware | ✅ on `main` |
-| **G5** runtime goto/GOSUB/RETURN | ❌ **next coding work** |
-| **G8** key LUT in snapshots | 🟡 partial (may fold into G5) |
-| Plan MSG table + I10 audit | ✅ through G4 (`play-v1-implementation-plan.md`) |
-| Chatbot brief | ✅ through G4 pre-parse |
-| Cleanup-docs tooling | ✅ `/cleanup-docs` skill + `scripts/cleanup_planning_docs.py` |
-| G4 feature brief | ✅ archived → `archive/labels-preparse-handoff.md` |
-| Cursor build/flash skills | ✅ `.claude/skills/` (this commit) |
-| Session continuity doc | ✅ this file + `play-v1-session-handoff-2026-06-13.md` |
+| **G1–G5, G6, G7** firmware | ✅ on `main` |
+| **G8** key LUT in snapshots | 🟡 **only v1 MSG row left** |
+| Plan MSG table + I10 audit | ✅ through G5 |
+| Chatbot brief | ✅ through G5 runtime labels/goto/GOSUB |
+| G5 feature brief | ✅ archived → `archive/labels-gosub-handoff.md` |
+| Session continuity doc | ✅ [play-v1-session-handoff-2026-06-14.md](play-v1-session-handoff-2026-06-14.md) |
 
 **Do not depend on old chat history.** Continuity lives in git + these docs.
 
@@ -110,7 +109,7 @@ Full table: [`play-v1-implementation-plan.md`](play-v1-implementation-plan.md) �
 | Agent contract | `AGENTS.md` |
 | Focused-session template | `Docs/planning/focused-implementation-handoff-template.md` |
 | Bench harness | `scripts/play_bench.py` · goldens in `scripts/play_golden/` |
-| Prior session notes | `play-v1-session-handoff-2026-06-13.md` |
+| Prior session notes | [play-v1-session-handoff-2026-06-14.md](play-v1-session-handoff-2026-06-14.md) |
 
 **Prime command:** `/read-the-docs` (loads memory index + `AGENTS.md` + plan context).
 
@@ -145,6 +144,7 @@ Do not re-litigate green D16/D17/S7d decisions.
 | ---- | ----- |
 | 2026-06-13 | G4 + cleanup-docs pushed; work-account parent session ends |
 | 2026-06-13 | Personal-account handoff prepared — **G5 brief is first task** |
+| 2026-06-14 | **G5** shipped (`a0ee2c4`); `/cleanup-docs` archived G5 brief; **G8** next |
 
 ---
 
