@@ -70,6 +70,23 @@ Number sequentially within each prefix (`D1`, `D2`, … `S1`, … `W1`, …).
 When status changes, update **both** the summary table **and** the matching
 detail section below.
 
+**Resolution:** *Living audit log — mark **§ MSG** rows ✅ when they land; bump **Last audited** in both **MSG** and here.*
+
+---
+
+### 2a. Must-Ship Gap (MSG) — scan table between Big Board and Wish list
+
+For implementation plans with a locked **I1** (or equivalent) feature fence, add **§ MSG**
+immediately after **The Big Board** and before the **Wish list**:
+
+- **`G1`…`Gn`** — unique **firmware** gap row IDs (append-only; mark **FW** ✅ when shipped — **do not renumber**). **Ord** column = bring-up order tier (1 before 2) — not PLAY **`P<n>`** voice indices.
+- **`GP1`…`** — peripheral rows (**§ MSG-GP**); cross-ref **T** IDs where applicable
+- **Ref** column links existing **D** / **S** / **I** decision IDs
+
+**Do not** put MSG rows on the wish list. **I10** (or similar) in the Big Board points here for detail/audit notes.
+
+When a firmware row ships: mark ✅ on **G*n***, sync **I10** detail, living docs, and relevant goldens.
+
 ### 2b. Wish list (v2+ backlog) — optional companion table
 
 For long-running plans (e.g. PLAY), add a **second scan table** directly under
@@ -78,8 +95,7 @@ tooling not in v1 scope. Use **W** (wish) or **E** (expression) IDs; link to
 existing **D** / **S** / **I** / **T** rows when the item already has a decision
 ID.
 
-**Do not** duplicate the **I10 firmware gap tracker** — v1 must-ship items that
-are spec-locked but not coded yet belong there, not on the wish list.
+**Do not** duplicate **§ MSG** — v1/v1.1 must-ship firmware belongs there, not on the wish list.
 
 Add a one-line row when an idea surfaces in chat; promote to a full **D**/**S**
 row + detail section when design work starts.

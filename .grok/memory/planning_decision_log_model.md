@@ -8,11 +8,12 @@
 For multi-session design (PLAY v1, etc.):
 
 1. Create `Docs/planning/<topic>-plan.md` with **The Big Board** — the summary decision table at the top: ID · status · one-line subject. (*Dr. Strangelove* nickname; user may refer to it that way in chat.)
-2. **ID prefixes:** D=design, S=semantics, I=implementation, T=tooling/docs, Q=user question.
-3. **Status:** 🔴 open · 🟡 leaning · 🟢 resolved · 🔵 deferred.
-4. Below the table: **detail section per ID** (question, options, leaning, resolution).
-5. **LOCKED CONTEXT** section for decisions already made.
-6. Footer: global notes + plan status.
+2. **§ MSG (Must-Ship Gap)** — optional scan table between Big Board and wish list: **`G1`…`Gn`** firmware gaps (append-only IDs); **`GP1`…`** peripheral; **Ord** = bring-up tier. (*Mine-Shaft-Gap* joke.)
+3. **ID prefixes:** D=design, S=semantics, I=implementation, T=tooling/docs, Q=user question, W=wish, **G**=MSG firmware gap, **GP**=MSG peripheral.
+4. **Status:** 🔴 open · 🟡 leaning · 🟢 resolved · 🔵 deferred.
+5. Below the table: **detail section per ID** (question, options, leaning, resolution).
+6. **LOCKED CONTEXT** section for decisions already made.
+7. Footer: global notes + plan status.
 
 User resolves in chat by ID (*"green D3"*, *"S2 option A"*). Agent updates the plan doc same session; sync the main spec when decisions lock.
 

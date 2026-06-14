@@ -24,6 +24,12 @@
 
 
 
+/** @brief Max decoded bytes for `\\"cmd:args"` expansion payload (D18; same cap as print). */
+
+#define PLAY_EXTENSION_PAYLOAD_MAX   (PLAY_PRINT_STRING_MAX)
+
+
+
 /** @brief Main-menu automation hook — scripts ESC×3 then this key (not submenu `s`). */
 
 #define PLAY_DEBUG_MENU_HOOK_KEY     ('S')
@@ -84,6 +90,12 @@
 
 
 
+/** @brief Max ASCII digits per numeric run (S7j); stored as uint16_t/int16_t. */
+
+#define PLAY_DIGIT_RUN_MAX           (5U)
+
+
+
 /* =============================================================================
 
  * S10 session defaults — adjust only here (plan S10, user lock 2026-06-13)
@@ -126,7 +138,14 @@
 
 #define PLAY_DEFAULT_VOICE           (0U)
 
+/** @brief Voice index: CORDIC sine (D1). */
+#define PLAY_VOICE_SINE              (0U)
 
+/** @brief Voice index: integer triangle (D1 extension, bench). */
+#define PLAY_VOICE_TRIANGLE          (1U)
+
+/** @brief Max parsed P<n> voice index (inclusive). */
+#define PLAY_VOICE_INDEX_MAX         (255U)
 
 /** @brief Default transpose semitones (implicit &0). */
 

@@ -65,7 +65,8 @@ For specs or features with many open decisions (e.g. PLAY meta-language v1), use
 
 - Mechanics: [`Docs/planning/decision-log-model.md`](Docs/planning/decision-log-model.md)
 - **The Big Board** — summary decision table with IDs (**D** design, **S** semantics, **I** implementation, **T** tooling, **Q** user question) and status: 🔴 open · 🟡 leaning · 🟢 resolved · 🔵 deferred (*Dr. Strangelove* nickname; see [`.grok/memory/user_conversational_tone.md`](.grok/memory/user_conversational_tone.md))
-- **PLAY wish list** — companion table under the Big Board in the active plan: **W** / **E** IDs for v2+ backlog, deferred features, and session ideas (not v1 firmware gaps — those stay in **I10**)
+- **Must-Ship Gap (MSG)** — tabular “what’s left to **code**” for v1/v1.1 between Big Board and wish list; **`G1`…`Gn`** firmware rows + **`GP1`…`** peripheral (*Mine-Shaft-Gap* — see active plan)
+- **PLAY wish list** — companion table under MSG in the active plan: **W** / **E** IDs for v2+ backlog and optional stretch (not v1/v1.1 firmware gaps — those stay in **§ MSG**; detail audit in **I10**)
 - User resolves in chat by ID (*"green D3"*, *"S2 option C"*); agent updates the plan doc same session
 - **Active plan:** [`Docs/planning/play-v1-implementation-plan.md`](Docs/planning/play-v1-implementation-plan.md) → parent spec [`Docs/PLAY_language_design.md`](Docs/PLAY_language_design.md). **Session target (2026-06-13):** v1 + v1.1 feature-complete on **G474** (v1.1 PLAY ≈ **X/Y** + optional **D5b**; **stretch:** [`uart_stream`](Docs/planning/uart_stream-port-notes.md)); living docs; **T4/T5** stretch; post-v1 → **vTree+ Mk 5** mic/DSP ([PROJECT.md](Docs/PROJECT.md)); PLAY v2+ likely **H7**.
 - **Deferred work briefs (read when tackling):**

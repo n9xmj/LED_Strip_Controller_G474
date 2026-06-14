@@ -24,8 +24,8 @@ N60Q N48Q
 %H C4H %W C4W %Q
 V80 T200 V50 T120
 C4Q ~ R4Q ~
-\"ctx:5Q;4\"
-\"noop:stub\"
+\"ctx:5Q;4"
+\"noop:stub"
 ? 
 [ C4 D4 E4 ]:2
 C4Q D4E4

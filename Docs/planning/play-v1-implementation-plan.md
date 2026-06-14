@@ -1,7 +1,7 @@
 # PLAY v1 — Implementation readiness plan
 
 **Parent spec:** [Docs/PLAY_language_design.md](../PLAY_language_design.md)  
-**Related:** [co5ths_key_signature_handoff.md](../co5ths_key_signature_handoff.md) · [tools/play_melody.py](../../tools/play_melody.py) · **[play-lead-char-cheat-sheet.md](play-lead-char-cheat-sheet.md)** (planning quick ref) · **[play-v1-chatbot-brief.md](play-v1-chatbot-brief.md)** (LLM / author copy-paste brief — **living fw status**) · [decision-log-model.md](decision-log-model.md) (**Big Board** + **wish list** mechanics)  
+**Related:** [co5ths_key_signature_handoff.md](../co5ths_key_signature_handoff.md) · [labels-preparse-handoff.md](labels-preparse-handoff.md) (**G4** focused session) · [tools/play_melody.py](../../tools/play_melody.py) · **[play-lead-char-cheat-sheet.md](play-lead-char-cheat-sheet.md)** (planning quick ref) · **[play-v1-chatbot-brief.md](play-v1-chatbot-brief.md)** (LLM / author copy-paste brief — **living fw status**) · [decision-log-model.md](decision-log-model.md) (**Big Board** + **§ MSG** + **wish list** mechanics)  
 **Branch:** `main` · **Status:** IN PROGRESS (G474 bench — v1 / v1.1 ship target)
 
 > **Goal:** Move PLAY from "early preview" to an **implementation-ready v1 contract**
@@ -26,9 +26,9 @@
 
 | Tier | Target | Deliverables |
 | ---- | ------ | ------------ |
-| **v1** | Feature-complete on bench | **I1** must-ship interpreter in `App/Src/play.c` — close **I10** gaps (labels, **K**, **V**, GOSUB, pre-scan, …) |
-| **v1.1** | Same tree, additive code | **D4** `X`/`Y` durations (**W1**) — **only required** v1.1 PLAY item. **D5b** raw-percent `;nn` (**W2**) **STET** same release: ~easy (1 digit = n/8, 2 digits = percent 0–100) |
-| **v1.1 stretch** | Infra (not PLAY grammar) | **`uart_stream` on USART2** (**W27**) — non-blocking debug console; unlocks terminal piano / bursty ANSI · brief: [uart_stream-port-notes.md](uart_stream-port-notes.md) |
+| **v1** | Feature-complete on bench | **I1** must-ship interpreter in `App/Src/play.c` — close **§ MSG** v1 rows (**G4**–**G8**; **G1**/**G2**/**G3** done) |
+| **v1.1** | Same tree, additive code | **D4** `X`/`Y` durations (**G9** / **W1**) — **only required** v1.1 PLAY item. **D5b** raw-percent `;nn` (**G10** / **W2**) **STET** same release |
+| **v1.1 stretch** | Infra (not PLAY grammar) | **`uart_stream` on USART2** (**G11** / **W27**) — non-blocking debug console |
 | **Docs (in progress)** | Ship with v1 | [play-lead-char-cheat-sheet.md](play-lead-char-cheat-sheet.md) · [play-v1-chatbot-brief.md](play-v1-chatbot-brief.md) (living fw status) · **T1** implementer trim of parent spec |
 | **Stretch (v1)** | Nice-to-have, not gate | **T4** normative EBNF · **T5** musician howto + tiered repertoire |
 
@@ -82,7 +82,7 @@ Cross-ref: [Docs/PROJECT.md](../PROJECT.md) long-term goals · deferred briefs u
 | D19 | 🟢     | **GOSUB / RETURN / END** — `**="name"`** / `**/**` / `*****`; `**/**` underflow + **undefined label ref** = **hard abort**                  |
 | D20 | 🟢     | `**R` rest** — full notation sub-parser → note memory + timed silence                                                                       |
 | D21 | 🟢     | **Transpose `&**` — `**&+n` / `&-n` / `&0**`; after **K**+accidentals; OOR → octave wrap + WARNING                                          |
-| D22 | 🟢     | `**N<n>**` absolute semitone — max **3** digits; suffix like notes; **K/&/acc** skip pitch + acc not stored                                 |
+| D22 | 🟢     | `**N<n>**` absolute semitone — **S7j** wire cap **5** digits; suffix like notes; **K/&/acc** skip pitch + acc not stored                                 |
 | D23 | 🔵     | **`L"…"` library GOSUB** — nested **L** stack + **`b_stop_is_return`**; callee `*` / **NUL** = return (deferred)                            |
 | D24 | 🟢     | **Beat unit `%`** — `%W`/`%H`/`%Q`/`%I` sets which note value = one beat; **no measure length**; supersedes draft `**U**`                      |
 | S1  | 🟢     | Polyphony — one monophonic PLAY string = one voice; sync post-v1                                                                            |
@@ -102,6 +102,7 @@ Cross-ref: [Docs/PROJECT.md](../PROJECT.md) long-term goals · deferred briefs u
 | S7g | 🟢     | **I8 resolve hook** — **does not** fire on rejected tokens; failures use fault path only                                                    |
 | S7h | 🔵     | **Optional LINT scanner** (later phase) — pre-play lint pass; may reuse **STRICT** duplicate rules (**S7i**)                               |
 | S7i | 🟢     | **Fault policy modes** — lazy / normal / strict; public `**play_fault_policy_t**` + default **NORMAL**                                      |
+| S7j | 🟢     | **Numeric digit-run cap** — max **5** ASCII digits; `**uint16_t`/`int16_t**` store; **>5** → STRICT fatal / else WARN + skip excess        |
 | S10 | 🟢     | **Session init defaults** — full note-memory struct + `**Cn4Q_`** template for first `**~**`                                                |
 | S8  | 🟢     | **Closed** — `**&0**` explicit transpose reset (**D21**); legacy `**S**` retired                                                            |
 | S9  | 🟢     | Duty on one note — **last parsed modifier wins**                                                                                            |
@@ -114,7 +115,9 @@ Cross-ref: [Docs/PROJECT.md](../PROJECT.md) long-term goals · deferred briefs u
 | I7  | 🔵     | **Module split** — deferred **v2+**; v1 = opaque `**play_handle_t**` + exposed `**play_instance_t**` (bench cast) + on-chip source (**I9**) |
 | I8  | 🟢     | **Resolve hook** — callback on every completed parse (Release-safe; verbose / test / GUI / LEDs)                                            |
 | I9  | 🟢     | **Player tests submenu** — **`1`/`2`/`s`/`q`/`p`** shipped; near-term **`g`** golden · **`l`** LED viz (**T3** / **I8**) |
-| I10 | 🟡     | **Firmware implementation gap** — live tracker vs **I1** fence (`App/Src/play.c`); P0 sub-FSM + **~** closed 2026-06-13 |
+| I10 | 🟡     | **MSG detail / audit log** — expanded firmware notes under **§ I10**; **scan table = § MSG** |
+| I11 | 🟡     | **Player verbosity** — cumulative log-level enum (`_SILENT`…`_DEBUG`); **§ I11**; orthogonal to **S7i** |
+| MSG | 🟡     | **Must-Ship Gap** — **`G1`…`Gn`** firmware gaps; scan table **§ MSG** (detail: **§ I10**) |
 | T1  | 🔴     | `PLAY_language_design.md` dedupe + implementer quick-ref (not user howto)                                                                   |
 | T2  | 🟡     | **Host + serial test harness** — `play_melody.py` / **`play_scenarios.py`**; dual-track with **T3** / **I9** (**user lock 2026-06-13**) |
 | T3  | 🟢     | **Golden tiers + menu order** — Smoke → Smoke+ (Williams) → Feature → Torture; **`m` → `g`** STRICT (**user lock 2026-06-13**) |
@@ -127,9 +130,68 @@ Cross-ref: [Docs/PROJECT.md](../PROJECT.md) long-term goals · deferred briefs u
 
 ---
 
+## Must-Ship Gap (MSG)
+
+*“Mine-Shaft-Gap” — what **I1** says must exist in `App/Src/play.c` but does not yet. **Scan here first** for coding work; peripheral docs/tests at **§ MSG-GP** below. Wish-list rows (**W3+**) are **not** MSG — they are v2+ or optional stretch. **Last audited:** 2026-06-13 (post-**G6** `\"ctx:…"`).*
+
+**Row IDs:** **`G1`…`Gn`** = firmware gap rows (append-only — **never renumber** when a row ships; mark **FW** ✅ instead). **`GP1`…** = peripheral rows (**§ MSG-GP**). Resolve in chat by gap ID (*"close G4"*, *"G9 next"*). **Ord** = bring-up order tier (1 before 2) — **not** PLAY voice **`P<n>`**.
+
+**Legend:** ✅ shipped · ❌ not in firmware · 🟡 partial · — (withdrawn / N/A)
+
+**Authoritative code:** `App/Src/play.c` · **I1** fence in LOCKED CONTEXT · bench goldens: `scripts/play_golden/`
+
+### MSG — v1 firmware (must ship before v1 “done”)
+
+| G | Ord | Ref | Feature | FW | Blocked by / notes |
+| --- | --- | --- | ------- | -- | ------------------ |
+| **G1** | 1 | **D6** | **`V<n>`** volume executive | ✅ | Live level on `PLAY_SCHED_SOUND`; >100 clamps |
+| **G2** | 1 | **D1** | **`P<n>`** voice executive | ✅ | Voice **0** sine · **1** triangle · unknown → WARNING + sine |
+| **G3** | 1 | **D22** | **`N<n>`** absolute semitone notes | ✅ | OOR → D21 salvage; `~` replays absolute path |
+| **G4** | 1 | **S7d** + **I2** | **Startup pre-parse** + label table | ❌ | `@` integrity, `<`/`>`/`=` ref resolve; `PLAY_STATE_LOADING` unused · **impl brief:** [labels-preparse-handoff.md](labels-preparse-handoff.md) |
+| **G5** | 1 | **D16–D19** | **Labels, goto, GOSUB, RETURN** | ❌ | Needs **G4**; torture exercises `<` `>` `=` `/` |
+| **G6** | 2 | **D18** | **`\"ctx:…"`** expansion dispatch | ✅ | `ctx:` zero-time suffix · `noop:` + unknown echo args |
+| **G7** | 2 | **D9** | **`\@`** inside `@ … @` | ✅ | `b_play_skip_comment` — `\@` does not close |
+| **G8** | 2 | — | **Key LUT in repeat/label snapshots** | 🟡 | **D8** sticky key not in `play_ctx_snapshot_t` — loop/goto edge case |
+
+**v1 firmware already landed (MSG ✅ — do not re-open):** notes/rest sub-FSM, inheritance, order-flex, duty, `R`, `~`, `T`/`%`/`O`/`^`/`v`, `&`, **`K"…"`**, **`N<n>`** (**G3**), `?"…"`, `[ ]:N`, `*`, `@` skip + **`\@`** (**G7**), **`V`/`P`** (**G1**/**G2**), **`\"ctx:…"`** (**G6**), **S7i**, **I4** scheduler, **I8** hook, **I9** submenu `1`/`2`/`s`.
+
+**Suggested code order (v1):** ~~sub-FSM~~ → ~~`~`~~ → ~~**K**~~ → ~~**G1**/**G2**~~ → ~~**G3**~~ → ~~**G6**~~ → **G4 + G5** → polish ~~**G7**~~ + **G8**.
+
+### MSG — v1.1 firmware (additive after v1)
+
+| G | Ord | Ref | Feature | FW | Notes |
+| --- | --- | --- | ------- | -- | ----- |
+| **G9** | 1 | **D4** / **W1** | **`X` / `Y` durations** | ❌ | Sixteenth / thirty-second; `PLAY_DUR_*_X2` + S5; golden: `grammar_torture_v11.play` |
+| **G10** | 1 | **D5b** / **W2** | **Raw-percent `;nn`** | ❌ | 1 digit → n/8 (**D5c** today); 2 digits → 0–100% (`;6` ≠ `;60`) |
+
+*v1.1 has no other **required** PLAY grammar deltas per session roadmap.*
+
+### MSG — v1.1 stretch (code, optional)
+
+| G | Ref | Feature | FW | Notes |
+| --- | --- | ------- | -- | ----- |
+| **G11** | **W27** | **`uart_stream`** (USART2) | ❌ | Non-blocking console; not PLAY — [uart_stream-port-notes.md](uart_stream-port-notes.md) |
+
+### MSG-GP — peripheral (docs, tests, bench — not firmware gates)
+
+| GP | Ref | Item | Status | Notes |
+| --- | --- | ---- | ------ | ----- |
+| **GP1** | **T1** | Implementer trim of `PLAY_language_design.md` | 🔴 | Dedupe + 1-page quick-ref; link **T4**/**T5** |
+| **GP2** | **T3** | **`m` → `g`** on-device golden runner | 🟡 | Menu + STRICT banner; shares `scripts/play_golden/` |
+| **GP3** | **T2** | **`play_scenarios.py`** host matrix | 🟡 | Dual-track with **T3**; smoke/feature scenarios |
+| **GP4** | **T4** | Normative EBNF | 🔴 | v1 **stretch** doc |
+| **GP5** | **T5** | Musician howto + repertoire | 🔴 | v1 **stretch** doc |
+| **GP6** | — | Living docs sync | 🟡 | [play-v1-chatbot-brief.md](play-v1-chatbot-brief.md) · [play-lead-char-cheat-sheet.md](play-lead-char-cheat-sheet.md) after each **G** row closes |
+| **GP7** | — | **`grammar_torture.play`** | ✅ | v1 fence; re-run after each v1 **G** close |
+| **GP8** | — | **`grammar_torture_v11.play`** | 🔴 | After **G9** ships |
+
+*Promote a row off MSG when firmware lands; bump **Last audited** and sync **I10** detail + living docs.*
+
+---
+
 ## PLAY wish list (v2+ backlog)
 
-*Companion to **The Big Board** — locked decisions and OPEN rows live there. This table is a **scan-friendly inventory** of enhancements, deferred features, and session-captured ideas **not required for v1 ship**. **v1 firmware gaps** (what I1 says must ship but `play.c` lacks yet) stay in the **I10** tracker below — **not here** (e.g. **`K"…"`** key signature = **D8**, **I10 P0**, not a wish-list row).*
+*Companion to **The Big Board** — deferred features, v2+ ideas, and optional stretch **not** on **§ MSG**. v1/v1.1 **must-ship firmware gaps** live in **§ Must-Ship Gap (MSG)** above — **not here** (e.g. **`K"…"`** was firmware work, not a wish row; **`X`/`Y`** = **G9** / **W1**).*
 
 ***v2+ target MCU:** author leaning **STM32H7xx** (see **Session & product roadmap** above) — G474 remains the v1/v1.1 monophonic ship tree.*
 
@@ -165,8 +227,40 @@ Cross-ref: [Docs/PROJECT.md](../PROJECT.md) long-term goals · deferred briefs u
 
 | W26 | post-v1 | **vTree+ Mk 5 audio-reactive stack** | I2S mic · analog path · DSP leveling · LED mapping; see **Session & product roadmap** + PROJECT.md lineage |
 | W27 | v1.1 stretch | **`uart_stream` (USART2)** | Non-blocking debug UART — register ISR, HAL init-only; **not** PLAY grammar · [uart_stream-port-notes.md](uart_stream-port-notes.md) · enables terminal piano (**I9** / **I8**) |
+| W28 | v2 · low | **Wall-clock note duration (ms)** | Absolute time per note/rest — **ignores `T`/`%`**; **keeps duty ratio** (`_`/`!`/`;`); bench timing torture / scheduler drift / sync latency; inheritance optional · see **W28** stub |
 
-*Last wish-list pass: 2026-06-13 (v1.1: X/Y + D5b; stretch **W27** uart_stream; vTree Mk 5).*
+*Last wish-list pass: 2026-06-13 (W28 wall-clock duration; v1.1 X/Y + D5b; stretch W27).*
+
+---
+
+### W28 — Wall-clock note/rest duration (v2 · low priority)
+
+**Status:** 🔵 · **Needs user:** no (idea capture 2026-06-13 — syntax **open**)
+
+**Intent:** Extend note/rest descriptor syntax so a token can be scheduled in **absolute wall-clock units** (milliseconds primary; standardized SI-style suffixes acceptable) instead of **tempo-relative** `W`/`H`/`Q`/`I` (+ dot).
+
+**Behavior (locked intent, syntax TBD):**
+
+| Aspect | Rule |
+| ------ | ---- |
+| **Overrides** | Wall-clock specifier on a token **replaces** musical duration for **that** note/rest only |
+| **Ignores** | **`T<n>`** tempo and **`%W/H/Q/I`** beat unit — wall time is already absolute |
+| **Keeps** | **Duty ratio** — `_` / `!` / `;` / `;n` still scale **sounding vs gap** within the wall-clock slot (same semantics as S5 duty-on-note) |
+| **Pitch path** | Unchanged — letter/`N`/acc/`K`/`&` unaffected |
+| **Primary use** | **Timing torture** — parser responsiveness, 1 ms scheduler accuracy, sync drift, processing-speed regression, HIL-style schedule proofs without retuning `T` |
+| **Inheritance** | **Nice-to-have** — if omitted on a follow-on token, inherit last wall-clock duration like today's `Q` inheritance; not required for v1 of the feature |
+
+**Syntax candidates (do not implement without closing):**
+
+- Suffix token: `C4ms500` / `Rms250` (unit suffix + digits, order-flex with other descriptors)
+- Parallel duration letter: `M500` inside cluster (= 500 ms) — collides with retired `M` voice cmd unless gated
+- Mode executive: `!ms` / `!wall` toggles sticky absolute-time mode (heavier; inheritance “for free”)
+
+**Out of scope:** replacing the whole score clock (conductor **S3**); polyphonic sync (**W8**); tuplets (**W4**).
+
+**Promote when:** v2 timing test matrix needs deterministic sub-`T` granularity without floating `T` hacks.
+
+---
 
 ---
 
@@ -780,7 +874,7 @@ Runtime hit on undefined ref (should not occur if pre-parse ran) → **hard abor
 | **Payload shape**  | `**cmd:args`** — first colon splits **command name** (sub-parser route) from **argument tail** (opaque to core parser). Examples: `**tuplet:3:2`**, `**echo:hello**`, `**ctx:4Q;6**`.                                                                                                                      |
 | `**ctx:` handler** | **Zero-time note-memory load** — `**args**` parsed with the **same rules as a note/rest descriptor suffix** (octave, duration, dot, duty; **no pitch letter**). Updates note memory; **does not schedule** silence or tone. Alternative to `**R**` when author wants context without a rest gap (**D20**). |
 | **Dispatch**       | Core calls `**play_extension_fn_t(cmd, args, ctx)**` (names TBD at v1 implement). Table of handlers; **NULL / unknown `cmd` → default stub**.                                                                                                                                                              |
-| **v1 stub**        | **Default handler echoes decoded payload** to debug UART — **bench-test parity with `?"…"**`. Real `**ctx:**` handler (apply note memory, no schedule) ships when extension table is wired — can land same release as `**R**` parser reuse.                                                                |
+| **v1 stub**        | **`ctx:`** applies note-memory suffix (no schedule). **Unknown `cmd`** → WARNING (optional) + echo **args** to UART (`noop:` silent). |
 | **I8**             | Emit `**PLAY_RESOLVE_EXTENSION**` (or **DEBUG_PRINT** kind with tag) on successful dispatch.                                                                                                                                                                                                               |
 
 
@@ -958,13 +1052,13 @@ B#,      O0  → pc 11 → absolute = 11
 **Locked syntax (top-level only):**
 
 ```
-N<sss>…   ; sss = 1..3 ASCII digits → semitone index (primary field)
+N<sss>…   ; sss = 1..5 ASCII digits → semitone index (primary field; **S7j** wire cap)
           ; … = shared suffix cluster (D7/D5/S9) — duration required (specify or inherit)
 ```
 
 **Parse order (D22-1 + D22-2):**
 
-1. `**N`** + read **1..3 consecutive digits** → `**u8_semitone`** (primary; no further digits consumed into this field).
+1. `**N`** + read digit run via **S7j** (`**PLAY_DIGIT_RUN_MAX = 5**`) → primary semitone (**`int16_t`**); command-specific range salvage (**D22-3**) applies after conversion.
 2. Invoke `**v_parse_note_descriptor_suffix()**` on the remainder (order-flexible W/H/Q/I, `.`, `_`/`!`/`;`, optional octave digit).
 
 **Octave disambiguation (D22-1 — author contract):** there is **no** syntactic way to embed an octave digit inside the semitone digit run. If the author wants an octave digit in **memory**, place it **after at least one non-digit suffix character** (typically **after duration**), or **omit** it.
@@ -1734,9 +1828,10 @@ Sub-items:
 | **S7g** | Resolve hook on rejected tokens (**I8**) | 🟢     |
 | **S7h** | Optional LINT scanner (post-v1)          | 🔵     |
 | **S7i** | Fault-policy modes (lazy / normal / strict) | 🟢  |
+| **S7j** | Numeric digit-run cap (5 digits, uint16/int16) | 🟢  |
 
 
-Cross-ref: session init / `**~`** seed → **S10** (not an S7 sub-item).
+Cross-ref: session init / `**~`** seed → **S10** (not an S7 sub-item). **S7j** shared primitive: `**b_play_scan_digit_run_u16**` / `**b_play_consume_digit_run_u16**` in `**play.c**` — used by **T/V/P/&/N/[ ]:N/`;n** and pre-parse label numeric refs (**G4**).
 
 ---
 
@@ -1800,6 +1895,28 @@ typedef enum {
 
 ---
 
+#### S7j — Numeric digit-run cap (multi-digit executives)
+
+**Status:** 🟢 · **Needs user:** no (locked 2026-06-13)
+
+**Rule:** Any PLAY primitive that reads a **multi-digit ASCII integer** shares one wire/parser contract — independent of per-command range limits (**T≤240**, **V≤100**, playable semitone bounds, etc.):
+
+| Layer | Contract |
+| ----- | -------- |
+| **Wire** | Read at most **`PLAY_DIGIT_RUN_MAX` (5)** consecutive `**0`–`9`** digits into the value |
+| **Store** | **`uint16_t`** (unsigned executives) or **`int16_t`** (signed **`&±n`** magnitude + sign) |
+| **Overflow** | After ASC→int on the first 5 digits, clamp to **`UINT16_MAX`** / **`INT16_MAX`** / **`INT16_MIN`** as appropriate |
+| **>5 digits** | **STRICT** → recoverable fault promoted to **fatal** (`**too many digits**`); **NORMAL** → **WARNING** + continue using first 5 digits; **LAZY** → silent skip of excess digits |
+| **Excess handling** | Digits beyond the fifth are **consumed and discarded** (cursor advances past them) — never folded into the value |
+
+**Single-digit fields** (note suffix octave `**0`–`9`**, `**O<n>**` when authored as one digit) are **not** multi-digit runs — **S7j** does not apply.
+
+**Firmware:** `**b_play_scan_digit_run_u16**` (scan only) + `**b_play_consume_digit_run_u16**` / `**_at**` (scan + **S7i** excess fault). Pre-parse label numeric refs (**G4**) reuse the same scan helper.
+
+**Cross-ref:** **D22** `**N<n>**` primary field · **D21** `**&±n**` · **S4** `[ ]:N` · **D5** `**;n**` duty digits · **I2** `<n` label ids.
+
+---
+
 #### S7a — Hard abort (fatal stop)
 
 **Status:** 🟢 · **Needs user:** no (resolved)
@@ -1837,6 +1954,7 @@ typedef enum {
 | `**~`** before any **completed** note/rest                                                 | Play **S10** template `**Cn4Q_`**           | **D2**, **S10**          |
 | `**?"…"`** faults (garbage after closing `"`, unknown `\X`, source truncate)               | Continue                                    | **D14**                  |
 | Accidentals on `**R` / `N`**                                                               | Ignore                                      | **D20**, **D22**         |
+| **Digit run > `PLAY_DIGIT_RUN_MAX` (5)** on any multi-digit executive                      | Use first 5 digits (clamped **uint16**); skip excess | **S7j**          |
 | Unknown `**\\` extension `cmd`**                                                           | Default stub                                | **D18**                  |
 | **Duplicate label define** (same name / id)                                                | **Last wins**                               | **I2**                   |
 | **Duplicate note-descriptor class** in one token *(optional STRICT only)*                  | **Last wins**; STRICT → fatal               | **S7i**, **S9**          |
@@ -2472,11 +2590,13 @@ Smoke+ presets land incrementally (**Star Wars** → **Raiders** → other Willi
 
 ---
 
-### I10 — Firmware implementation gap (vs I1 fence)
+### I10 — MSG detail / firmware audit log (vs I1 fence)
 
-**Status:** 🟡 · **Living tracker** — update as `App/Src/play.c` grows · **Last audited:** 2026-06-13 (**D8** `K"…"` shipped; P0 sub-FSM + `~` closed)
+**Status:** 🟡 · **Living companion to § MSG** — update when `App/Src/play.c` grows · **Last audited:** 2026-06-13 (**G6** `\"ctx:…"` shipped)
 
-**Question:** What does the **on-device interpreter actually parse today**, versus the **I1 must-ship** column?
+> **Scan table:** **§ Must-Ship Gap (MSG)** above — tabular v1/v1.1 “what’s left to code.” This section keeps shipped inventory, partial gaps, bring-up order, and audit notes. **Player verbosity** → **§ I11** (not MSG — cross-cutting diagnostic policy).
+
+**Question:** What does the on-device interpreter actually parse today, versus the **I1 must-ship** column?
 
 **Authoritative code:** `App/Src/play.c` · Bench presets: `App/Src/play_presets.c` · Golden: `scripts/play_golden/`
 
@@ -2495,13 +2615,16 @@ Smoke+ presets land incrementally (**Star Wars** → **Raiders** → other Willi
 
 #### v1 must-ship still open (quick scan — not on wish list)
 
-| ID | Feature | Firmware | Priority |
-| -- | ------- | -------- | -------- |
-| D6/D1 | **`V`**, **`P`** | ❌ | P1 |
-| D16–D19 | Labels, goto, GOSUB | ❌ (needs pre-scan) | P1 |
-| D18 | **`\"ctx:…"`** | ❌ | P2 |
-| D22 | **`N<n>`** | ❌ | P1 |
-| S7d/I2 | Pre-parse + label table | ❌ | P1 (unblocks control flow) |
+*Canonical table: **§ MSG — v1 firmware** (**G1**…**G8**). Rows below mirror MSG for auditors who live in **§ I10** only.*
+
+| G | Ref | Feature | Firmware | Ord |
+| --- | --- | ------- | -------- | --- |
+| **G1** | D6 | **`V`** | ✅ | 1 |
+| **G2** | D1 | **`P`** | ✅ | 1 — voice 0 sine · 1 triangle |
+| **G3** | D22 | **`N<n>`** | ✅ | 1 |
+| **G4** | S7d/I2 | Pre-parse + label table | ❌ | 1 (unblocks **G5**) |
+| **G5** | D16–D19 | Labels, goto, GOSUB | ❌ | 1 |
+| **G6** | D18 | **`\"ctx:…"`** | ✅ | 2 |
 
 **Theory/LUT reference:** [co5ths_key_signature_handoff.md](../co5ths_key_signature_handoff.md) · locked wire = **D8** / **D8b** in this plan · **Pitch resolve pipeline** section.
 
@@ -2513,7 +2636,7 @@ Smoke+ presets land incrementally (**Star Wars** → **Raiders** → other Willi
 
 | Feature               | Notes                                                                                                |
 | --------------------- | ---------------------------------------------------------------------------------------------------- |
-| **Notes A–G**         | Order-flex suffix; inheritance; compact runs (`CQ4DEFGAB`) |
+| **Notes A–G** + **`N<n>`** | Order-flex suffix; absolute semitone (**D22**); compact runs (`CQ4DEFGAB`) |
 | **`T<n>`**            | Tempo BPM; capped `PLAY_TEMPO_BPM_MAX` |
 | **`%W/H/Q/I`**        | Beat unit (D24); default `%Q` at session start |
 | **`O<n>`**            | Default octave in note memory |
@@ -2526,14 +2649,15 @@ Smoke+ presets land incrementally (**Star Wars** → **Raiders** → other Willi
 | **`[ … ]:N`**         | Repeat stack; `]` re-entry **without** snapshot restore |
 | **`?"…"` / bare `?`** | Print / lyrics; C escapes |
 | **`*` END**           | Hard stop + synth off; NUL = implicit `*` |
-| **`@ … @`**           | Runtime skip (no title, no `\@`) |
+| **`@ … @`**           | Runtime skip; **`\@`** literal inside block (**G7**) |
+| **`\"cmd:args"`** | **`ctx:`** zero-time suffix load (**G6**); **`noop:`** / unknown echo **args** to UART |
 | **`L"…"`**            | Warn + skip (D23 deferred) |
 | **S7i fault policy**  | `play_fault_policy_t` — LAZY / NORMAL / STRICT |
 | **S10 session defaults** | `PLAY_DEFAULT_DUR_X2` seeded at session start |
 | **I4 scheduler**      | 1 ms shared tick; legato default duty 8/8 |
 | **I8 resolve hook**   | Fires on successful resolve |
 | **I9 bench**          | Submenu `m` → `1`/`2`/`s` |
-| **T3 golden**         | `smoke` · `loop` · `tilde` · `raiders` in `scripts/play_golden/` |
+| **T3 golden**         | `smoke` · `loop` · `tilde` · `raiders` · `ctx` in `scripts/play_golden/` |
 
 
 **Safe authoring today (copy-paste patterns):**
@@ -2543,6 +2667,8 @@ Smoke+ presets land incrementally (**Star Wars** → **Raiders** → other Willi
 T120 O4 %Q
 CQ4DEFGABC5                    ; compact scale
 C4Q ~ ~                       ; tilde replay
+\"ctx:5Q;4" CQ                ; zero-time octave+duty bump (no backslash before closing ")
+\"noop:bench"                 ; default echo stub
 [^CQDQEQFQGQAQBQ]:8           ; repeat (mutations persist)
 *
 ```
@@ -2567,7 +2693,7 @@ C4Q ~ ~                       ; tilde replay
 | -- | ------- | -------- |
 | D7 | **Explicit accidentals** (`#` `+` `b` `-` `n`) | ✅ shift pitch in note parser |
 | D8 | **`K"…"`** key LUT on **bare** letters | ✅ **2026-06-13** |
-| D22 | **`N<n>`** absolute semitone | ❌ P1 |
+| D22 | **`N<n>`** absolute semitone | ✅ **2026-06-13** |
 
 ---
 
@@ -2580,9 +2706,9 @@ All below → `**PLAY fault: unsupported executive**` today.
 | ------- | ------------------------ | ---------------------------------------------------------------------------------- |
 | D21     | `**&+n` / `&-n` / `&0**` | ✅ Transpose after pitch normalize (**2026-06-13**)                                |
 | D8      | `**K"…"**`               | ✅ Key signature + per-note LUT (**2026-06-13**)                                   |
-| D6      | `**V<n>**`               | Volume 0..100 — default **50%** applied; executive not parsed                      |
-| D1      | `**P<n>**`               | Voice index — always sine audio in v1                                              |
-| D18     | `**\"cmd:args"**`        | Extension dispatch; `**ctx:**` zero-time memory load                               |
+| D6      | `**V<n>**`               | ✅ Volume 0..100; live `set_level` while sustaining (**2026-06-13**)                 |
+| D1      | `**P<n>**`               | ✅ **P0** CORDIC sine · **P1** integer triangle (**2026-06-13**)                   |
+| D22     | `**N<n>**`               | ✅ Absolute semitone; suffix like notes; `~` replays absolute (**2026-06-13**)       |
 | D16/D17 | `**<` / `>**`            | Label define / goto                                                                |
 | D19     | `**=` / `/**`            | GOSUB / RETURN (in-string)                                                         |
 | D23 🔵  | `**L"…"**`               | External library GOSUB — **lead reserved**; **deferred** (not v1)                  |
@@ -2596,7 +2722,7 @@ All below → `**PLAY fault: unsupported executive**` today.
 | ID     | Feature                              | Spec                                                                       | Firmware                                                                    |
 | ------ | ------------------------------------ | -------------------------------------------------------------------------- | --------------------------------------------------------------------------- |
 | S7d    | **Startup pre-parse**                | Comment integrity, label table + ref check before RUNNING | ❌ `**b_play_start**` → RUNNING immediately; `**PLAY_STATE_LOADING**` unused |
-| D9     | `**\@` in comments**                 | Literal `**@**` inside comment body                                        | ❌ Inner `**@**` closes block early                                          |
+| D9     | `**\@` in comments**                 | Literal `**@**` inside comment body                                        | ✅ **2026-06-13** |
 | D10    | **Title from first `@` block**       | **Withdrawn** — use `?"…"` (**D14**)                                       | N/A (never implement)                                                        |
 | I2     | **Label table**                      | Sparse table, caps, duplicate/missing rules                                | ❌                                                                           |
 | S7     | **Tiered error policy**              | **S7i** lazy/normal/strict + **S7a** fatals                              | ✅ `play_fault_policy_t` in `b_play_fault` |
@@ -2604,18 +2730,19 @@ All below → `**PLAY fault: unsupported executive**` today.
 | I3/S7e | **GOSUB call stack**                 | Separate from repeat stack                                                 | ❌ Repeat stack only                                                         |
 | —      | **Unified note memory in snapshots** | Key, transpose, voice, last note in repeat/label snaps                     | 🟡 Partial — tempo, octave, volume, beat unit, duty only                    |
 | I8/S7g | **Resolve on rejected tokens**       | Hook **does not** fire on rejects (**S7g** 🟢)                             | ✅ Matches spec — rejects use `**v_play_fault**` only                        |
+| I11    | **Player verbosity / log level**     | Cumulative `**play_log_level_t**`; `**_SILENT`…`_DEBUG**` — **§ I11**     | ❌ `**b_play_fault**` / lifecycle always `**printf**` today                  |
 
 
 ---
 
-#### Explicitly out of v1 (🔵 — not tracked as gaps)
+#### Explicitly out of v1 (🔵 — tracked on MSG v1.1, not v1 gaps)
 
-Per **I1 Out** column — do not file as missing v1 work:
+Per **I1 Out** column — do not file as missing **v1** work (v1.1 items are on **§ MSG — v1.1**):
 
 
 | ID      | Item                                              |
 | ------- | ------------------------------------------------- |
-| D4      | `**X` / `Y**` sixteenth / thirty-second durations |
+| D4      | `**X` / `Y**` sixteenth / thirty-second durations — **v1.1 required** |
 | D15, Q1 | Tuplets / triplet timing                          |
 | S3      | Polyphony / `**                                   |
 | D13     | Envelope / ADSR PLAY syntax                       |
@@ -2633,15 +2760,91 @@ Ordered to maximize score expressiveness per commit (aligns with bench `**playst
 1. ~~**Note/rest sub-FSM**~~ ✅
 2. ~~**`~` + last-note snapshot**~~ ✅
 3. ~~**`K"…"` + pitch LUT**~~ — **done 2026-06-13** (D8 executive + Co5ths LUT on bare letters)
-4. **`V`**, **`P`** executives (**P1**)
-5. **Pre-parse pass** — `@`/`\@`, labels → unblocks `<` `>` `=` `/` (**P1**)
-6. **`\"ctx:…"`** extension stub (**P2**)
-7. **`m` → `g`** STRICT golden runner on device (**I9** follow-on)
-8. **Golden host runner** — `play_scenarios.py` P0/P1
+4. ~~**G1**/**G2** (`V`/`P`)~~ ✅ — voice **1** = triangle
+5. **G4** pre-parse pass — `@`/`\@`, labels → unblocks **G5** (**G4** + **G5**)
+6. ~~**G3** `N<n>`~~ ✅
+7. ~~**G6** `\"ctx:…"` extension stub~~ — **shipped**
+8. **GP2** `m` → `g` STRICT golden runner on device (**I9** follow-on)
+9. **GP3** golden host runner — `play_scenarios.py`
 
 **Cross-refs:** **I1** fence · **I9** presets · [play-lead-char-cheat-sheet.md](play-lead-char-cheat-sheet.md) · **T3** acceptance strings (🔴)
 
-**Resolution:** *Living document — mark rows ✅ as they land; bump **Last audited** date.*
+**Resolution:** *Living document — mark **G*n*** ✅ as they land; bump **Last audited** date.*
+
+---
+
+### I11 — Player verbosity (log level)
+
+**Status:** 🟡 · **Needs user:** no (model locked 2026-06-13) · **Firmware:** ❌ not implemented
+
+**Question:** How loud should the **interpreter** be on the debug UART — independent of what the **score** asks to print?
+
+**Answer:** A **cumulative log-level** knob (standard severity ladder). The enum names the **ceiling** enabled — not a bitmask of arbitrary combinations.
+
+#### Enum (locked naming)
+
+```c
+typedef enum {
+    PLAY_LOG_LEVEL_UNKNOWN = 0,
+    PLAY_LOG_LEVEL_SILENT,   /* no interpreter diagnostics */
+    PLAY_LOG_LEVEL_ERROR,    /* + fault / fatal stop messages */
+    PLAY_LOG_LEVEL_WARN,     /* + recoverable warnings */
+    PLAY_LOG_LEVEL_INFO,     /* + lifecycle / coarse progress */
+    PLAY_LOG_LEVEL_DEBUG     /* + per-resolve trace, offsets, hook-adjacent detail */
+} play_log_level_t;
+```
+
+**Cumulative enablement** (each step adds to prior):
+
+| Level | Interpreter may emit |
+| ----- | -------------------- |
+| **`_SILENT`** | *(none)* |
+| **`_ERROR`** | `**PLAY fault:**` / hard-abort lines (**S7a** stops — message may still matter for host capture) |
+| **`_WARN`** | `**PLAY warn:**` recoverable faults (**S7b**/**S7c** — only when policy would log; see below) |
+| **`_INFO`** | Session lifecycle (`start` / `stop` / `ended @off`), coarse structural lines (repeat open/close count, optional one-line meta resolves) |
+| **`_DEBUG`** | High-volume trace: `**LOGCT(LOG_PLAY, …)**`, per-note Hz/dur dumps, **I8** consumer default echo, offset-heavy diagnostics |
+
+**Default (leaning):** `**PLAY_LOG_LEVEL_WARN**` for bench `**playstr**`; `**PLAY_LOG_LEVEL_ERROR**` for on-target golden runner; `**PLAY_LOG_LEVEL_SILENT**` for demo/performance listening.
+
+#### Score-directed output — **never** gated
+
+Verbosity controls **interpreter diagnostics only**. These **always** reach the UART when the executive runs, at **every** log level including **`_SILENT`**:
+
+| Source | Examples |
+| ------ | -------- |
+| **`?"…"` / bare `?` (D14)** | Lyrics, titles, intentional author trace |
+| **`\"cmd:…"` extension (D18)** | Command-defined payloads when a handler explicitly writes user-facing text |
+| **Audio** | `**synth_engine**` — not UART logging |
+
+**Rejected:** using **`_SILENT`** to mute lyrics the author embedded via **`?"…"`** — that is score content, not player noise.
+
+#### Orthogonal to **S7i** fault policy
+
+| Axis | Controls |
+| ---- | -------- |
+| **S7i** (`**play_fault_policy_t**`) | **Behavior** on recoverable faults — skip vs warn vs fatal |
+| **I11** (`**play_log_level_t**`) | **Whether diagnostic text is emitted** once behavior is decided |
+
+Examples:
+
+- **NORMAL + `LOG_WARN`** — recoverable fault → skip/fix **and** print `**PLAY warn:**` (today’s bench default).
+- **NORMAL + `LOG_ERROR`** — same skip/fix behavior, **suppress** warn text (quiet bench).
+- **STRICT + any log level** — first recoverable still **stops** playback; **`LOG_ERROR`** may omit the warn line before stop if promotion happens before emit (implementer: emit once at ERROR ceiling if message exists).
+- **LAZY + `LOG_SILENT`** — fully quiet interpreter; score `?"…"` still prints.
+
+**S7i LAZY** “silent recoverable” ≠ **`LOG_SILENT`** — LAZY suppresses warn **behavior logging** for recoverables only; INFO/DEBUG lifecycle lines are an **I11** concern.
+
+#### Implementation sketch
+
+- `**#define PLAY_LOG_LEVEL_DEFAULT`** in `**play_config.h**` (suggest **`_WARN`**).
+- `**v_play_set_log_level(play_log_level_t)**` — global default and/or per-session override on `**play_runtime_t**`.
+- Central gate: `**b_play_log_emits(px_rt, play_log_level_t e_min_level)**` → feeds one `**v_play_log(...)**` helper used by `**b_play_fault**`, lifecycle `**printf**`, and optional DEBUG branches.
+- **I8 resolve hook** remains **NULL** by default; **`LOG_DEBUG`** does **not** auto-register a hook — consumers opt in. Hook registration is separate from log level.
+- Host / debug menu: expose level alongside fault policy (e.g. `**playstr`** STRICT + SILENT for golden listen tests).
+
+**Cross-ref:** **D14** `**?**` · **D18** extension dispatch · **I8** hook · **S7i** fault policy · **T3** golden pass criteria (`**PLAY warn:**` visibility under STRICT).
+
+**Resolution:** **Cumulative `play_log_level_t` with `_SILENT`…`_DEBUG`; score `?"…"` always prints; central log gate in `play.c`; default WARN; implementation tracked as I11 gap in § I10 structural table.**
 
 ---
 

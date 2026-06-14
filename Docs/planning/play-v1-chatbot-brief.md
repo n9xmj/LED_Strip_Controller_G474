@@ -43,8 +43,8 @@ These seed **sticky note memory** before the first token (no need to spell them 
 | Octave | **4** | `O4` |
 | Duration | **Quarter (`Q`)** | on first note or via memory |
 | Duty | **Legato 8/8** | `_` (implicit in template) |
-| Volume | **50%** | `V50` — **NO** (executive not parsed; default applied internally) |
-| Voice | **Sine (`P0`)** | `P0` — **NO** (always sine audio in v1) |
+| Volume | **50%** | `V50` — **YES** (live update while sustaining) |
+| Voice | **Sine (`P0`)** | `P0` sine · `P1` triangle — **YES** |
 | Key | **C major (`K"C"`)** | **YES** — LUT on bare letters; default all naturals |
 
 Template name in spec: **`Cn4Q_`** — first note may omit duration/octave and inherit **Q** + **O4**.
@@ -146,9 +146,9 @@ These start a new statement at the top level (after whitespace), not inside a no
 | **`~`** | | Repeat **last completed note** | **YES** |
 | **`K`** | `K"C"` | Key signature | **YES** |
 | **`&`** | `&+2` `&-3` `&0` | Transpose semitones | **YES** |
-| **`V`** | `V80` | Volume 0…100 | **NO** (50% default still applied) |
-| **`P`** | `P0` | Voice/timbre index | **NO** (audio always sine) |
-| **`\`** | `\"ctx:4Q"` | Extension / context load | **NO** |
+| **`V`** | `V80` | Volume 0…100 | **YES** |
+| **`P`** | `P0` / `P1` | Voice/timbre: **0** sine · **1** triangle | **YES** |
+| **`\`** | `\"ctx:4Q"` | Extension / context load | **YES** (`ctx:` memory · `noop:`/unknown echo) |
 | **`<` / `>`** | `<"lbl"` `>"lbl"` | Label define / goto | **NO** |
 | **`=` / `/`** | `="name"` `/` | GOSUB / RETURN | **NO** |
 | **`:`** | | Optional statement terminator (D12) | **NO** — stray `:` warns |
@@ -173,7 +173,7 @@ CQ4DEFGABC5 *
 
 - **`@ … @`**: skipped during playback (**YES**) — comments only, never executed.
 - **Score title:** optional **`?"Song Title\r\n"`** at the start (**YES** — same as lyrics/trace, **D14**). No special `@` title capture (**D10** withdrawn).
-- **Literal `@` inside comment (`\@`):** **NO** — inner `@` ends block early.
+- **Literal `@` inside comment (`\@`):** **YES** — escaped `@` does not close the block.
 
 ---
 
@@ -194,6 +194,10 @@ CQ4DEFGABC5 *
 | **LAZY** | silent skip | Low-noise |
 
 **Fatals always stop** (bad tempo, unclosed `@`, repeat stack overflow, etc.) in every mode.
+
+**Multi-digit cap (S7j):** executives reading numeric runs (`T`, `V`, `P`, `&±n`, `N`, `[ ]:N`, `;n`, …) accept at most **5** ASCII digits, stored as **uint16/int16**. More than 5 → **WARN** (skip excess digits, use first 5) in NORMAL/LAZY; **fatal** in STRICT. Per-command range limits apply after that (e.g. `T≤240`, `V≤100`).
+
+**Player verbosity (I11 — not yet in firmware):** cumulative log level `SILENT` → `ERROR` → `WARN` → `INFO` → `DEBUG`. Controls interpreter diagnostics (`PLAY warn`/`fault`, lifecycle lines) — **not** score-directed `?"…"` output (lyrics always print, even in SILENT).
 
 ---
 
@@ -258,12 +262,12 @@ Group checklist for authors and chatbots — **do not rely on these in scores me
 
 **Pitch & memory meta**
 
-- `N<n>` absolute semitone  
+- ~~`N<n>` absolute semitone~~ — **shipped** (OOR salvage; `~` replays absolute path)
 
 **Mix & timbre**
 
-- `V<n>` volume executive (default volume only)  
-- `P<n>` voice selection (sine only)  
+- ~~`V<n>` volume executive~~ — **shipped**  
+- ~~`P<n>` voice selection~~ — **shipped** (`P0` sine, `P1` triangle)  
 
 **Structure**
 
@@ -274,12 +278,12 @@ Group checklist for authors and chatbots — **do not rely on these in scores me
 
 **Extensions**
 
-- `\"cmd:args"` expansion dispatch  
+- ~~`\"cmd:args"` expansion dispatch~~ — **shipped** (`ctx:` zero-time suffix · default echo for `noop:` / unknown)
 - `L"…"` library call (reserved; warn + skip)  
 
 **Comment polish**
 
-- `\@` inside comments  
+- ~~`\@` inside comments~~ — **shipped**
 
 ---
 
@@ -310,7 +314,7 @@ See `scripts/play_bench.py` and `/playstr` skill. This is **transport**, not par
 | Doc | Role |
 |-----|------|
 | [play-lead-char-cheat-sheet.md](play-lead-char-cheat-sheet.md) | One-screen lead-char reference |
-| [play-v1-implementation-plan.md](play-v1-implementation-plan.md) | Full decision log + **The Big Board** |
+| [play-v1-implementation-plan.md](play-v1-implementation-plan.md) | Full decision log + **The Big Board** + **§ MSG** (Must-Ship Gap) |
 | [PLAY_language_design.md](../PLAY_language_design.md) | Original language design (being trimmed for v1) |
 
 ---

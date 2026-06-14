@@ -34,8 +34,10 @@ static uint32_t s_u32_fs_hz;
 static uint32_t s_u32_phase;
 static uint32_t s_u32_phase_step;
 
+static synth_waveform_t s_e_waveform = SYNTH_WAVE_SINE;
+
 // CORDIC configured flag
-static bool     s_b_cordic_configured;
+static bool s_b_cordic_configured;
 
 // Envelope (light linear attack + short decay/release) to eliminate audible pops/clicks
 // on note activation, deactivation, and live changes from the note player or sequencer.
@@ -122,20 +124,35 @@ static int32_t i32_phase_to_cordic_q31(uint32_t u32_phase)
     return (int32_t)(u32_phase - (1U << 31));
 }
 
+static int16_t i16_scale_wave_sample(int32_t i32_q31_peak, float f_level)
+{
+    int32_t scaled = (i32_q31_peak >> 16);
+    scaled = (int32_t)(scaled * f_level);
+    if (scaled > 32767)
+    {
+        scaled = 32767;
+    }
+    if (scaled < -32768)
+    {
+        scaled = -32768;
+    }
+    return (int16_t)scaled;
+}
+
 static int16_t i16_scale_cordic_result(int32_t i32_cordic_out, float f_level)
 {
-    // CORDIC Q1.31 sine result is approx. +/- (1 << 31) for +/-1.0
-    // >> 16 gives us roughly +/- 32768 range.
-    int32_t scaled = (i32_cordic_out >> 16);
+    return i16_scale_wave_sample(i32_cordic_out, f_level);
+}
 
-    // Apply level (0.0 .. 1.0). Use 0.5f default max in practice to avoid clipping.
-    scaled = (int32_t)(scaled * f_level);
-
-    // Clamp to int16
-    if (scaled > 32767)  scaled = 32767;
-    if (scaled < -32768) scaled = -32768;
-
-    return (int16_t)scaled;
+/** @brief Triangle in Q1.31 peak range from phase accumulator (one period = 2^32). */
+static int32_t i32_triangle_from_phase(uint32_t u32_phase)
+{
+    if (u32_phase < 0x80000000u)
+    {
+        return (int32_t)((int64_t)u32_phase * 2147483647LL / 0x80000000u);
+    }
+    return (int32_t)((int64_t)(0xFFFFFFFFu - u32_phase) * 2147483647LL /
+                     0x80000000u);
 }
 
 //------------------------------------------------------------------------------
@@ -145,6 +162,7 @@ void v_synth_engine_init(void)
 {
     s_b_active = false;
     s_f_freq_hz = 0.0f;
+    s_e_waveform = SYNTH_WAVE_SINE;
     s_f_level = 0.0f;
     s_u32_fs_hz = 0u;
     s_u32_phase = 0u;
@@ -164,6 +182,18 @@ void v_synth_engine_init(void)
 
     LOGCT(LOG_I2S_OUT, "synth_engine_init (CORDIC direct sine path + light attack/decay envelope)");
     v_synth_configure_cordic();
+}
+
+void v_synth_engine_set_waveform(synth_waveform_t e_waveform)
+{
+    if (e_waveform == SYNTH_WAVE_TRIANGLE)
+    {
+        s_e_waveform = SYNTH_WAVE_TRIANGLE;
+    }
+    else
+    {
+        s_e_waveform = SYNTH_WAVE_SINE;
+    }
 }
 
 void v_synth_engine_start_sine(float f_freq_hz, float f_level)
@@ -427,22 +457,26 @@ i2s_audio_out_fill_result_t x_synth_engine_fill(int16_t *p_i16_pcm,
 
         float f_eff_lvl = f_base_lvl * f_env;
 
-        int32_t i32_angle = i32_phase_to_cordic_q31(u32_phase);
-
         int32_t i32_out = 0;
-        // Use CalculateZO for lower overhead once configured (single calc).
-        // Short timeout; in practice the peripheral is very fast.
-        HAL_StatusTypeDef hal_st = HAL_CORDIC_CalculateZO(&hcordic, &i32_angle, &i32_out, 1, 5u);
-        if (hal_st != HAL_OK)
+        if (s_e_waveform == SYNTH_WAVE_TRIANGLE)
         {
-            s_u32_cordic_errors++;
-            // i32_out left as 0 → will produce silence for this sample
+            i32_out = i32_triangle_from_phase(u32_phase);
+        }
+        else
+        {
+            int32_t i32_angle = i32_phase_to_cordic_q31(u32_phase);
+            HAL_StatusTypeDef hal_st =
+                HAL_CORDIC_CalculateZO(&hcordic, &i32_angle, &i32_out, 1, 5u);
+            if (hal_st != HAL_OK)
+            {
+                s_u32_cordic_errors++;
+            }
         }
 
-        s_i32_last_cordic_out = i32_out;  // for service to report (sampled)
+        s_i32_last_cordic_out = i32_out;
         s_u32_fills++;
 
-        p_i16_pcm[u16_i] = i16_scale_cordic_result(i32_out, f_eff_lvl);
+        p_i16_pcm[u16_i] = i16_scale_wave_sample(i32_out, f_eff_lvl);
 
         u32_phase += u32_step;
     }

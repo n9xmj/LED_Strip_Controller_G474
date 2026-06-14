@@ -18,6 +18,16 @@
 
 #include "i2s_audio_out.h"
 
+/** @brief Waveform for monophonic tone generation. */
+typedef enum
+{
+    SYNTH_WAVE_SINE = 0,
+    SYNTH_WAVE_TRIANGLE
+} synth_waveform_t;
+
+/** Set waveform for subsequent set_tone/start (D1: P0=sine, P1=triangle). */
+void v_synth_engine_set_waveform(synth_waveform_t e_waveform);
+
 /** Initialize the synth engine (call once at startup, after MX_CORDIC_Init). */
 void v_synth_engine_init(void);
 

@@ -38,6 +38,13 @@
     "policy": "strict",
     "aliases": ["transpose-plus7", "D21"]
   },
+  "ctx": {
+    "description": "G6/D18 — ctx: suffix load + noop echo",
+    "tier": "feature",
+    "file": "ctx.play",
+    "policy": "strict",
+    "aliases": ["G6", "D18", "ctx-load"]
+  },
   "grammar_torture": {
     "description": "Full v1 grammar torture — one unpleasant STRICT string (T3 Torture / grammar HIL)",
     "tier": "torture",
