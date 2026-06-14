@@ -132,7 +132,7 @@ Cross-ref: [Docs/PROJECT.md](../PROJECT.md) long-term goals · deferred briefs u
 
 ## Must-Ship Gap (MSG)
 
-*“Mine-Shaft-Gap” — what **I1** says must exist in `App/Src/play.c` but does not yet. **Scan here first** for coding work; peripheral docs/tests at **§ MSG-GP** below. Wish-list rows (**W3+**) are **not** MSG — they are v2+ or optional stretch. **Last audited:** 2026-06-13 (post-**G6** `\"ctx:…"`).*
+*“Mine-Shaft-Gap” — what **I1** says must exist in `App/Src/play.c` but does not yet. **Scan here first** for coding work; peripheral docs/tests at **§ MSG-GP** below. Wish-list rows (**W3+**) are **not** MSG — they are v2+ or optional stretch. **Last audited:** 2026-06-13 (post-**G4** startup pre-parse + label table).*
 
 **Row IDs:** **`G1`…`Gn`** = firmware gap rows (append-only — **never renumber** when a row ships; mark **FW** ✅ instead). **`GP1`…** = peripheral rows (**§ MSG-GP**). Resolve in chat by gap ID (*"close G4"*, *"G9 next"*). **Ord** = bring-up order tier (1 before 2) — **not** PLAY voice **`P<n>`**.
 
@@ -147,15 +147,15 @@ Cross-ref: [Docs/PROJECT.md](../PROJECT.md) long-term goals · deferred briefs u
 | **G1** | 1 | **D6** | **`V<n>`** volume executive | ✅ | Live level on `PLAY_SCHED_SOUND`; >100 clamps |
 | **G2** | 1 | **D1** | **`P<n>`** voice executive | ✅ | Voice **0** sine · **1** triangle · unknown → WARNING + sine |
 | **G3** | 1 | **D22** | **`N<n>`** absolute semitone notes | ✅ | OOR → D21 salvage; `~` replays absolute path |
-| **G4** | 1 | **S7d** + **I2** | **Startup pre-parse** + label table | ❌ | `@` integrity, `<`/`>`/`=` ref resolve; `PLAY_STATE_LOADING` unused · **impl brief:** [labels-preparse-handoff.md](labels-preparse-handoff.md) |
-| **G5** | 1 | **D16–D19** | **Labels, goto, GOSUB, RETURN** | ❌ | Needs **G4**; torture exercises `<` `>` `=` `/` |
+| **G4** | 1 | **S7d** + **I2** | **Startup pre-parse** + label table | ✅ | `b_play_preparse()` at LOADING; `@`/`\@`, `<`/`>`/`=` ref resolve; table on runtime for **G5** · goldens: `labels_scan`, `labels_fatal_*` |
+| **G5** | 1 | **D16–D19** | **Labels, goto, GOSUB, RETURN** | ❌ | Needs **G4** ✅; runtime PC jump + `/` RETURN; torture exercises `<` `>` `=` `/` |
 | **G6** | 2 | **D18** | **`\"ctx:…"`** expansion dispatch | ✅ | `ctx:` zero-time suffix · `noop:` + unknown echo args |
 | **G7** | 2 | **D9** | **`\@`** inside `@ … @` | ✅ | `b_play_skip_comment` — `\@` does not close |
 | **G8** | 2 | — | **Key LUT in repeat/label snapshots** | 🟡 | **D8** sticky key not in `play_ctx_snapshot_t` — loop/goto edge case |
 
-**v1 firmware already landed (MSG ✅ — do not re-open):** notes/rest sub-FSM, inheritance, order-flex, duty, `R`, `~`, `T`/`%`/`O`/`^`/`v`, `&`, **`K"…"`**, **`N<n>`** (**G3**), `?"…"`, `[ ]:N`, `*`, `@` skip + **`\@`** (**G7**), **`V`/`P`** (**G1**/**G2**), **`\"ctx:…"`** (**G6**), **S7i**, **I4** scheduler, **I8** hook, **I9** submenu `1`/`2`/`s`.
+**v1 firmware already landed (MSG ✅ — do not re-open):** notes/rest sub-FSM, inheritance, order-flex, duty, `R`, `~`, `T`/`%`/`O`/`^`/`v`, `&`, **`K"…"`**, **`N<n>`** (**G3**), `?"…"`, `[ ]:N`, `*`, `@` skip + **`\@`** (**G7**), **`V`/`P`** (**G1**/**G2**), **`\"ctx:…"`** (**G6**), **startup pre-parse + label table** (**G4**), **S7i**, **I4** scheduler, **I8** hook, **I9** submenu `1`/`2`/`s`.
 
-**Suggested code order (v1):** ~~sub-FSM~~ → ~~`~`~~ → ~~**K**~~ → ~~**G1**/**G2**~~ → ~~**G3**~~ → ~~**G6**~~ → **G4 + G5** → polish ~~**G7**~~ + **G8**.
+**Suggested code order (v1):** ~~sub-FSM~~ → ~~`~`~~ → ~~**K**~~ → ~~**G1**/**G2**~~ → ~~**G3**~~ → ~~**G6**~~ → ~~**G4**~~ → **G5** → polish ~~**G7**~~ + **G8**.
 
 ### MSG — v1.1 firmware (additive after v1)
 
@@ -2592,7 +2592,7 @@ Smoke+ presets land incrementally (**Star Wars** → **Raiders** → other Willi
 
 ### I10 — MSG detail / firmware audit log (vs I1 fence)
 
-**Status:** 🟡 · **Living companion to § MSG** — update when `App/Src/play.c` grows · **Last audited:** 2026-06-13 (**G6** `\"ctx:…"` shipped)
+**Status:** 🟡 · **Living companion to § MSG** — update when `App/Src/play.c` grows · **Last audited:** 2026-06-13 (**G4** pre-parse + label table shipped)
 
 > **Scan table:** **§ Must-Ship Gap (MSG)** above — tabular v1/v1.1 “what’s left to code.” This section keeps shipped inventory, partial gaps, bring-up order, and audit notes. **Player verbosity** → **§ I11** (not MSG — cross-cutting diagnostic policy).
 
@@ -2622,8 +2622,8 @@ Smoke+ presets land incrementally (**Star Wars** → **Raiders** → other Willi
 | **G1** | D6 | **`V`** | ✅ | 1 |
 | **G2** | D1 | **`P`** | ✅ | 1 — voice 0 sine · 1 triangle |
 | **G3** | D22 | **`N<n>`** | ✅ | 1 |
-| **G4** | S7d/I2 | Pre-parse + label table | ❌ | 1 (unblocks **G5**) |
-| **G5** | D16–D19 | Labels, goto, GOSUB | ❌ | 1 |
+| **G4** | S7d/I2 | Pre-parse + label table | ✅ | 1 — **`b_play_preparse`**; goldens `labels_scan`, `labels_fatal_*` |
+| **G5** | D16–D19 | Labels, goto, GOSUB | ❌ | 1 — runtime `<`/`>`/`=`/`/` execution |
 | **G6** | D18 | **`\"ctx:…"`** | ✅ | 2 |
 
 **Theory/LUT reference:** [co5ths_key_signature_handoff.md](../co5ths_key_signature_handoff.md) · locked wire = **D8** / **D8b** in this plan · **Pitch resolve pipeline** section.
@@ -2650,6 +2650,7 @@ Smoke+ presets land incrementally (**Star Wars** → **Raiders** → other Willi
 | **`?"…"` / bare `?`** | Print / lyrics; C escapes |
 | **`*` END**           | Hard stop + synth off; NUL = implicit `*` |
 | **`@ … @`**           | Runtime skip; **`\@`** literal inside block (**G7**) |
+| **Startup pre-parse** | **`b_play_preparse`** — `@` integrity, `<`/`>`/`=` ref resolve, label table (**G4**); runtime goto/GOSUB still stub-skip until **G5** |
 | **`\"cmd:args"`** | **`ctx:`** zero-time suffix load (**G6**); **`noop:`** / unknown echo **args** to UART |
 | **`L"…"`**            | Warn + skip (D23 deferred) |
 | **S7i fault policy**  | `play_fault_policy_t` — LAZY / NORMAL / STRICT |
@@ -2721,10 +2722,10 @@ All below → `**PLAY fault: unsupported executive**` today.
 
 | ID     | Feature                              | Spec                                                                       | Firmware                                                                    |
 | ------ | ------------------------------------ | -------------------------------------------------------------------------- | --------------------------------------------------------------------------- |
-| S7d    | **Startup pre-parse**                | Comment integrity, label table + ref check before RUNNING | ❌ `**b_play_start**` → RUNNING immediately; `**PLAY_STATE_LOADING**` unused |
+| S7d    | **Startup pre-parse**                | Comment integrity, label table + ref check before RUNNING | ✅ **`b_play_preparse`** at LOADING (**G4** 2026-06-13) |
 | D9     | `**\@` in comments**                 | Literal `**@**` inside comment body                                        | ✅ **2026-06-13** |
 | D10    | **Title from first `@` block**       | **Withdrawn** — use `?"…"` (**D14**)                                       | N/A (never implement)                                                        |
-| I2     | **Label table**                      | Sparse table, caps, duplicate/missing rules                                | ❌                                                                           |
+| I2     | **Label table**                      | Sparse table, caps, duplicate/missing rules                                | ✅ **`play_label_entry_t[]`** on runtime (**G4**) |
 | S7     | **Tiered error policy**              | **S7i** lazy/normal/strict + **S7a** fatals                              | ✅ `play_fault_policy_t` in `b_play_fault` |
 | D12    | `:` optional EOS                 | Top-level statement boundary                                               | 🟡 Stray `:` warns only |
 | I3/S7e | **GOSUB call stack**                 | Separate from repeat stack                                                 | ❌ Repeat stack only                                                         |
@@ -2761,7 +2762,7 @@ Ordered to maximize score expressiveness per commit (aligns with bench `**playst
 2. ~~**`~` + last-note snapshot**~~ ✅
 3. ~~**`K"…"` + pitch LUT**~~ — **done 2026-06-13** (D8 executive + Co5ths LUT on bare letters)
 4. ~~**G1**/**G2** (`V`/`P`)~~ ✅ — voice **1** = triangle
-5. **G4** pre-parse pass — `@`/`\@`, labels → unblocks **G5** (**G4** + **G5**)
+5. ~~**G4** pre-parse pass — `@`/`\@`, labels~~ → **G5** runtime goto/GOSUB/RETURN (**G4** ✅ 2026-06-13)
 6. ~~**G3** `N<n>`~~ ✅
 7. ~~**G6** `\"ctx:…"` extension stub~~ — **shipped**
 8. **GP2** `m` → `g` STRICT golden runner on device (**I9** follow-on)

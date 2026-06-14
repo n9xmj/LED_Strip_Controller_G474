@@ -271,9 +271,9 @@ Group checklist for authors and chatbots — **do not rely on these in scores me
 
 **Structure**
 
-- `<` / `>` labels and gotos  
-- `=` GOSUB / `/` RETURN  
-- Startup label pre-scan (S7d)  
+- `<` / `>` labels and gotos — **pre-parse table + ref resolve shipped (G4)**; **runtime PC jump still NO (G5)**  
+- `=` GOSUB / `/` RETURN — **still NO (G5)**  
+- ~~Startup label pre-scan (S7d)~~ — **shipped (G4)**  
 - `:` as statement terminator  
 
 **Extensions**

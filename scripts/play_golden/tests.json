@@ -58,5 +58,26 @@
     "file": "grammar_torture_v11.play",
     "policy": "strict",
     "aliases": ["D4", "XY", "grammar-v11"]
+  },
+  "labels_scan": {
+    "description": "G4 pre-parse — label define + ref resolve; music completes (G5 goto deferred)",
+    "tier": "feature",
+    "file": "labels_scan.play",
+    "policy": "strict",
+    "aliases": ["G4", "labels", "preparse"]
+  },
+  "labels_fatal_missing": {
+    "description": "G4 pre-parse fatal — undefined numeric label ref refuses start",
+    "tier": "feature",
+    "file": "labels_fatal_missing.play",
+    "expect_start_fail": true,
+    "aliases": ["G4-fatal-missing", "labels-missing"]
+  },
+  "labels_fatal_quote": {
+    "description": "G4 pre-parse fatal — unterminated quoted label define",
+    "tier": "feature",
+    "file": "labels_fatal_quote.play",
+    "expect_start_fail": true,
+    "aliases": ["G4-fatal-quote", "labels-quote"]
   }
 }

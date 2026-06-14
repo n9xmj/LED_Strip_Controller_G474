@@ -1,0 +1,4 @@
+# G4 pre-parse fatal — undefined numeric goto ref (>99 with no <99).
+T120
+>99
+C4Q *

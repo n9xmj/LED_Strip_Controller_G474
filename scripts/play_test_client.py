@@ -73,6 +73,7 @@ class PlayRunResult:
     faults: list[str] = field(default_factory=list)
     warns: list[str] = field(default_factory=list)
     ended: bool = False
+    start_failed: bool = False
     golden_banner: Optional[str] = None
     error: Optional[str] = None
 
@@ -146,15 +147,20 @@ class PlayBenchClient:
     def enter_player_submenu(self) -> None:
         self._send_key("m", 0.2)
 
-    def run_menu_preset(self, key: str, timeout_s: float = 120.0) -> PlayRunResult:
+    def run_menu_preset(self, key: str, timeout_s: float = 120.0, *,
+                        strict: bool = False,
+                        expect_start_fail: bool = False) -> PlayRunResult:
         self._log_chunks.clear()
         self.unwind_to_main_menu()
         self.enter_player_submenu()
         self._read_for(0.4)
         self._send_key(key, 0.15)
-        return self._await_play_completion(timeout_s)
+        return self._await_play_completion(timeout_s, strict=strict,
+                                         expect_start_fail=expect_start_fail)
 
-    def play_string(self, play_src: str, timeout_s: float = 120.0) -> PlayRunResult:
+    def play_string(self, play_src: str, timeout_s: float = 120.0, *,
+                    strict: bool = False,
+                    expect_start_fail: bool = False) -> PlayRunResult:
         if len(play_src) > PLAY_MAX_LINE_CHARS:
             return PlayRunResult(
                 passed=False,
@@ -193,9 +199,12 @@ class PlayBenchClient:
 
         time.sleep(PLAY_TX_PRE_SEND_DELAY_S)
         self._send_play_line_paced(play_src)
-        return self._await_play_completion(timeout_s)
+        return self._await_play_completion(timeout_s, strict=strict,
+                                           expect_start_fail=expect_start_fail)
 
-    def _await_play_completion(self, timeout_s: float) -> PlayRunResult:
+    def _await_play_completion(self, timeout_s: float, *,
+                               strict: bool = False,
+                               expect_start_fail: bool = False) -> PlayRunResult:
         deadline = time.monotonic() + timeout_s
         while time.monotonic() < deadline:
             chunk = self._ser.read(4096) if self._ser else b""
@@ -205,34 +214,44 @@ class PlayBenchClient:
                 sys.stdout.write(text)
                 sys.stdout.flush()
             log = "".join(self._log_chunks)
-            result = assess_log(log, strict=False)
+            result = assess_log(log, strict=strict, expect_start_fail=expect_start_fail)
+            if expect_start_fail and result.start_failed:
+                result.log = log
+                return result
             if result.ended or result.faults or result.golden_banner:
                 result.log = log
                 return result
             time.sleep(0.02)
 
         log = "".join(self._log_chunks)
-        result = assess_log(log, strict=False)
+        result = assess_log(log, strict=strict, expect_start_fail=expect_start_fail)
         result.log = log
-        if not result.ended and not result.faults:
+        if expect_start_fail:
+            if not result.start_failed:
+                result.passed = False
+                result.error = "Expected PLAY start failed — playback started or no refusal seen"
+        elif not result.ended and not result.faults:
             result.passed = False
             result.error = f"Timed out after {timeout_s:.0f}s waiting for PLAY ended"
         return result
 
 
-def assess_log(log: str, strict: bool = False) -> PlayRunResult:
+def assess_log(log: str, strict: bool = False, expect_start_fail: bool = False) -> PlayRunResult:
     faults = [ln.strip() for ln in log.splitlines() if WITNESS_FAULT in ln]
     warns = [ln.strip() for ln in log.splitlines() if WITNESS_WARN in ln]
     ended = WITNESS_ENDED in log
     golden_pass = WITNESS_GOLDEN_PASS in log
     golden_fail = WITNESS_GOLDEN_FAIL in log
+    start_failed = "PLAY start failed" in log
 
-    if "PLAY start failed" in log:
+    if start_failed:
         faults.append("PLAY start failed")
 
     passed = False
     golden_banner: Optional[str] = None
-    if golden_pass:
+    if expect_start_fail:
+        passed = start_failed and not ended
+    elif golden_pass:
         passed = True
         golden_banner = WITNESS_GOLDEN_PASS
     elif golden_fail:
@@ -250,6 +269,7 @@ def assess_log(log: str, strict: bool = False) -> PlayRunResult:
         faults=faults,
         warns=warns,
         ended=ended,
+        start_failed=start_failed,
         golden_banner=golden_banner,
     )
 

@@ -197,15 +197,15 @@ Register all three in `scripts/play_golden/tests.json`. For fatal vectors, exten
 
 ## 8. Integration checklist
 
-- [ ] `play_label_entry_t` + table on `play_runtime_t`
-- [ ] `b_play_preparse()` — comment + quote aware linear scan
-- [ ] `b_play_start_policy()` — LOADING → pre-parse → RUNNING or refuse
-- [ ] Duplicate define → WARNING + last wins
-- [ ] Unreferenced define → WARNING at end (log `PLAY warn:` under NORMAL/STRICT)
-- [ ] Reuse **S7j** digit scanner for `<n` / `>n` / `=n`
-- [ ] Golden: `labels_scan` + fatal vectors
-- [ ] Update **MSG G4 → ✅**, **I10**, [play-v1-chatbot-brief.md](play-v1-chatbot-brief.md) (pre-parse row only — leave `<`/`>` **NO** until G5)
-- [ ] `/wrapup` → new `play-v1-session-handoff-YYYY-MM-DD.md`
+- [x] `play_label_entry_t` + table on `play_runtime_t`
+- [x] `b_play_preparse()` — comment + quote aware linear scan
+- [x] `b_play_start_policy()` — LOADING → pre-parse → RUNNING or refuse
+- [x] Duplicate define → WARNING + last wins
+- [x] Unreferenced define → WARNING at end (log `PLAY warn:` under NORMAL/STRICT)
+- [x] Reuse **S7j** digit scanner for `<n` / `>n` / `=n`
+- [x] Golden: `labels_scan` + fatal vectors
+- [x] Update **MSG G4 → ✅**, **I10**, [play-v1-chatbot-brief.md](play-v1-chatbot-brief.md) (pre-parse row only — leave `<`/`>` **NO** until G5)
+- [x] `/wrapup` → new `play-v1-session-handoff-2026-06-13.md`
 
 ---
 

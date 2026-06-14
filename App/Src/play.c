@@ -83,6 +83,20 @@ typedef struct
     uint16_t            u16_remaining;
     play_ctx_snapshot_t x_snap;
 } play_repeat_frame_t;
+typedef enum
+{
+    PLAY_LABEL_KIND_UNKNOWN = 0,
+    PLAY_LABEL_KIND_NUMERIC,
+    PLAY_LABEL_KIND_STRING
+} play_label_kind_t;
+typedef struct
+{
+    play_label_kind_t e_kind;
+    uint16_t          u16_num_id;
+    char              ac_name[PLAY_LABEL_MAX_LEN + 1U];
+    uint32_t          u32_define_offset;
+    bool              b_referenced;
+} play_label_entry_t;
 typedef struct
 {
     play_instance_t       x_public;
@@ -101,6 +115,8 @@ typedef struct
     uint8_t                    u8_voice;
     float                      f_current_hz;
     float                 f_current_level;
+    play_label_entry_t         ax_labels[PLAY_LABEL_TABLE_MAX];
+    uint8_t                    u8_label_count;
 } play_runtime_t;
 /* =============================================================================
  * PRIVATE VARIABLES
@@ -134,6 +150,9 @@ static bool b_play_consume_digit_run_u16_at(play_runtime_t *px_rt,
                                             uint16_t *pu16_out,
                                             bool *pb_have_digit);
 static bool b_play_skip_comment(play_runtime_t *px_rt);
+static bool b_play_preparse(play_runtime_t *px_rt);
+static bool b_play_skip_label_define(play_runtime_t *px_rt);
+static bool b_play_skip_label_ref(play_runtime_t *px_rt, char c_lead);
 static bool b_play_breaks_note_token(char c_ch, bool b_after_letter);
 static bool b_play_x2_from_duration_letter(char c_letter, uint8_t *pu8_x2);
 static int8_t i8_play_semitone_for_letter(char c_letter);
@@ -263,6 +282,12 @@ bool b_play_start_policy(const char *psz_src,
         {
             v_play_session_reset(px_rt, e_policy);
             px_rt->x_public.psz_src = psz_src;
+            px_rt->x_public.u32_src_offset = 0U;
+            px_rt->x_public.e_state = PLAY_STATE_LOADING;
+            if (!b_play_preparse(px_rt))
+            {
+                return false;
+            }
             px_rt->x_public.u32_src_offset = 0U;
             px_rt->x_public.e_state = PLAY_STATE_RUNNING;
             px_rt->e_phase = PLAY_SCHED_PARSE;
@@ -546,6 +571,461 @@ static bool b_play_skip_comment(play_runtime_t *px_rt)
     }
     (void)b_play_fault(px_rt, PLAY_FAULT_CLASS_FATAL, "unclosed @ comment");
     return true;
+}
+static bool b_play_preparse_fault(play_runtime_t *px_rt,
+                                  uint32_t u32_off,
+                                  play_fault_class_t e_class,
+                                  const char *psz_msg)
+{
+    px_rt->x_public.u32_src_offset = u32_off;
+    return b_play_fault(px_rt, e_class, psz_msg);
+}
+static bool b_play_scan_skip_ws_at(const char *psz, uint32_t *pu32_off)
+{
+    if (psz == NULL || pu32_off == NULL)
+    {
+        return false;
+    }
+    while (psz[*pu32_off] != '\0' && b_play_is_ws(psz[*pu32_off]))
+    {
+        (*pu32_off)++;
+    }
+    return true;
+}
+static bool b_play_scan_skip_comment_at(play_runtime_t *px_rt, uint32_t *pu32_off)
+{
+    const char *psz = px_rt->x_public.psz_src;
+    if (psz == NULL || pu32_off == NULL || psz[*pu32_off] != '@')
+    {
+        return false;
+    }
+    (*pu32_off)++;
+    while (psz[*pu32_off] != '\0')
+    {
+        char c_ch = psz[*pu32_off];
+        if (c_ch == '\\' && psz[*pu32_off + 1U] == '@')
+        {
+            *pu32_off += 2U;
+            continue;
+        }
+        if (c_ch == '@')
+        {
+            (*pu32_off)++;
+            return true;
+        }
+        (*pu32_off)++;
+    }
+    return b_play_preparse_fault(px_rt, *pu32_off, PLAY_FAULT_CLASS_FATAL,
+                                 "unclosed @ comment");
+}
+static bool b_play_scan_quoted_string_at(play_runtime_t *px_rt,
+                                         uint32_t *pu32_off,
+                                         char *psz_out,
+                                         uint16_t u16_out_max,
+                                         bool b_capture,
+                                         const char *psz_err_open)
+{
+    const char *psz = px_rt->x_public.psz_src;
+    uint16_t u16_out = 0U;
+    if (psz == NULL || pu32_off == NULL)
+    {
+        return false;
+    }
+    if (psz[*pu32_off] != '"')
+    {
+        return b_play_preparse_fault(px_rt, *pu32_off, PLAY_FAULT_CLASS_FATAL,
+                                     (psz_err_open != NULL) ? psz_err_open
+                                                            : "expected quote");
+    }
+    (*pu32_off)++;
+    while (psz[*pu32_off] != '\0')
+    {
+        char c_ch = psz[*pu32_off];
+        if (c_ch == '"')
+        {
+            (*pu32_off)++;
+            if (b_capture && psz_out != NULL)
+            {
+                psz_out[u16_out] = '\0';
+            }
+            return true;
+        }
+        if (c_ch == '\\')
+        {
+            (*pu32_off)++;
+            char c_esc = psz[*pu32_off];
+            if (c_esc == '\0')
+            {
+                return b_play_preparse_fault(px_rt, *pu32_off,
+                                             PLAY_FAULT_CLASS_FATAL,
+                                             "bad string escape");
+            }
+            (*pu32_off)++;
+            if (b_capture && psz_out != NULL)
+            {
+                switch (c_esc)
+                {
+                    case '"':  c_ch = '"'; break;
+                    case '\\': c_ch = '\\'; break;
+                    case 'n':  c_ch = '\n'; break;
+                    case 'r':  c_ch = '\r'; break;
+                    case 't':  c_ch = '\t'; break;
+                    default:   c_ch = c_esc; break;
+                }
+                if (u16_out + 1U >= u16_out_max)
+                {
+                    return b_play_preparse_fault(px_rt, *pu32_off,
+                                                 PLAY_FAULT_CLASS_FATAL,
+                                                 "string too long");
+                }
+                psz_out[u16_out++] = c_ch;
+            }
+            continue;
+        }
+        if (b_capture && psz_out != NULL)
+        {
+            if (u16_out + 1U >= u16_out_max)
+            {
+                return b_play_preparse_fault(px_rt, *pu32_off,
+                                             PLAY_FAULT_CLASS_FATAL,
+                                             "string too long");
+            }
+            psz_out[u16_out++] = c_ch;
+        }
+        (*pu32_off)++;
+    }
+    return b_play_preparse_fault(px_rt, *pu32_off, PLAY_FAULT_CLASS_FATAL,
+                                 "unterminated string");
+}
+static int8_t i8_play_label_find(play_runtime_t *px_rt,
+                                 play_label_kind_t e_kind,
+                                 uint16_t u16_num,
+                                 const char *psz_name)
+{
+    for (uint8_t u8_i = 0U; u8_i < px_rt->u8_label_count; u8_i++)
+    {
+        play_label_entry_t *px_e = &px_rt->ax_labels[u8_i];
+        if (px_e->e_kind != e_kind)
+        {
+            continue;
+        }
+        if (e_kind == PLAY_LABEL_KIND_NUMERIC && px_e->u16_num_id == u16_num)
+        {
+            return (int8_t)u8_i;
+        }
+        if (e_kind == PLAY_LABEL_KIND_STRING && psz_name != NULL &&
+            strcmp(px_e->ac_name, psz_name) == 0)
+        {
+            return (int8_t)u8_i;
+        }
+    }
+    return -1;
+}
+static bool b_play_preparse_add_define(play_runtime_t *px_rt,
+                                       uint32_t u32_define_off,
+                                       play_label_kind_t e_kind,
+                                       uint16_t u16_num,
+                                       const char *psz_name)
+{
+    play_label_entry_t x_entry;
+    int8_t i8_idx;
+    memset(&x_entry, 0, sizeof(x_entry));
+    x_entry.e_kind = e_kind;
+    x_entry.u16_num_id = u16_num;
+    x_entry.u32_define_offset = u32_define_off;
+    x_entry.b_referenced = false;
+    if (e_kind == PLAY_LABEL_KIND_STRING && psz_name != NULL)
+    {
+        strncpy(x_entry.ac_name, psz_name, PLAY_LABEL_MAX_LEN);
+        x_entry.ac_name[PLAY_LABEL_MAX_LEN] = '\0';
+    }
+    i8_idx = i8_play_label_find(px_rt, e_kind, u16_num,
+                                (e_kind == PLAY_LABEL_KIND_STRING) ? x_entry.ac_name
+                                                                   : NULL);
+    if (i8_idx >= 0)
+    {
+        px_rt->x_public.u32_src_offset = u32_define_off;
+        if (!b_play_fault(px_rt, PLAY_FAULT_CLASS_RECOVERABLE, "duplicate label"))
+        {
+            return false;
+        }
+        px_rt->ax_labels[(uint8_t)i8_idx] = x_entry;
+        return true;
+    }
+    if (px_rt->u8_label_count >= PLAY_LABEL_TABLE_MAX)
+    {
+        return b_play_preparse_fault(px_rt, u32_define_off, PLAY_FAULT_CLASS_FATAL,
+                                     "label table full");
+    }
+    px_rt->ax_labels[px_rt->u8_label_count] = x_entry;
+    px_rt->u8_label_count++;
+    return true;
+}
+static bool b_play_preparse_parse_define(play_runtime_t *px_rt, uint32_t *pu32_off)
+{
+    const char *psz = px_rt->x_public.psz_src;
+    uint32_t u32_define_off = *pu32_off;
+    uint16_t u16_num = 0U;
+    bool b_have_digit = false;
+    char ac_name[PLAY_LABEL_MAX_LEN + 1U];
+    (*pu32_off)++;
+    (void)b_play_scan_skip_ws_at(psz, pu32_off);
+    if (psz[*pu32_off] >= '0' && psz[*pu32_off] <= '9')
+    {
+        uint32_t u32_new = 0U;
+        bool b_excess = false;
+        if (!b_play_scan_digit_run_u16(psz, *pu32_off, &u32_new, &u16_num,
+                                       &b_have_digit, &b_excess))
+        {
+            return false;
+        }
+        *pu32_off = u32_new;
+        if (b_excess)
+        {
+            px_rt->x_public.u32_src_offset = *pu32_off;
+            if (!b_play_fault(px_rt, PLAY_FAULT_CLASS_RECOVERABLE, "too many digits"))
+            {
+                return false;
+            }
+        }
+        if (!b_have_digit)
+        {
+            return b_play_preparse_fault(px_rt, *pu32_off, PLAY_FAULT_CLASS_FATAL,
+                                         "bad label define");
+        }
+        return b_play_preparse_add_define(px_rt, u32_define_off,
+                                          PLAY_LABEL_KIND_NUMERIC, u16_num, NULL);
+    }
+    if (psz[*pu32_off] == '"')
+    {
+        if (!b_play_scan_quoted_string_at(px_rt, pu32_off, ac_name,
+                                          (uint16_t)sizeof(ac_name), true,
+                                          "expected quote after <"))
+        {
+            return false;
+        }
+        return b_play_preparse_add_define(px_rt, u32_define_off,
+                                          PLAY_LABEL_KIND_STRING, 0U, ac_name);
+    }
+    return b_play_preparse_fault(px_rt, *pu32_off, PLAY_FAULT_CLASS_FATAL,
+                                 "bad label define");
+}
+static bool b_play_preparse_parse_ref(play_runtime_t *px_rt,
+                                      uint32_t *pu32_off,
+                                      char c_lead)
+{
+    const char *psz = px_rt->x_public.psz_src;
+    uint16_t u16_num = 0U;
+    bool b_have_digit = false;
+    char ac_name[PLAY_LABEL_MAX_LEN + 1U];
+    play_label_kind_t e_kind = PLAY_LABEL_KIND_UNKNOWN;
+    int8_t i8_idx;
+    (void)c_lead;
+    (*pu32_off)++;
+    (void)b_play_scan_skip_ws_at(psz, pu32_off);
+    if (psz[*pu32_off] >= '0' && psz[*pu32_off] <= '9')
+    {
+        uint32_t u32_new = 0U;
+        bool b_excess = false;
+        if (!b_play_scan_digit_run_u16(psz, *pu32_off, &u32_new, &u16_num,
+                                       &b_have_digit, &b_excess))
+        {
+            return false;
+        }
+        *pu32_off = u32_new;
+        if (b_excess)
+        {
+            px_rt->x_public.u32_src_offset = *pu32_off;
+            if (!b_play_fault(px_rt, PLAY_FAULT_CLASS_RECOVERABLE, "too many digits"))
+            {
+                return false;
+            }
+        }
+        if (!b_have_digit)
+        {
+            return b_play_preparse_fault(px_rt, *pu32_off, PLAY_FAULT_CLASS_FATAL,
+                                         "bad label ref");
+        }
+        e_kind = PLAY_LABEL_KIND_NUMERIC;
+        i8_idx = i8_play_label_find(px_rt, e_kind, u16_num, NULL);
+    }
+    else if (psz[*pu32_off] == '"')
+    {
+        if (!b_play_scan_quoted_string_at(px_rt, pu32_off, ac_name,
+                                          (uint16_t)sizeof(ac_name), true,
+                                          "expected quote after label ref"))
+        {
+            return false;
+        }
+        e_kind = PLAY_LABEL_KIND_STRING;
+        i8_idx = i8_play_label_find(px_rt, e_kind, 0U, ac_name);
+    }
+    else
+    {
+        return b_play_preparse_fault(px_rt, *pu32_off, PLAY_FAULT_CLASS_FATAL,
+                                     "bad label ref");
+    }
+    if (i8_idx < 0)
+    {
+        return b_play_preparse_fault(px_rt, *pu32_off, PLAY_FAULT_CLASS_FATAL,
+                                     "undefined label ref");
+    }
+    px_rt->ax_labels[(uint8_t)i8_idx].b_referenced = true;
+    return true;
+}
+static bool b_play_preparse(play_runtime_t *px_rt)
+{
+    const char *psz = px_rt->x_public.psz_src;
+    uint32_t u32_off = 0U;
+    uint32_t u32_len;
+    if (psz == NULL)
+    {
+        return false;
+    }
+    u32_len = (uint32_t)strlen(psz);
+    px_rt->u8_label_count = 0U;
+    memset(px_rt->ax_labels, 0, sizeof(px_rt->ax_labels));
+    while (u32_off < u32_len)
+    {
+        (void)b_play_scan_skip_ws_at(psz, &u32_off);
+        if (u32_off >= u32_len)
+        {
+            break;
+        }
+        char c_ch = psz[u32_off];
+        if (c_ch == '@')
+        {
+            if (!b_play_scan_skip_comment_at(px_rt, &u32_off))
+            {
+                return false;
+            }
+            continue;
+        }
+        if (c_ch == '\\' && psz[u32_off + 1U] == '"')
+        {
+            u32_off++;
+            if (!b_play_scan_quoted_string_at(px_rt, &u32_off, NULL, 0U, false,
+                                              "expected quote after \\"))
+            {
+                return false;
+            }
+            continue;
+        }
+        if (c_ch == '"')
+        {
+            if (!b_play_scan_quoted_string_at(px_rt, &u32_off, NULL, 0U, false,
+                                              "expected quote"))
+            {
+                return false;
+            }
+            continue;
+        }
+        if (c_ch == '<')
+        {
+            if (!b_play_preparse_parse_define(px_rt, &u32_off))
+            {
+                return false;
+            }
+            continue;
+        }
+        if (c_ch == '>' || c_ch == '=')
+        {
+            if (!b_play_preparse_parse_ref(px_rt, &u32_off, c_ch))
+            {
+                return false;
+            }
+            continue;
+        }
+        u32_off++;
+    }
+    for (uint8_t u8_i = 0U; u8_i < px_rt->u8_label_count; u8_i++)
+    {
+        if (!px_rt->ax_labels[u8_i].b_referenced)
+        {
+            px_rt->x_public.u32_src_offset =
+                px_rt->ax_labels[u8_i].u32_define_offset;
+            if (!b_play_fault(px_rt, PLAY_FAULT_CLASS_RECOVERABLE,
+                              "unreferenced label"))
+            {
+                return false;
+            }
+        }
+    }
+    px_rt->x_public.u32_src_offset = 0U;
+    LOGCT(LOG_PLAY, "preparse OK labels=%u", (unsigned)px_rt->u8_label_count);
+    printf("PLAY preparse OK labels=%u\r\n", (unsigned)px_rt->u8_label_count);
+    return true;
+}
+static bool b_play_skip_label_define(play_runtime_t *px_rt)
+{
+    const char *psz = px_rt->x_public.psz_src;
+    uint32_t u32_off = px_rt->x_public.u32_src_offset;
+    uint16_t u16_num = 0U;
+    bool b_have_digit = false;
+    (void)b_play_scan_skip_ws_at(psz, &u32_off);
+    if (psz[u32_off] >= '0' && psz[u32_off] <= '9')
+    {
+        if (!b_play_consume_digit_run_u16_at(px_rt, &u32_off, &u16_num, &b_have_digit))
+        {
+            return false;
+        }
+        if (!b_have_digit)
+        {
+            (void)b_play_fault(px_rt, PLAY_FAULT_CLASS_FATAL, "bad label define");
+            return false;
+        }
+        px_rt->x_public.u32_src_offset = u32_off;
+        return true;
+    }
+    if (psz[u32_off] == '"')
+    {
+        if (!b_play_scan_quoted_string_at(px_rt, &u32_off, NULL, 0U, false,
+                                          "expected quote after <"))
+        {
+            return false;
+        }
+        px_rt->x_public.u32_src_offset = u32_off;
+        return true;
+    }
+    (void)b_play_fault(px_rt, PLAY_FAULT_CLASS_FATAL, "bad label define");
+    return false;
+}
+static bool b_play_skip_label_ref(play_runtime_t *px_rt, char c_lead)
+{
+    const char *psz = px_rt->x_public.psz_src;
+    uint32_t u32_off = px_rt->x_public.u32_src_offset;
+    uint16_t u16_num = 0U;
+    bool b_have_digit = false;
+    char ac_discard[PLAY_LABEL_MAX_LEN + 1U];
+    (void)c_lead;
+    (void)b_play_scan_skip_ws_at(psz, &u32_off);
+    if (psz[u32_off] >= '0' && psz[u32_off] <= '9')
+    {
+        if (!b_play_consume_digit_run_u16_at(px_rt, &u32_off, &u16_num, &b_have_digit))
+        {
+            return false;
+        }
+        if (!b_have_digit)
+        {
+            (void)b_play_fault(px_rt, PLAY_FAULT_CLASS_FATAL, "bad label ref");
+            return false;
+        }
+        px_rt->x_public.u32_src_offset = u32_off;
+        return true;
+    }
+    if (psz[u32_off] == '"')
+    {
+        if (!b_play_scan_quoted_string_at(px_rt, &u32_off, ac_discard,
+                                          (uint16_t)sizeof(ac_discard), true,
+                                          "expected quote after label ref"))
+        {
+            return false;
+        }
+        px_rt->x_public.u32_src_offset = u32_off;
+        return true;
+    }
+    (void)b_play_fault(px_rt, PLAY_FAULT_CLASS_FATAL, "bad label ref");
+    return false;
 }
 static bool b_play_breaks_note_token(char c_ch, bool b_after_letter)
 {
@@ -2423,6 +2903,24 @@ static bool b_play_exec_next(play_runtime_t *px_rt)
             }
             if (!b_play_fault(px_rt, PLAY_FAULT_CLASS_RECOVERABLE,
                               "library (L) not in v1"))
+            {
+                return false;
+            }
+            continue;
+        }
+        if (c_ch == '<')
+        {
+            px_rt->x_public.u32_src_offset++;
+            if (!b_play_skip_label_define(px_rt))
+            {
+                return false;
+            }
+            continue;
+        }
+        if (c_ch == '>' || c_ch == '=')
+        {
+            px_rt->x_public.u32_src_offset++;
+            if (!b_play_skip_label_ref(px_rt, c_ch))
             {
                 return false;
             }

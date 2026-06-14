@@ -156,16 +156,22 @@ def cmd_test(args: argparse.Namespace) -> int:
 
     menu_key = entry.get("menu_key")
     file_name = entry.get("file")
+    strict = entry.get("policy") == "strict"
+    expect_start_fail = bool(entry.get("expect_start_fail"))
 
     def run(client: PlayBenchClient):
         if menu_key:
             print(f"Menu preset key '{menu_key}' in m → player submenu")
-            return client.run_menu_preset(str(menu_key), timeout_s=args.timeout)
+            return client.run_menu_preset(str(menu_key), timeout_s=args.timeout,
+                                          strict=strict,
+                                          expect_start_fail=expect_start_fail)
         if file_name:
             path = GOLDEN_DIR / file_name
             play_src = read_play_file(path)
             print(f"String from {path.name} ({len(play_src)} chars)")
-            return client.play_string(play_src, timeout_s=args.timeout)
+            return client.play_string(play_src, timeout_s=args.timeout,
+                                      strict=strict,
+                                      expect_start_fail=expect_start_fail)
         raise RuntimeError(f"Test {test_id} has neither menu_key nor file")
 
     return _run_client(run, args)
