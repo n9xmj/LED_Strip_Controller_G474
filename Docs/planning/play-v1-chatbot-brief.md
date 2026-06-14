@@ -6,7 +6,7 @@
 
 **Living document:** Update this file whenever `App/Src/play.c` gains or loses behavior. **Firmware truth:** `App/Src/play.c` + bench presets in `App/Src/play_presets.c`.
 
-**Last updated:** 2026-06-13 (audited against firmware — inheritance, order-flex, `%`, S7i, duty, `~`, `&` transpose, **`K"…"`** key LUT, **`G4`** label pre-parse, top-level **`S`** playstr hook)
+**Last updated:** 2026-06-14 (audited against firmware — **G5** runtime labels/goto/GOSUB/RETURN; **G4** two-pass pre-parse forward refs)
 
 ---
 
@@ -149,8 +149,8 @@ These start a new statement at the top level (after whitespace), not inside a no
 | **`V`** | `V80` | Volume 0…100 | **YES** |
 | **`P`** | `P0` / `P1` | Voice/timbre: **0** sine · **1** triangle | **YES** |
 | **`\`** | `\"ctx:4Q"` | Extension / context load | **YES** (`ctx:` memory · `noop:`/unknown echo) |
-| **`<` / `>`** | `<"lbl"` `>"lbl"` | Label define / goto | **PARTIAL** — **G4** pre-parse + table ✅; runtime PC jump **NO** (**G5**) |
-| **`=` / `/`** | `="name"` `/` | GOSUB / RETURN | **NO** (**G5**) |
+| **`<` / `>`** | `<"lbl"` `>"lbl"` / `<n` `>n` | Label define (no-op skip) / goto (pure PC jump, carries ctx) | **YES** |
+| **`=` / `/`** | `="name"` `/` | GOSUB / RETURN (caller snapshot restore) | **YES** — empty `/` stack → **fatal** |
 | **`:`** | | Optional statement terminator (D12) | **NO** — stray `:` warns |
 
 ### Repeat blocks — caveat (**YES** with spec drift)
@@ -159,6 +159,7 @@ Syntax: `[ body ]:N` (e.g. `[CQDQEQ]:4`).
 
 - **YES:** open `[`, close `]:N`, loop body, nested depth limit.
 - **Spec drift:** on `]` re-entry, the **`[` snapshot is not restored** — mutations inside the loop **persist** across iterations (plan amended 2026-06-13). Put **`^`** / **`O`** changes where you intend them.
+- **Goto (`>`):** pure PC jump — **no** snapshot save/restore (S2 revised 2026-06-14). Backward goto loops accumulate context; use `[ ]:N` for per-iteration reset.
 
 ---
 
@@ -181,7 +182,7 @@ CQ4DEFGABC5 *
 
 - At **root**: **`*`** = hard stop (ends sequence).
 - **NUL** at end of string = implicit **`*`** (**YES**).
-- Inside future **`=`** subroutines: **`*`** may mean RETURN when `b_stop_is_return` — **NO** (GOSUB not shipped).
+- Inside **`=`** subroutines: **`*`** = hard stop at root; callee **`/`** returns to caller (**YES**, **G5**). **`b_stop_is_return`** (NUL/`*` = return in library tunes) — **NO** (D23 deferred).
 
 ---
 
@@ -271,9 +272,9 @@ Group checklist for authors and chatbots — **do not rely on these in scores me
 
 **Structure**
 
-- `<` / `>` labels and gotos — **pre-parse table + ref resolve shipped (G4)**; **runtime PC jump still NO (G5)**  
-- `=` GOSUB / `/` RETURN — **still NO (G5)**  
-- ~~Startup label pre-scan (S7d)~~ — **shipped (G4)**  
+- ~~`<` / `>` labels and gotos~~ — **shipped (G5)** — pre-parse table (**G4**) + runtime PC jump; goto carries ctx (S2)
+- ~~`=` GOSUB / `/` RETURN~~ — **shipped (G5)**
+- ~~Startup label pre-scan (S7d)~~ — **shipped (G4)** — two-pass forward refs
 - `:` as statement terminator  
 
 **Extensions**

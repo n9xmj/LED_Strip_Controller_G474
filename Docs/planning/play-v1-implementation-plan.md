@@ -148,14 +148,14 @@ Cross-ref: [Docs/PROJECT.md](../PROJECT.md) long-term goals · deferred briefs u
 | **G2** | 1 | **D1** | **`P<n>`** voice executive | ✅ | Voice **0** sine · **1** triangle · unknown → WARNING + sine |
 | **G3** | 1 | **D22** | **`N<n>`** absolute semitone notes | ✅ | OOR → D21 salvage; `~` replays absolute path |
 | **G4** | 1 | **S7d** + **I2** | **Startup pre-parse** + label table | ✅ | `b_play_preparse()` at LOADING; `@`/`\@`, `<`/`>`/`=` ref resolve; table on runtime for **G5** · goldens: `labels_scan`, `labels_fatal_*` |
-| **G5** | 1 | **D16–D19** | **Labels, goto, GOSUB, RETURN** | ❌ | Needs **G4** ✅; runtime PC jump + `/` RETURN; torture exercises `<` `>` `=` `/` |
+| **G5** | 1 | **D16–D19** | **Labels, goto, GOSUB, RETURN** | ✅ | Runtime `>` pure PC jump (S2); `=`/`/` call stack + snapshot restore; goldens `labels_goto`, `labels_gosub`; torture label block fixed |
 | **G6** | 2 | **D18** | **`\"ctx:…"`** expansion dispatch | ✅ | `ctx:` zero-time suffix · `noop:` + unknown echo args |
 | **G7** | 2 | **D9** | **`\@`** inside `@ … @` | ✅ | `b_play_skip_comment` — `\@` does not close |
 | **G8** | 2 | — | **Key LUT in repeat/label snapshots** | 🟡 | **D8** sticky key not in `play_ctx_snapshot_t` — loop/goto edge case |
 
-**v1 firmware already landed (MSG ✅ — do not re-open):** notes/rest sub-FSM, inheritance, order-flex, duty, `R`, `~`, `T`/`%`/`O`/`^`/`v`, `&`, **`K"…"`**, **`N<n>`** (**G3**), `?"…"`, `[ ]:N`, `*`, `@` skip + **`\@`** (**G7**), **`V`/`P`** (**G1**/**G2**), **`\"ctx:…"`** (**G6**), **startup pre-parse + label table** (**G4**), **S7i**, **I4** scheduler, **I8** hook, **I9** submenu `1`/`2`/`s`.
+**v1 firmware already landed (MSG ✅ — do not re-open):** notes/rest sub-FSM, inheritance, order-flex, duty, `R`, `~`, `T`/`%`/`O`/`^`/`v`, `&`, **`K"…"`**, **`N<n>`** (**G3**), `?"…"`, `[ ]:N`, `*`, `@` skip + **`\@`** (**G7**), **`V`/`P`** (**G1**/**G2**), **`\"ctx:…"`** (**G6**), **startup pre-parse + label table** (**G4**), **labels/goto/GOSUB/RETURN** (**G5**), **S7i**, **I4** scheduler, **I8** hook, **I9** submenu `1`/`2`/`s`.
 
-**Suggested code order (v1):** ~~sub-FSM~~ → ~~`~`~~ → ~~**K**~~ → ~~**G1**/**G2**~~ → ~~**G3**~~ → ~~**G6**~~ → ~~**G4**~~ → **G5** → polish ~~**G7**~~ + **G8**.
+**Suggested code order (v1):** ~~sub-FSM~~ → ~~`~`~~ → ~~**K**~~ → ~~**G1**/**G2**~~ → ~~**G3**~~ → ~~**G6**~~ → ~~**G4**~~ → ~~**G5**~~ → polish ~~**G7**~~ + **G8**.
 
 ### MSG — v1.1 firmware (additive after v1)
 
@@ -2589,7 +2589,7 @@ Smoke+ presets land incrementally (**Star Wars** → **Raiders** → other Willi
 
 ### I10 — MSG detail / firmware audit log (vs I1 fence)
 
-**Status:** 🟡 · **Living companion to § MSG** — update when `App/Src/play.c` grows · **Last audited:** 2026-06-13 (**G4** pre-parse + label table shipped)
+**Status:** 🟡 · **Living companion to § MSG** — update when `App/Src/play.c` grows · **Last audited:** 2026-06-14 (**G5** runtime labels/goto/GOSUB/RETURN shipped)
 
 > **Scan table:** **§ Must-Ship Gap (MSG)** above — tabular v1/v1.1 “what’s left to code.” This section keeps shipped inventory, partial gaps, bring-up order, and audit notes. **Player verbosity** → **§ I11** (not MSG — cross-cutting diagnostic policy).
 
@@ -2620,7 +2620,7 @@ Smoke+ presets land incrementally (**Star Wars** → **Raiders** → other Willi
 | **G2** | D1 | **`P`** | ✅ | 1 — voice 0 sine · 1 triangle |
 | **G3** | D22 | **`N<n>`** | ✅ | 1 |
 | **G4** | S7d/I2 | Pre-parse + label table | ✅ | 1 — **`b_play_preparse`**; goldens `labels_scan`, `labels_fatal_*` |
-| **G5** | D16–D19 | Labels, goto, GOSUB | ❌ | 1 — runtime `<`/`>`/`=`/`/` execution |
+| **G5** | D16–D19 | Labels, goto, GOSUB | ✅ | 1 — runtime `<`/`>`/`=`/`/`; **`v_play_snapshot_restore`**; two-pass pre-parse forward refs |
 | **G6** | D18 | **`\"ctx:…"`** | ✅ | 2 |
 
 **Theory/LUT reference:** [co5ths_key_signature_handoff.md](../co5ths_key_signature_handoff.md) · locked wire = **D8** / **D8b** in this plan · **Pitch resolve pipeline** section.
@@ -2647,7 +2647,8 @@ Smoke+ presets land incrementally (**Star Wars** → **Raiders** → other Willi
 | **`?"…"` / bare `?`** | Print / lyrics; C escapes |
 | **`*` END**           | Hard stop + synth off; NUL = implicit `*` |
 | **`@ … @`**           | Runtime skip; **`\@`** literal inside block (**G7**) |
-| **Startup pre-parse** | **`b_play_preparse`** — `@` integrity, `<`/`>`/`=` ref resolve, label table (**G4**); runtime goto/GOSUB still stub-skip until **G5** |
+| **Startup pre-parse** | **`b_play_preparse`** — two-pass: collect `<` defines, validate `>`/`=` refs (**G4**+forward refs); label table for runtime (**G5**) |
+| **`<` / `>` / `=` / `/`** | Label define no-op skip; **`>`** pure PC jump (S2); **`=`** push call frame + snapshot; **`/`** restore + return PC (**G5**); empty `/` stack → fatal |
 | **`\"cmd:args"`** | **`ctx:`** zero-time suffix load (**G6**); **`noop:`** / unknown echo **args** to UART |
 | **`L"…"`**            | Warn + skip (D23 deferred) |
 | **S7i fault policy**  | `play_fault_policy_t` — LAZY / NORMAL / STRICT |
@@ -2655,7 +2656,7 @@ Smoke+ presets land incrementally (**Star Wars** → **Raiders** → other Willi
 | **I4 scheduler**      | 1 ms shared tick; legato default duty 8/8 |
 | **I8 resolve hook**   | Fires on successful resolve |
 | **I9 bench**          | Submenu `m` → `1`/`2`/`s` |
-| **T3 golden**         | `smoke` · `loop` · `tilde` · `raiders` · `ctx` in `scripts/play_golden/` |
+| **T3 golden**         | `smoke` · `loop` · `tilde` · `raiders` · `ctx` · `labels_*` · `grammar_torture` in `scripts/play_golden/` |
 
 
 **Safe authoring today (copy-paste patterns):**
@@ -2759,7 +2760,7 @@ Ordered to maximize score expressiveness per commit (aligns with bench `**playst
 2. ~~**`~` + last-note snapshot**~~ ✅
 3. ~~**`K"…"` + pitch LUT**~~ — **done 2026-06-13** (D8 executive + Co5ths LUT on bare letters)
 4. ~~**G1**/**G2** (`V`/`P`)~~ ✅ — voice **1** = triangle
-5. ~~**G4** pre-parse pass — `@`/`\@`, labels~~ → **G5** runtime goto/GOSUB/RETURN (**G4** ✅ 2026-06-13)
+5. ~~**G4** pre-parse pass — `@`/`\@`, labels~~ → ~~**G5** runtime goto/GOSUB/RETURN~~ (**G5** ✅ 2026-06-14) → **G8** key LUT in snapshots
 6. ~~**G3** `N<n>`~~ ✅
 7. ~~**G6** `\"ctx:…"` extension stub~~ — **shipped**
 8. **GP2** `m` → `g` STRICT golden runner on device (**I9** follow-on)
@@ -3257,9 +3258,9 @@ Minimum 🟢 before formal grammar + howto + coding:
 | 🟡 Observations / open design | **S11** |
 
 
-**Next suggested chat prompt:** *"Implement **G5** (labels/goto/GOSUB) — copy [focused-implementation-handoff-template.md](focused-implementation-handoff-template.md) to `labels-gosub-handoff.md` and run a focused session."*
+**Next suggested chat prompt:** *"Implement **G8** (key LUT in repeat/label snapshots) — focused session; only MSG row left on v1 firmware."*
 
-**Session handoff:** [play-v1-session-handoff-2026-06-13.md](play-v1-session-handoff-2026-06-13.md) — **G4** shipped; **G5** + **G8** remain on MSG v1.
+**Session handoff:** [play-v1-session-handoff-2026-06-14.md](play-v1-session-handoff-2026-06-14.md) — **G5** shipped; **G8** remains on MSG v1.
 
 ### Cross-reference: punctuator roles (D2, S3, D16, D17, D18)
 

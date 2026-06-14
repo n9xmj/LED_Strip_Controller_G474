@@ -7,7 +7,7 @@
 # Coverage map (v1):
 #   D9 comment  D7 accidentals+order-flex  D5 duty  D20 R rest  D22 N
 #   D3 ^v  D21 &  D24 %  D6 V  D1 P  D2 ~  D18 \\"ctx + noop  D14 ?
-#   S4 [ ]:N  D16/D17 < > numeric+string labels  S2 backward restore
+#   S4 [ ]:N  D16/D17 < > numeric+string labels  S2 goto pure jump (ctx carry)
 #   D19 = / GOSUB  D12 : EOS  D23 L warn  D8b K optional WS before quote
 #
 @ PLAY v1 grammar torture @
@@ -15,7 +15,7 @@
 T240 O4 %Q V50 P0
 K"F" Ab4Q K "C"
 C4Q DEFGAB C5Q
-Eb4Q D#4Q En4Q F+4Q G-4Q An4Q 4QC Q4C
+Eb4Q D#4Q En4Q F+4Q G-4Q An4Q C4QC C4Q
 C4W C4H. C4Q C4I. R4W R4H. R4Q R4I
 C4Q_ C4Q! C4Q; C4Q;6 RI;
 N60Q N48Q
@@ -31,18 +31,20 @@ C4Q ~ R4Q ~
 C4Q D4E4
 >7 G4A4
 F4G4A4
-<7 G4A4B4C5Q
-<"bk" T100 O6
->"bk" C5Q T120 O4
+<7 G4A4B4C5Q >"fwd0"
+<"fwd0" C4Q >"fwd2"
+<"fwd1" E4Q >"fwd3"
+<"fwd2" D4Q >"fwd1"
+<"fwd3" G4Q T120 O4 >"skipsubs"
 <2 E4F4/
-C4Q =2 G4Q
 <"sub" E4F4/
-=\"sub\" C4Q G4Q
 <"inner" D4E4/
-<"outer" C4Q =\"inner\" /
-=\"outer\" F4G4
+<"outer" C4Q ="inner" /
+<"skipsubs"
+C4Q =2 G4Q
+="sub" C4Q G4Q
+="outer" F4G4
 [ [ C4Q ]:2 D4Q ]:2
 @ inner \@ marker @
-L"lib"
 K"C":T120
 *

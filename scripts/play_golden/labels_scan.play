@@ -1,9 +1,7 @@
-# G4 pre-parse smoke — defines + refs resolve at load (runtime goto is G5).
-# Pass: STRICT start succeeds; > and = may WARN until G5 — music after refs must complete.
+# G4 pre-parse + G5 runtime - defines, > and = refs resolve; music completes.
 @ label pre-parse smoke (G4) @
-T120 O4 %Q
-<1 C4Q D4Q
-<"hook" E4Q
->1
-="hook"
+T120 O4 %Q >1
+<1 C4Q D4Q >2
+<2 E4Q ="hook"
 C4G4 *
+<"hook" G4Q /

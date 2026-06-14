@@ -1,7 +1,7 @@
 # Agent Handoff: G5 — Runtime Labels / goto / GOSUB / RETURN (D16–D19, S2)
 
-**Date:** 2026-06-13 (S2 model revised 2026-06-14 — goto is a pure jump)
-**Status:** IN PROGRESS (archive candidate after MSG **G5** ✅)
+**Date:** 2026-06-13 (S2 model revised 2026-06-14 — goto is a pure jump)  
+**Status:** ✅ SHIPPED 2026-06-14 — archive via `/cleanup-docs`
 **MSG:** **G5** · **Plan refs:** D16, D17, D19, **S2** (revised), S7a, S7d, S7e, I2 (🟢 — do not re-litigate)
 **Bench:** COM9 @ 921600 · ST-Link SN from `scripts/bench.defaults.json` (`003C00193137510C39383538`)
 
@@ -68,16 +68,16 @@ Make the label control-flow tokens **execute** at runtime. G4 already built the 
 
 ## 4. Implementation checklist
 
-- [ ] Add `v_play_snapshot_restore(px_rt, const play_ctx_snapshot_t *)` mirroring `v_play_snapshot_save` (write back to `x_public` / `x_note_mem` / members) — used by `/` RETURN.
-- [ ] Runtime `<` define: context no-op, skip token (no snapshot).
-- [ ] Runtime `>` goto: lookup → set PC = `u32_define_offset`; carry ctx; **no fwd/bwd branch, no restore**. Missing (shouldn't happen post pre-parse) → FATAL (S7a).
-- [ ] Add a call-stack array + depth (reuse `PLAY_STACK_MAX_DEPTH`); frame = {return offset, caller snapshot}.
-- [ ] Runtime `=` GOSUB: push frame, jump to define offset; overflow → FATAL.
-- [ ] Add `/` RETURN dispatch case: empty stack → FATAL (S7a); else pop, restore caller snapshot, set PC to return offset.
-- [ ] Reset call-stack depth in session reset (alongside `u8_repeat_depth`).
-- [ ] Goldens green (see §5): `labels_goto`, `labels_gosub`, full `grammar_torture`; fatal vectors stay green.
-- [ ] MSG **G5** → ✅ in plan (§ MSG + **I10** audit); update [play-v1-chatbot-brief.md](play-v1-chatbot-brief.md) (runtime goto/GOSUB now YES; note goto = pure jump).
-- [ ] `/wrapup` → new session handoff; this file → archive candidate.
+- [x] Add `v_play_snapshot_restore(px_rt, const play_ctx_snapshot_t *)` mirroring `v_play_snapshot_save` (write back to `x_public` / `x_note_mem` / members) — used by `/` RETURN.
+- [x] Runtime `<` define: context no-op, skip token (no snapshot).
+- [x] Runtime `>` goto: lookup → set PC = `u32_define_offset`; carry ctx; **no fwd/bwd branch, no restore**. Missing (shouldn't happen post pre-parse) → FATAL (S7a).
+- [x] Add a call-stack array + depth (reuse `PLAY_STACK_MAX_DEPTH`); frame = {return offset, caller snapshot}.
+- [x] Runtime `=` GOSUB: push frame, jump to define offset; overflow → FATAL.
+- [x] Add `/` RETURN dispatch case: empty stack → FATAL (S7a); else pop, restore caller snapshot, set PC to return offset.
+- [x] Reset call-stack depth in session reset (alongside `u8_repeat_depth`).
+- [x] Goldens green (see §5): `labels_goto`, `labels_gosub`, full `grammar_torture`; fatal vectors stay green.
+- [x] MSG **G5** → ✅ in plan (§ MSG + **I10** audit); update [play-v1-chatbot-brief.md](play-v1-chatbot-brief.md) (runtime goto/GOSUB now YES; note goto = pure jump).
+- [x] `/wrapup` → new session handoff; this file → archive candidate.
 
 ---
 

@@ -60,11 +60,25 @@
     "aliases": ["D4", "XY", "grammar-v11"]
   },
   "labels_scan": {
-    "description": "G4 pre-parse — label define + ref resolve; music completes (G5 goto deferred)",
+    "description": "G4 pre-parse — label define + ref resolve; music completes",
     "tier": "feature",
     "file": "labels_scan.play",
     "policy": "strict",
     "aliases": ["G4", "labels", "preparse"]
+  },
+  "labels_goto": {
+    "description": "G5 runtime goto — forward + backward PC jump, terminating model",
+    "tier": "feature",
+    "file": "labels_goto.play",
+    "policy": "strict",
+    "aliases": ["G5", "G5-goto", "labels-goto"]
+  },
+  "labels_gosub": {
+    "description": "G5 GOSUB/RETURN — nested calls, octave restore on /",
+    "tier": "feature",
+    "file": "labels_gosub.play",
+    "policy": "strict",
+    "aliases": ["G5-gosub", "labels-gosub"]
   },
   "labels_fatal_missing": {
     "description": "G4 pre-parse fatal — undefined numeric label ref refuses start",

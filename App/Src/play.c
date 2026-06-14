@@ -83,6 +83,11 @@ typedef struct
     uint16_t            u16_remaining;
     play_ctx_snapshot_t x_snap;
 } play_repeat_frame_t;
+typedef struct
+{
+    uint32_t            u32_return_offset;
+    play_ctx_snapshot_t x_snap;
+} play_call_frame_t;
 typedef enum
 {
     PLAY_LABEL_KIND_UNKNOWN = 0,
@@ -107,7 +112,9 @@ typedef struct
     play_note_memory_t    x_note_mem;
     play_fault_policy_t   e_fault_policy;
     uint8_t               u8_repeat_depth;
+    uint8_t               u8_call_depth;
     play_repeat_frame_t        ax_repeat[PLAY_STACK_MAX_DEPTH];
+    play_call_frame_t          ax_call[PLAY_STACK_MAX_DEPTH];
     play_completed_snapshot_t  x_last_completed;
     bool                       b_has_completed_note;
     int16_t                    i16_transpose;
@@ -152,7 +159,10 @@ static bool b_play_consume_digit_run_u16_at(play_runtime_t *px_rt,
 static bool b_play_skip_comment(play_runtime_t *px_rt);
 static bool b_play_preparse(play_runtime_t *px_rt);
 static bool b_play_skip_label_define(play_runtime_t *px_rt);
-static bool b_play_skip_label_ref(play_runtime_t *px_rt, char c_lead);
+static bool b_play_parse_label_ref(play_runtime_t *px_rt, int8_t *pi8_idx);
+static bool b_play_exec_goto(play_runtime_t *px_rt);
+static bool b_play_exec_gosub(play_runtime_t *px_rt);
+static bool b_play_exec_return(play_runtime_t *px_rt);
 static bool b_play_breaks_note_token(char c_ch, bool b_after_letter);
 static bool b_play_x2_from_duration_letter(char c_letter, uint8_t *pu8_x2);
 static int8_t i8_play_semitone_for_letter(char c_letter);
@@ -214,6 +224,8 @@ static void v_play_start_note(play_runtime_t *px_rt,
                               int16_t i16_abs_sound);
 static void v_play_service(play_runtime_t *px_rt);
 static void v_play_snapshot_save(play_runtime_t *px_rt, play_ctx_snapshot_t *px_out);
+static void v_play_snapshot_restore(play_runtime_t *px_rt,
+                                    const play_ctx_snapshot_t *px_in);
 static void v_play_emit_resolve(play_runtime_t *px_rt,
                                 play_resolve_kind_t e_kind,
                                 uint32_t u32_off,
@@ -873,18 +885,68 @@ static bool b_play_preparse_parse_ref(play_runtime_t *px_rt,
     px_rt->ax_labels[(uint8_t)i8_idx].b_referenced = true;
     return true;
 }
-static bool b_play_preparse(play_runtime_t *px_rt)
+static bool b_play_scan_skip_label_ref_at(play_runtime_t *px_rt, uint32_t *pu32_off)
+{
+    const char *psz = px_rt->x_public.psz_src;
+    uint32_t u32_save = px_rt->x_public.u32_src_offset;
+    uint16_t u16_num = 0U;
+    bool b_have_digit = false;
+    char ac_discard[PLAY_LABEL_MAX_LEN + 1U];
+    (*pu32_off)++;
+    (void)b_play_scan_skip_ws_at(psz, pu32_off);
+    if (psz[*pu32_off] >= '0' && psz[*pu32_off] <= '9')
+    {
+        px_rt->x_public.u32_src_offset = *pu32_off;
+        if (!b_play_consume_digit_run_u16_at(px_rt, pu32_off, &u16_num, &b_have_digit))
+        {
+            px_rt->x_public.u32_src_offset = u32_save;
+            return false;
+        }
+        if (!b_have_digit)
+        {
+            px_rt->x_public.u32_src_offset = u32_save;
+            return b_play_preparse_fault(px_rt, *pu32_off, PLAY_FAULT_CLASS_FATAL,
+                                         "bad label ref");
+        }
+        px_rt->x_public.u32_src_offset = u32_save;
+        return true;
+    }
+    if (psz[*pu32_off] == '"')
+    {
+        if (!b_play_scan_quoted_string_at(px_rt, pu32_off, ac_discard,
+                                          (uint16_t)sizeof(ac_discard), true,
+                                          "expected quote after label ref"))
+        {
+            px_rt->x_public.u32_src_offset = u32_save;
+            return false;
+        }
+        px_rt->x_public.u32_src_offset = u32_save;
+        return true;
+    }
+    px_rt->x_public.u32_src_offset = u32_save;
+    return b_play_preparse_fault(px_rt, *pu32_off, PLAY_FAULT_CLASS_FATAL,
+                                 "bad label ref");
+}
+static bool b_play_scan_skip_label_define_at(play_runtime_t *px_rt, uint32_t *pu32_off)
+{
+    uint32_t u32_save = px_rt->x_public.u32_src_offset;
+    px_rt->x_public.u32_src_offset = *pu32_off + 1U;
+    if (!b_play_skip_label_define(px_rt))
+    {
+        px_rt->x_public.u32_src_offset = u32_save;
+        return false;
+    }
+    *pu32_off = px_rt->x_public.u32_src_offset;
+    px_rt->x_public.u32_src_offset = u32_save;
+    return true;
+}
+static bool b_play_preparse_scan(play_runtime_t *px_rt,
+                                 uint32_t u32_len,
+                                 bool b_collect_defines,
+                                 bool b_validate_refs)
 {
     const char *psz = px_rt->x_public.psz_src;
     uint32_t u32_off = 0U;
-    uint32_t u32_len;
-    if (psz == NULL)
-    {
-        return false;
-    }
-    u32_len = (uint32_t)strlen(psz);
-    px_rt->u8_label_count = 0U;
-    memset(px_rt->ax_labels, 0, sizeof(px_rt->ax_labels));
     while (u32_off < u32_len)
     {
         (void)b_play_scan_skip_ws_at(psz, &u32_off);
@@ -922,7 +984,14 @@ static bool b_play_preparse(play_runtime_t *px_rt)
         }
         if (c_ch == '<')
         {
-            if (!b_play_preparse_parse_define(px_rt, &u32_off))
+            if (b_collect_defines)
+            {
+                if (!b_play_preparse_parse_define(px_rt, &u32_off))
+                {
+                    return false;
+                }
+            }
+            else if (!b_play_scan_skip_label_define_at(px_rt, &u32_off))
             {
                 return false;
             }
@@ -930,13 +999,41 @@ static bool b_play_preparse(play_runtime_t *px_rt)
         }
         if (c_ch == '>' || c_ch == '=')
         {
-            if (!b_play_preparse_parse_ref(px_rt, &u32_off, c_ch))
+            if (b_validate_refs)
+            {
+                if (!b_play_preparse_parse_ref(px_rt, &u32_off, c_ch))
+                {
+                    return false;
+                }
+            }
+            else if (!b_play_scan_skip_label_ref_at(px_rt, &u32_off))
             {
                 return false;
             }
             continue;
         }
         u32_off++;
+    }
+    return true;
+}
+static bool b_play_preparse(play_runtime_t *px_rt)
+{
+    const char *psz = px_rt->x_public.psz_src;
+    uint32_t u32_len;
+    if (psz == NULL)
+    {
+        return false;
+    }
+    u32_len = (uint32_t)strlen(psz);
+    px_rt->u8_label_count = 0U;
+    memset(px_rt->ax_labels, 0, sizeof(px_rt->ax_labels));
+    if (!b_play_preparse_scan(px_rt, u32_len, true, false))
+    {
+        return false;
+    }
+    if (!b_play_preparse_scan(px_rt, u32_len, false, true))
+    {
+        return false;
     }
     for (uint8_t u8_i = 0U; u8_i < px_rt->u8_label_count; u8_i++)
     {
@@ -990,14 +1087,17 @@ static bool b_play_skip_label_define(play_runtime_t *px_rt)
     (void)b_play_fault(px_rt, PLAY_FAULT_CLASS_FATAL, "bad label define");
     return false;
 }
-static bool b_play_skip_label_ref(play_runtime_t *px_rt, char c_lead)
+static bool b_play_parse_label_ref(play_runtime_t *px_rt, int8_t *pi8_idx)
 {
     const char *psz = px_rt->x_public.psz_src;
     uint32_t u32_off = px_rt->x_public.u32_src_offset;
     uint16_t u16_num = 0U;
     bool b_have_digit = false;
-    char ac_discard[PLAY_LABEL_MAX_LEN + 1U];
-    (void)c_lead;
+    char ac_name[PLAY_LABEL_MAX_LEN + 1U];
+    if (pi8_idx == NULL)
+    {
+        return false;
+    }
     (void)b_play_scan_skip_ws_at(psz, &u32_off);
     if (psz[u32_off] >= '0' && psz[u32_off] <= '9')
     {
@@ -1010,22 +1110,76 @@ static bool b_play_skip_label_ref(play_runtime_t *px_rt, char c_lead)
             (void)b_play_fault(px_rt, PLAY_FAULT_CLASS_FATAL, "bad label ref");
             return false;
         }
-        px_rt->x_public.u32_src_offset = u32_off;
-        return true;
+        *pi8_idx = i8_play_label_find(px_rt, PLAY_LABEL_KIND_NUMERIC, u16_num, NULL);
     }
-    if (psz[u32_off] == '"')
+    else if (psz[u32_off] == '"')
     {
-        if (!b_play_scan_quoted_string_at(px_rt, &u32_off, ac_discard,
-                                          (uint16_t)sizeof(ac_discard), true,
+        if (!b_play_scan_quoted_string_at(px_rt, &u32_off, ac_name,
+                                          (uint16_t)sizeof(ac_name), true,
                                           "expected quote after label ref"))
         {
             return false;
         }
-        px_rt->x_public.u32_src_offset = u32_off;
-        return true;
+        *pi8_idx = i8_play_label_find(px_rt, PLAY_LABEL_KIND_STRING, 0U, ac_name);
     }
-    (void)b_play_fault(px_rt, PLAY_FAULT_CLASS_FATAL, "bad label ref");
-    return false;
+    else
+    {
+        (void)b_play_fault(px_rt, PLAY_FAULT_CLASS_FATAL, "bad label ref");
+        return false;
+    }
+    px_rt->x_public.u32_src_offset = u32_off;
+    if (*pi8_idx < 0)
+    {
+        (void)b_play_fault(px_rt, PLAY_FAULT_CLASS_FATAL, "undefined label ref");
+        return false;
+    }
+    return true;
+}
+static bool b_play_exec_goto(play_runtime_t *px_rt)
+{
+    int8_t i8_idx;
+    if (!b_play_parse_label_ref(px_rt, &i8_idx))
+    {
+        return false;
+    }
+    px_rt->x_public.u32_src_offset =
+        px_rt->ax_labels[(uint8_t)i8_idx].u32_define_offset;
+    return true;
+}
+static bool b_play_exec_gosub(play_runtime_t *px_rt)
+{
+    int8_t i8_idx;
+    play_call_frame_t *px_f;
+    if (!b_play_parse_label_ref(px_rt, &i8_idx))
+    {
+        return false;
+    }
+    if (px_rt->u8_call_depth >= PLAY_STACK_MAX_DEPTH)
+    {
+        (void)b_play_fault(px_rt, PLAY_FAULT_CLASS_FATAL, "call stack overflow");
+        return false;
+    }
+    px_f = &px_rt->ax_call[px_rt->u8_call_depth];
+    px_f->u32_return_offset = px_rt->x_public.u32_src_offset;
+    v_play_snapshot_save(px_rt, &px_f->x_snap);
+    px_rt->u8_call_depth++;
+    px_rt->x_public.u32_src_offset =
+        px_rt->ax_labels[(uint8_t)i8_idx].u32_define_offset;
+    return true;
+}
+static bool b_play_exec_return(play_runtime_t *px_rt)
+{
+    play_call_frame_t *px_f;
+    if (px_rt->u8_call_depth == 0U)
+    {
+        (void)b_play_fault(px_rt, PLAY_FAULT_CLASS_FATAL, "return stack underflow");
+        return false;
+    }
+    px_rt->u8_call_depth--;
+    px_f = &px_rt->ax_call[px_rt->u8_call_depth];
+    v_play_snapshot_restore(px_rt, &px_f->x_snap);
+    px_rt->x_public.u32_src_offset = px_f->u32_return_offset;
+    return true;
 }
 static bool b_play_breaks_note_token(char c_ch, bool b_after_letter)
 {
@@ -2022,6 +2176,25 @@ static void v_play_snapshot_save(play_runtime_t *px_rt, play_ctx_snapshot_t *px_
     px_out->i16_transpose = px_rt->i16_transpose;
     px_out->u8_voice = px_rt->u8_voice;
 }
+static void v_play_snapshot_restore(play_runtime_t *px_rt,
+                                    const play_ctx_snapshot_t *px_in)
+{
+    if (px_rt == NULL || px_in == NULL)
+    {
+        return;
+    }
+    px_rt->x_public.u16_tempo_bpm = px_in->u16_tempo_bpm;
+    px_rt->x_note_mem.u8_octave = px_in->u8_octave;
+    px_rt->x_public.u8_octave = px_in->u8_octave;
+    px_rt->x_public.u8_volume_pct = px_in->u8_volume_pct;
+    px_rt->u8_beat_unit_x2 = px_in->u8_beat_unit_x2;
+    px_rt->x_note_mem.u8_dur_x2 = px_in->u8_dur_x2;
+    px_rt->x_note_mem.b_dotted = px_in->b_dotted;
+    px_rt->x_note_mem.u8_duty_num = px_in->u8_duty_num;
+    px_rt->x_note_mem.u8_duty_den = px_in->u8_duty_den;
+    px_rt->i16_transpose = px_in->i16_transpose;
+    v_play_apply_voice(px_rt, px_in->u8_voice);
+}
 static void v_play_apply_voice(play_runtime_t *px_rt, uint8_t u8_voice)
 {
     synth_waveform_t e_wave = SYNTH_WAVE_SINE;
@@ -2917,10 +3090,28 @@ static bool b_play_exec_next(play_runtime_t *px_rt)
             }
             continue;
         }
-        if (c_ch == '>' || c_ch == '=')
+        if (c_ch == '>')
         {
             px_rt->x_public.u32_src_offset++;
-            if (!b_play_skip_label_ref(px_rt, c_ch))
+            if (!b_play_exec_goto(px_rt))
+            {
+                return false;
+            }
+            continue;
+        }
+        if (c_ch == '=')
+        {
+            px_rt->x_public.u32_src_offset++;
+            if (!b_play_exec_gosub(px_rt))
+            {
+                return false;
+            }
+            continue;
+        }
+        if (c_ch == '/')
+        {
+            px_rt->x_public.u32_src_offset++;
+            if (!b_play_exec_return(px_rt))
             {
                 return false;
             }
