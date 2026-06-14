@@ -228,8 +228,9 @@ Cross-ref: [Docs/PROJECT.md](../PROJECT.md) long-term goals · deferred briefs u
 | W26 | post-v1 | **vTree+ Mk 5 audio-reactive stack** | I2S mic · analog path · DSP leveling · LED mapping; see **Session & product roadmap** + PROJECT.md lineage |
 | W27 | v1.1 stretch | **`uart_stream` (USART2)** | Non-blocking debug UART — register ISR, HAL init-only; **not** PLAY grammar · [uart_stream-port-notes.md](uart_stream-port-notes.md) · enables terminal piano (**I9** / **I8**) |
 | W28 | v2 · low | **Wall-clock note duration (ms)** | Absolute time per note/rest — **ignores `T`/`%`**; **keeps duty ratio** (`_`/`!`/`;`); bench timing torture / scheduler drift / sync latency; inheritance optional · see **W28** stub |
+| W29 | v2 | **Musical dynamics & volume ramps** | Step markings (pp…ff) + **crescendo** / **decrescendo** (diminuendo) — graduated level change over time; extends **D6** `V` + **D13** envelope path · see **W29** stub |
 
-*Last wish-list pass: 2026-06-13 (W28 wall-clock duration; v1.1 X/Y + D5b; stretch W27).*
+*Last wish-list pass: 2026-06-14 (W29 dynamics/crescendo; W28 wall-clock duration).*
 
 ---
 
@@ -259,6 +260,35 @@ Cross-ref: [Docs/PROJECT.md](../PROJECT.md) long-term goals · deferred briefs u
 **Out of scope:** replacing the whole score clock (conductor **S3**); polyphonic sync (**W8**); tuplets (**W4**).
 
 **Promote when:** v2 timing test matrix needs deterministic sub-`T` granularity without floating `T` hacks.
+
+---
+
+### W29 — Musical dynamics & volume ramps (v2)
+
+**Status:** 🔵 · **Needs user:** no (idea capture 2026-06-14 — syntax **open**)
+
+**Intent:** Extend expression beyond v1 **`V<n>`** (instant numeric 0–100 step). Two complementary layers:
+
+| Layer | Musical name | Behavior |
+| ----- | ------------ | -------- |
+| **Step dynamics** | *Dynamics* — pp, p, mp, mf, f, ff (+ sfz, fp, …) | Apply a **scaling factor** to the current **`V<n>` baseline** — not an absolute replacement level. e.g. *fortissimo* = multiply present `V` by a fixed ratio (exact factors TBD at syntax close). Sticky until the next dynamic marking. |
+| **Graduated ramps** | **Crescendo** · **Decrescendo** / **diminuendo** | **Interpolate** effective volume over a **beat-count span** (ramp **period in beats** is part of the syntax). **Start** and **stop** volumes are **relative to the set `V` baseline** (same scaling model as step dynamics), not raw 0–100 absolutes. |
+
+**User direction (2026-06-14):** **`V<n>`** remains the author’s master volume knob. Symbolic dynamics and ramps are **multipliers / overlays on that baseline** — step markings nudge level up/down by ratio; ramps specify **beats**, **start scale**, and **stop scale** relative to `V`.
+
+**v1 baseline:** `V<n>` sets level immediately on `PLAY_SCHED_SOUND`; no symbolic names, no ramp between events. `grammar_torture` whole-note V/P blocks are **audibility torture**, not crescendo.
+
+**Syntax sketch (open — do not ship without design close):**
+
+- **Ramp:** executive or quoted form carrying **period (beats)**, **start volume scale**, **stop volume scale** — all relative to current `V`. Scheduler linearly (or curved) interpolates effective level across the beat span under active `T`/`%`.
+- **Step dynamic:** single token or short executive mapping pp…ff → scale factor applied to present `V` (composer still sets overall loudness with `V` first).
+- **Parser:** must not collide with note leads or **`V`/`P`** executives; see parent spec candidates in [PLAY_language_design.md](../PLAY_language_design.md).
+- **Scheduler:** ramp during `PLAY_SCHED_SOUND` / gap — may share machinery with **D13** ADSR and **W19** portamento freq ramp.
+- **Resolve hook (I8):** emit baseline `V`, scale endpoints, beat span for bench trace / LED viz (**W23**).
+
+**Cross-ref:** **D6** (`V`) · **D13** (envelope) · **W5** (VIB/TRM/ADSR syntax) · parent spec dynamics section.
+
+**Promote when:** repertoire demos need audible phrasing beyond on/off `V` steps — e.g. Sousa/Elgar tier (**T5**) or expression-heavy v2 scores.
 
 ---
 
