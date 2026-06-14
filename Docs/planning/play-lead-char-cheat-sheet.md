@@ -81,7 +81,7 @@ API: `b_play_start()` → NORMAL · `b_play_start_policy(src, PLAY_FAULT_POLICY_
 | **/** | **RETURN** — pop **`=`** stack; **fatal** if empty at root 🟢 | |
 | **L** | **Library** — `L"…"` (**D23** 🔵); sets **`b_stop_is_return`** for descendants | warn + skip |
 | **\*** | **END** — hard STOP at root (incl. in-string **`=`** callee); **return** when **`b_stop_is_return`** (**D23**) | **fw** (root NUL = `*`) |
-| **@** | **Comment** open/close; first block = title 🟢 | **fw** (skip only; title/pre-parse pending) |
+| **@** | **Comment** open/close only 🟢 (**D10** withdrawn — title = `?"…"`) | **fw** (skip; `\@` pending) |
 
 Quoted metas (`"` ends token; **optional WS before `"`** per **D8b**): `K"C"C4Q` · `K "C"C4Q` · `?"hi"` · `\"ctx:4Q;6"` · `<"loop"` · `>"loop"` · `="TURN"`
 

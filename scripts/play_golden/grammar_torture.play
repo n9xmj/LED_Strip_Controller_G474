@@ -5,7 +5,7 @@
 # v1.1 X/Y appendix: grammar_torture_v11.play (run after D4 lands).
 #
 # Coverage map (v1):
-#   D9/D10 title+comment  D7 accidentals+order-flex  D5 duty  D20 R rest  D22 N
+#   D9 comment  D7 accidentals+order-flex  D5 duty  D20 R rest  D22 N
 #   D3 ^v  D21 &  D24 %  D6 V  D1 P  D2 ~  D18 \\"ctx + noop  D14 ?
 #   S4 [ ]:N  D16/D17 < > numeric+string labels  S2 backward restore
 #   D19 = / GOSUB  D12 : EOS  D23 L warn  D8b K optional WS before quote

@@ -141,7 +141,7 @@ These start a new statement at the top level (after whitespace), not inside a no
 | **`?`** | `?"text"` or bare `?` | **Lyrics / spoken text** at playback time (UART); also trace. C escapes; bare `?` → CRLF | **YES** |
 | **`[` / `]`** | `[ … ]:N` | Repeat block **N** times | **YES** (see caveat below) |
 | **`*`** | | END — stop playback | **YES** (NUL at EOF = implicit `*`) |
-| **`@`** | `@ … @` | Comment block (skipped at runtime) | **PARTIAL** — no title capture; inner `@` not escaped |
+| **`@`** | `@ … @` | Comment block (skipped) | **YES** |
 | **`L`** | `L"…"` | External library (future) | **PARTIAL** — warn + skip quoted payload |
 | **`~`** | | Repeat **last completed note** | **YES** |
 | **`K`** | `K"C"` | Key signature | **YES** |
@@ -162,16 +162,17 @@ Syntax: `[ body ]:N` (e.g. `[CQDQEQ]:4`).
 
 ---
 
-## Comments & titles
+## Comments & optional title
 
 ```text
-@ optional title or comment @
+?"My Song Title\r\n"
+@ rehearsal note — not shown @
 T132
 CQ4DEFGABC5 *
 ```
 
-- **`@ … @`**: skipped during playback (**YES**).
-- **First `@` block as title (D10):** **NO** — not stored.
+- **`@ … @`**: skipped during playback (**YES**) — comments only, never executed.
+- **Score title:** optional **`?"Song Title\r\n"`** at the start (**YES** — same as lyrics/trace, **D14**). No special `@` title capture (**D10** withdrawn).
 - **Literal `@` inside comment (`\@`):** **NO** — inner `@` ends block early.
 
 ---
@@ -276,9 +277,8 @@ Group checklist for authors and chatbots — **do not rely on these in scores me
 - `\"cmd:args"` expansion dispatch  
 - `L"…"` library call (reserved; warn + skip)  
 
-**Comment/title polish**
+**Comment polish**
 
-- Title from first `@` block  
 - `\@` inside comments  
 
 ---

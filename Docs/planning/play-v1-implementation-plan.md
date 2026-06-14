@@ -69,8 +69,8 @@ Cross-ref: [Docs/PROJECT.md](../PROJECT.md) long-term goals · deferred briefs u
 | D8  | 🟢     | `**K"…"**` only; no opening `"` after `**K**` = WARNING; quote integrity = FATAL (**D8b**)                                                  |
 | D8a | 🟢     | **Rejected** — no unquoted `**K**` or command abutment; use `**K"…"**` (**D8**)                                                             |
 | D8b | 🟢     | Shared `**"…"**` delimiter + quote fault policy; **optional WS before `"**` (all string consumers)                                          |
-| D9  | 🟢     | `@ … @` comment blocks; `\@` escape; pre-parse unterminated check                                                                           |
-| D10 | 🟢     | Title = first `@ … @` block (pre-parse); no magic header                                                                                    |
+| D9  | 🟢     | `@ … @` comment blocks only (no title role); `\@` escape; pre-parse unterminated check                                                      |
+| D10 | 🟢     | **Rejected** — no `@` title capture; use `?"…"` for score title (**D14**, user 2026-06-13)                                                 |
 | D11 | 🟢     | No separate `M` cmd — `P` is canonical voice selection                                                                                      |
 | D12 | 🟢     | **Lexical boundaries** — WS readability; `**:**` = optional EOS (BASIC-like); `**;**` = duty only (not C-EOS)                               |
 | D13 | 🔵     | Envelope / ADSR PLAY syntax — post-v1 (after synth + duty ship)                                                                             |
@@ -186,17 +186,15 @@ These are **already chosen** in the spec or firmware; v1 implementation should a
 - `**V<n>` volume (D6 🟢)** — decimal **0..100** (human “percent loudness”; **0–127 MIDI-style rejected**). `**V` + one or more ASCII digits**; value **> 100** silently clamps to **100** (max volume). `**V0` = silence**. Updates sticky volume in note memory (inherits; label/repeat snapshots). Maps to synth as `**level = n / 100.0f**` (single conversion point in firmware).
 - `**^` / `v` octave shorthands (D3 🟢)** — standalone executives (no digits). `**^**` increments `**current_octave**` by 1; `**v**` decrements by 1. Same field as `O<n>` and explicit note octaves. `**+` / `-` rejected** for octave step — collide with note accidentals (`+`/`#`, `-`/`b`) and with `**&+` / `&-` transpose** syntax; would require lookahead/context rules for marginal ergonomics gain.
 - `**P<n>` voice selection (D1 🟢, D11 🟢)** — **canonical** command for synthesizable voice / timbre (not per-note; not polyphony routing). Updates `**u8_current_voice**` in unified note memory (inherits; label/repeat snapshots). **Default:** pure **sine** (CORDIC) — implicit `**P0**`. Range **0–255**; `**P1`, `P2`, …** map to future generators in the voice table. **No separate `M` command** — withdrawn from spec (D11). **v1 syntax:** `**P` + digits only**; `**P`-family modifier syntax may grow** as `synth_engine` gains params (ADSR per voice, detune, …) without adding parallel command letters.
-- **Title metadata (D10 🟢)** — the **first `@ … @` comment block** in the string (after leading whitespace skip) is the **piece/part title**, captured at **pre-parse**. Stored in `play_session_t` (not note memory). If no comment block precedes music, title is **empty**. No mandatory magic/version header.
-- `**@ … @` comment blocks (D9 🟢)** — bracketed skip regions; `\@` escape; unterminated block at EOF = load error. **First** block doubles as title (D10); later blocks are comments only.
+- **Title / lyrics (D14 🟢; D10 withdrawn 2026-06-13)** — **no** dedicated title syntax. Optional human-facing title at score start: `?"Song Title\r\n"` (prints at playback time like any `?"…"`). **`@ … @`** is **comments only** (**D9**) — not a title carrier.
+- `**@ … @` comment blocks (D9 🟢)** — bracketed skip regions; `\@` escape; unterminated block at EOF = load error. **No** first-block title semantics (former **D10** withdrawn).
 - **K + & pitch pipeline (D8 🟢, D21 🟢, pitch-resolve contract)** — **Default key: C major** until valid `**K"…"**`. Per note: **bare letter** → apply `**K` LUT**; **explicit accidental** (`**#`/`+`/`b`/`-`/`n`** in descriptor cluster) → **skip `K` LUT entirely** → build **linear absolute semitone** → add sticky `**&**` offset (**no `% 12`** on normal path). `**K"…"` only**; `**K**` without opening `**"**` → **WARNING**, keep key; bad keyspec inside quotes → **WARNING**; quote integrity → **FATAL** (**D8b**). **Only** when absolute lies **outside playable min/max** after full sum → **D21 OOR salvage** (`pc` fold + octave clamp + WARNING) — not used for in-range transpose. Bad `**&**` → **WARNING**, keep offset. `**&0**` clears offset (**S8** closed). Full step list: **Pitch resolve pipeline** (after **D21**).
 - `**?"…"` print (D14 🟢)** — single-char `**?**` (BASIC `**PRINT**` shorthand). **Primary use:** embed **spoken lyrics** in the score — text prints **at parse time** in near-real-time with the music (UART today; future TFT/karaoke sink). **Also:** bench trace / author notes. `**?"…"**` → emit **decoded** string (**C escapes**, no `**printf**` `%` formats); **no auto-CRLF** after quoted output (`**?""**` = emit nothing). **Bare `?**` alone → **CR/LF (`\r\n`)**. Quote integrity faults → **FATAL** (**D8b**); other `**?"…"**` faults → **WARNING**, continue.
 - **Streaming-first parser (not a REPL / not a general language)** — music is interpreted **at runtime** by a char-at-a-time walk; **no AST**, no token list in RAM. **Single-char executives** dominate (`T120`, `P1`, …). **Quoted-string metas (D8b):** `**K"…"**` (D8 — **only** form), `**?"…"**`, `**\"…"**`, `**<"…"**` / `**>"…"**` / `**="…"**` — all allow **optional WS before opening `"**`. **Block meta:** `**@ … @**` (D9).
 - **Error policy (S7 🟢, S7i 🟢)** — three **fault-policy modes** (`**play_fault_policy_t**`): **LAZY** (silent recoverable), **NORMAL** (default — WARNING + continue), **STRICT** (recoverable warnings/errors → **FATAL** stop, GCC `-Werror` analog). **S7a** fatals **always abort** in every mode. Recoverable = **S7b** carve-outs + **S7c** default bucket. Build default **`PLAY_FAULT_POLICY_DEFAULT = PLAY_FAULT_POLICY_NORMAL`** in `**play_config.h**`; debug `**playstr**` may select **STRICT** for authoring.
 - **Startup pre-parse (still runtime at load, not compile-time — S7d 🟢)** — **not** a full syntax scanner or LINTer. One **linear pass** for **hard failures that are unresolvable before playback can start**, plus **label table build + reference check**. Everything else is handled **during streaming interpret** under the active **S7i** policy (**S7b** / **S7c**). Optional **strict LINT pass** deferred (**S7h** 🔵).
   1. **Comment integrity** — every `@` opener has a closing `@` before EOF (`\@` does not close); else **FATAL**, refuse to play (**D9**, **S7a**).
-  2. **Title capture (D10)** — the **first** complete `@ … @` block’s inner text (trim) → sequence title; max **64 chars** (truncate + log). If none, title = empty.
-  3. **Label table + resolver** (comment-aware) — record every `**<n**` / `**<"…"**` define; resolve every `**>…**` / `**=…**` reference. **Missing reference** (goto/GOSUB to undefined label) → **FATAL**, refuse to play (**S2**, **D19**, **S7d**). **Unreferenced define** → **WARNING** only (**S7b**). Required-string quote faults on label/goto/GOSUB tokens (**D8b**) → **FATAL** in this pass. Runtime undefined-ref hit → **S7a** safety net only.
-  4. *(Not in v1 pre-parse)* repeat `**[` / `]**` balance, note-descriptor completeness, `**T`/`U`/`N` malformed** — caught at **runtime** per active **S7i** policy (**S7c** / **S7b**) unless **S7h** LINT invoked later.
+  2. **Label table + resolver** (comment-aware) — record every `**<n**` / `**<"…"**` define; resolve every `**>…**` / `**=…**` reference. **Missing reference** (goto/GOSUB to undefined label) → **FATAL**, refuse to play (**S2**, **D19**, **S7d**). **Unreferenced define** → **WARNING** only (**S7b**). Required-string quote faults on label/goto/GOSUB tokens (**D8b**) → **FATAL** in this pass. Runtime undefined-ref hit → **S7a** safety net only.
   Playback then **streams** from `pos=0`; `@` blocks skipped during interpret.
 - **Case + accidentals (D7 🟢)** — note letters `**A`–`G` uppercase only**; flat `**b**` or `**-**`; sharp `**#**` / `**+**`; natural `**n**` (descriptor-only). Top-level `**N**` = absolute semitone (**D22**). `**=` not natural** (GOSUB).
 - **Lexical boundaries (D12 🟢)** — Think **BASIC/C lexer**, not REPL lines. **Whitespace** = skipped readability (mostly), plus soft boundary between executives. **String consumers** (**D8b**): optional WS before `**"**`. `**:**` = optional **end-of-statement** at top level (BASIC mental model — **not required** in our metalanguage). After `**:**`, skip WS → next sig char = top-level lead. `**;**` is **not** PLAY EOS — it is **note duty** (**D5** `;` / `**;n**` inside descriptors only; C’s statement-terminator role **not adopted** at top level). **Exception:** `**]:N**` repeat tail (**S4**). `**:**` / `**;**` literal inside `**"…"**`, `**@ … @**`, note sub-FSM.
@@ -207,7 +205,7 @@ These are **already chosen** in the spec or firmware; v1 implementation should a
 - **Resolve hook (I8 🟢)** — every time the parser finishes one **complete executive** (note, rest, meta, `?`, structural token, …), invoke an optional **Release-safe callback** with source span + resolved semantics + schedule context. Default **NULL** (single branch, near-zero cost). Enables verbose console echo, golden trace tests, virtual synthboard GUI, LED animation — without duplicating the parser. Parameter struct TBD at implementation; see **I8** detail.
 - **Storage direction (post-v1 loader)** — text `.play` on LittleFS / FAT; not blocking first on-device interpreter if strings live in flash/const for tests.
 - **Tuplets / triplets (D15 🔵)** — **not in v1.** No syntax for “N notes in the time of M” (e.g. triplet eighths, Star Wars opening). **S5** v1 formula assumes **standard W/H/Q/I (+ dot)** durations only. v1 demos (**Q1**, **T5** Star Wars) use **approximation** (even eighths + author comment). Real tuplet support is **v2+** (or v1 only if **D15** closes early with a clean design).
-- **PLAY v1 feature fence (I1 🟢)** — **Must ship:** notes **A–G** + `**N<n>**` (**D22**); accidentals `**#`/`-`/`n**`; octave digit; durations **W H Q I** + dot; duty `**`_ `!` `;` `;n**` (**D5**); `**R`** rest (**D20**); executives `**T` `O` `^` `v` `K"…"` `&` `U` `V` `P` `?"…"` `~`**; expansion `**\"cmd:args"**` incl. `**ctx:**` stub (**D18**); repeat `**[ ]:N`**; labels `**<n`/`<"…"`/`>…`/`="…"**` (**D16**/**D17** 🟢); **GOSUB/RETURN/END** (**D19**); optional first `**@`** title (**D10**); startup **label pre-scan** (**S7d**); `**play_resolve_fn_t`** hook (**I8**, NULL default); **monophonic** interpreter → `**synth_engine`** sine output (**P0** default, `**P<n>`** stored); **const-string** input OK for first bench (debug `**playstr`**). **Out of v1:** **X/Y** (**D4**); tuplets (**D15**, **Q1** approx only); inline chords / multi-voice in one string; polyphony / `**|"`** sync (**S3**); **VIB/TRM/ADSR** PLAY syntax (**D13**); binary compile (**I6**); LittleFS loader / ESP upload path; mandatory magic / `**VER:`** header. **Delivery:** one `**play_session`**, dedicated HW tick (**I4**), bypass terminal `**p`** keys for first on-device audio path.
+- **PLAY v1 feature fence (I1 🟢)** — **Must ship:** notes **A–G** + `**N<n>**` (**D22**); accidentals `**#`/`-`/`n**`; octave digit; durations **W H Q I** + dot; duty `**`_ `!` `;` `;n**` (**D5**); `**R`** rest (**D20**); executives `**T` `O` `^` `v` `K"…"` `&` `U` `V` `P` `?"…"` `~`**; expansion `**\"cmd:args"**` incl. `**ctx:**` stub (**D18**); repeat `**[ ]:N`**; labels `**<n`/`<"…"`/`>…`/`="…"**` (**D16**/**D17** 🟢); **GOSUB/RETURN/END** (**D19**); optional first `**@`** title (**D10** withdrawn — use `?"…"`); startup **label pre-scan** (**S7d**); `**play_resolve_fn_t`** hook (**I8**, NULL default); **monophonic** interpreter → `**synth_engine`** sine output (**P0** default, `**P<n>`** stored); **const-string** input OK for first bench (debug `**playstr`**). **Out of v1:** **X/Y** (**D4**); tuplets (**D15**, **Q1** approx only); inline chords / multi-voice in one string; polyphony / `**|"`** sync (**S3**); **VIB/TRM/ADSR** PLAY syntax (**D13**); binary compile (**I6**); LittleFS loader / ESP upload path; mandatory magic / `**VER:`** header. **Delivery:** one `**play_session`**, dedicated HW tick (**I4**), bypass terminal `**p`** keys for first on-device audio path.
 - **Label table limits (I2 🟢, D16/D17 🟢)** — `**PLAY_LABEL_MAX_LEN`** (default **16**) caps quoted name length; `**PLAY_LABEL_TABLE_MAX`** (default **10**) caps **define** count per sequence (`**<"…"`** and `**<n**` share one sparse table). Both are `**#define**` build-time invariants in `**play_config.h**`. **11th define** or name **> max len** → **FATAL** at pre-parse. **Duplicate define** (same name or same numeric id) → **last wins** + **WARNING**. **Missing ref** unchanged (**FATAL**). Numeric `**<n` / `>n` / `=n`** use the same table — no dense `**label_pos[256]**` array.
 - **PLAY C constants policy (I2 🟢)** — avoid magic-number literals in firmware for invariants and build-time limits; prefer `**#define`** in `**play_config.h**` (or documented headers). Runtime-mutable defaults only where a decision explicitly allows them (case-by-case).
 - **Player bench menu (I9 🟢)** — debug top menu `**m`** → submenu banner `**--- Player tests and experiments ---**`. **v1 minimum:** `**1`** = in-flash PLAY smoke tune (C major scale ascending, quarter notes — interpreter smoke-test); `**s**` = prompt + `**i_getline()**` → dispatch **≤ `PLAY_DEBUG_LINE_MAX`** chars to PLAY API (async); `**p**` = same blocking terminal note player as top menu (`**v_note_player_run**`, **not** PLAY). Top-level `**p`** **kept** (duplicate entry). Menu handlers non-blocking; PLAY runs from jobs + **I4** tick. **Star Wars** intro ROM tune = follow-on preset, not v1 smoke gate.
@@ -623,7 +621,7 @@ C4Q ?"after C4" E4Q
 | **Bare `?`**        | After `**?**`, **WS-before-`"`** skip. Next sig char **not `"`** → emit **CR/LF (`\r\n`)** (e.g. `**?`**, `**? C4Q**`, `**?C4Q**`) — not a **WARNING**.                                                                                                          |
 | **C escapes (v1)**  | Inside `**?"…"`** payload, after `\`: `\` `"` `'` `?` `n` `r` `t` `0` `a` `b` `f` `v` — standard C character escapes. **Optional v1:** `\xHH` (hex, 1–2 digits) and `\ooo` (octal, 1–3 digits). Unknown `\X` → **WARNING**, emit `\` + `X` literally (fallback). |
 | **Not in v1**       | `**printf`-style `%d` / `%s` / field width** — explicitly out of scope; add in a later version if needed.                                                                                                                                                        |
-| **Source cap**      | Max **64 chars** inside quotes (source length before escape expansion) — truncate source + **WARNING** if exceeded (D10 cap precedent).                                                                                                                          |
+| **Source cap**      | Max **64 chars** inside quotes (source length before escape expansion) — truncate source + **WARNING** if exceeded.                                                                                                                          |
 | **When**            | **Runtime** — interpreter reaches token during playback; emits then continues (no audio side effect). **Lyrics:** interleave with notes/rests so text tracks the sung line.                                                                                                                                                            |
 | **Sink**            | Debug UART via project logging (v1). Same executive may drive a future on-device lyric display. Host `**play_melody.py`** should apply the same escape expansion when simulating.                                                                                                                                                |
 | **vs `@` comments** | Comments are **skipped** (never executed, never shown). `**?`** is **executed** at parse time — visible output.                                                                                                                                                                  |
@@ -1242,9 +1240,8 @@ C4Q @ rehearsal @ E4Q
 | Escape           | `**\@**` → literal `@` inside comment (backslash only meaningful inside an open comment)                     |
 | Outside comments | Normal lead-char / note grammar; `**@` is not a command lead**                                               |
 | Performance      | Byte scan / state machine only — no allocation, no nested interpretation                                     |
-| Pre-parse        | On sequence start: validate all blocks terminate; **first** block → title (D10); label scan is comment-aware |
-| First block      | Inner text = **title** (pre-parse) **and** skipped as comment during playback                                |
-| Later blocks     | Comments only (skipped; not titles)                                                                          |
+| Pre-parse        | On sequence start: validate all blocks terminate; label scan is comment-aware                                 |
+| Role             | **Comments only** — no title/metadata capture (withdrawn **D10**; use `?"…"` for titles)                    |
 
 
 **Rejected for v1:** `;` to EOL, `#` lines. Legacy examples using `-` **between** executives (not as flat accidental) should use whitespace instead (D12).
@@ -1342,41 +1339,27 @@ P1:V80:T120       ; explicit separators (readable scores)
 
 ---
 
-### D10 — Title = first `@ … @` block (pre-parse)
+### D10 — Title metadata (withdrawn)
 
-**Status:** 🟢 · **Needs user:** no (resolved 2026-06-11; amended same session)
+**Status:** 🟢 · **Amended 2026-06-13** — **Rejected** (user: `@` title capture unnecessary; `?"…"` suffices)
 
-**Question:** How is piece/part title metadata carried?
+**Was:** First `@ … @` block captured at pre-parse into `play_session_t.title` (**D10**, 2026-06-11).
 
-**Prior resolution:** Optional first-line `TITLE:` keyword — **withdrawn.**
-
-**User direction (amendment):** The **first `@ … @` comment block** encountered in the string is the **title**, determined at **pre-parse** time.
-
-**Agent feedback — magic header:** Still **not required** (see prior analysis). Title-as-first-comment unifies metadata with D9 — no second syntax.
-
-**Locked rules:**
+**Now:** **No dedicated title syntax.** Authors who want a visible title at playback:
 
 ```
-@ Star Wars Intro @
+?"Star Wars Intro\r\n"
 T120
-CH GH FQ EQ DQ C5Q ...
+...
 ```
 
+Same **`?"…"`** path as lyrics, bench trace, and section headers (**D14**). Hosts that need a stored title string can read UART output or add product-specific metadata outside PLAY.
 
-| Rule             | Detail                                                                                  |
-| ---------------- | --------------------------------------------------------------------------------------- |
-| Which block      | **First** complete `@ … @` in the buffer (leading whitespace skipped per D12)           |
-| Capture          | Inner text, **trim** leading/trailing SP/LF/CR/TAB; store in `**play_session_t.title`** |
-| Max length       | **64 chars** — truncate with log if longer                                              |
-| No title block   | Title string **empty** (legal — e.g. bare `C4Q` test fragments)                         |
-| During playback  | Title block is still a **comment** — skipped, never interpreted as music                |
-| Second `@` block | Ordinary comment only (e.g. `@ rehearsal @`)                                            |
-| Pre-parse order  | Comment termination check → **title capture** → label table (single pass possible)      |
+**`@ … @`** remains **comments only** (**D9**) — rehearsal notes, `@ approx triplet @`, torture-test coverage, etc.
 
+**Rejected:** `TITLE:` keyword · first-`@`-block title capture · mandatory magic header · separate title executive.
 
-**Rejected:** `TITLE:` keyword line; mandatory `#PLAY v1` magic.
-
-**Resolution:** **Title = first `@ … @` block, captured at pre-parse; no magic header; `TITLE:` withdrawn.**
+**Resolution:** **Withdrawn.** Title = optional `?"…"` at author's discretion; `@` has no metadata role.
 
 ---
 
@@ -1901,7 +1884,7 @@ typedef enum {
 | **Missing reference** — `**>"…"`**, `**>n**`, `**="…"**`, `**=n**` with no matching `**<…**` define | **FATAL**                 | **S2**, **D19**, **S7a** |
 | **Quote integrity** on label/goto/GOSUB string tokens                                               | **FATAL**                 | **D8b**, **S7a**         |
 | **Unreferenced define** — `**<"…"`** / `**<n**` never referenced                                    | **Recoverable** (end of pass) | **S7b**              |
-| Title capture (first `**@ … @`**)                                                                   | Non-fatal truncate        | **D10**                  |
+| Title capture (first `**@ … @`**)                                                                   | **Withdrawn (D10)** — use `?"…"` at runtime (**D14**)   |
 
 
 **Runtime streaming interpret — default (not pre-parse):**
@@ -2038,7 +2021,7 @@ Separate stacks, **shared numeric limit**. Depth **10** is `**#define`-able** on
 
 **Cross-refs:** **S5** timing uses `**tempo_bpm`** from memory (starts **120**). **S2/S4** snapshots include full struct. `**R`** / `**N**` / `**\"ctx:…"**` overwrite applicable fields. `**N60Q_**` ≈ `**Cn4Q_**` pitch under default **K"/&0** (**D22-5**). Compact letter runs (**`CDEF`**, **`DEFGAB`**) inherit **Q** + **O4** from this seed without an explicit duration on the first note.
 
-**Not session defaults (do not init here):** `**play_session_t` title** (D10, empty until pre-parse) · **PC / call stack / repeat stack** · **label table** (built at load) · `**g_u32_play_sched_tick**`.
+**Not session defaults (do not init here):** **PC / call stack / repeat stack** · **label table** (built at load) · `**g_u32_play_sched_tick**`. *(No `play_session_t.title` — **D10** withdrawn.)*
 
 **Resolution:** **Full struct init at session start; `T120` `V50` `%Q` `P0` `&0` `K"C"` (when wired) `O4` legato **8/8**; `~` seed `Cn4Q_`; first `~` → WARNING + template.**
 
@@ -2090,7 +2073,7 @@ Separate stacks, **shared numeric limit**. Depth **10** is `**#define`-able** on
 | `[ ]:N` `**<n` / `>n` / `<"…"` / `>"…"` (D16/D17 🟢)** `**~` note-repeat (D2 🟢)** `**="…"` / `/` / `*` GOSUB/RETURN/END (D19 🟢)**                                    | Binary compile (I6 🔵)                                           |
 | Label **pre-scan** (**S7d** 🟢)                                                                                                                                        | Mandatory magic / `VER:` header                                  |
 | `**play_resolve_fn_t` hook (I8 🟢)** — NULL default                                                                                                                    | ESP32 / host upload transport                                    |
-| Optional **first `@` title block** (D10 🟢)                                                                                                                            | LittleFS `**playfile`** loader (const string OK for first bench) |
+| `@ … @` comments only (**D9**; **D10** withdrawn)                                                                                                                      | LittleFS `**playfile`** loader (const string OK for first bench) |
 
 
 **Leaning:** Ship **monophonic interpreter** driving `synth_engine` directly (bypass terminal `p` keys). **Default voice = sine (D1);** `P` stored, audible sine until more voices exist.
@@ -2260,7 +2243,7 @@ Reuse pitch math from `**note_player`** / shared helper in v1; extract to `**pla
 **Handle model (locked — forward-compatible with v2+ polyphony):**
 
 - `**play_handle_t`** — **opaque token** (`void *` in the v1 sketch). Product / menu code passes handles to `**b_play_start`**, `**v_play_stop**`, and future per-instance APIs **without dereferencing**.
-- `**play_instance_t`** — **exposed struct** in `**play.h`** (not hidden in `**play.c**`). Holds interpreter + scheduler status fields for **bench-test monitoring** (run state, source offset, title, tempo snapshot, … — finalized at implement). **Read-only** for callers outside `**play.c`**; only the PLAY module mutates instance fields.
+- `**play_instance_t`** — **exposed struct** in `**play.h`** (not hidden in `**play.c**`). Holds interpreter + scheduler status fields for **bench-test monitoring** (run state, source offset, tempo snapshot, … — finalized at implement). **Read-only** for callers outside `**play.c`**; only the PLAY module mutates instance fields.
 - **Bench cast (debug / HIL / menu status — not general API):**
   ```c
   play_instance_t *px_inst = PLAY_HANDLE_AS_INSTANCE(px_active_play);
@@ -2612,9 +2595,9 @@ All below → `**PLAY fault: unsupported executive**` today.
 
 | ID     | Feature                              | Spec                                                                       | Firmware                                                                    |
 | ------ | ------------------------------------ | -------------------------------------------------------------------------- | --------------------------------------------------------------------------- |
-| S7d    | **Startup pre-parse**                | Comment integrity, **title (D10)**, label table + ref check before RUNNING | ❌ `**b_play_start**` → RUNNING immediately; `**PLAY_STATE_LOADING**` unused |
+| S7d    | **Startup pre-parse**                | Comment integrity, label table + ref check before RUNNING | ❌ `**b_play_start**` → RUNNING immediately; `**PLAY_STATE_LOADING**` unused |
 | D9     | `**\@` in comments**                 | Literal `**@**` inside comment body                                        | ❌ Inner `**@**` closes block early                                          |
-| D10    | **Title from first `@` block**       | Stored in session                                                          | ❌                                                                           |
+| D10    | **Title from first `@` block**       | **Withdrawn** — use `?"…"` (**D14**)                                       | N/A (never implement)                                                        |
 | I2     | **Label table**                      | Sparse table, caps, duplicate/missing rules                                | ❌                                                                           |
 | S7     | **Tiered error policy**              | **S7i** lazy/normal/strict + **S7a** fatals                              | ✅ `play_fault_policy_t` in `b_play_fault` |
 | D12    | `:` optional EOS                 | Top-level statement boundary                                               | 🟡 Stray `:` warns only |
@@ -2651,7 +2634,7 @@ Ordered to maximize score expressiveness per commit (aligns with bench `**playst
 2. ~~**`~` + last-note snapshot**~~ ✅
 3. ~~**`K"…"` + pitch LUT**~~ — **done 2026-06-13** (D8 executive + Co5ths LUT on bare letters)
 4. **`V`**, **`P`** executives (**P1**)
-5. **Pre-parse pass** — `@`/`\@`, title, labels → unblocks `<` `>` `=` `/` (**P1**)
+5. **Pre-parse pass** — `@`/`\@`, labels → unblocks `<` `>` `=` `/` (**P1**)
 6. **`\"ctx:…"`** extension stub (**P2**)
 7. **`m` → `g`** STRICT golden runner on device (**I9** follow-on)
 8. **Golden host runner** — `play_scenarios.py` P0/P1
@@ -2820,11 +2803,11 @@ Skill files: **`.grok/skills/playstr|playfile|playtest/SKILL.md`**. Registry: **
 | **Torture** | post-**I10** · `**grammar_torture.play**` | Full **I1** fence in one string — labels, GOSUB, repeat, **K**, **&**, … | STRICT · **`play_bench.py test grammar_torture`** |
 | **Torture v1.1** | post-**D4** · `**grammar_torture_v11.play**` | **X** / **Y** duration appendix only | STRICT · run after v1 torture green |
 
-**Smoke+ repertoire (locked 2026-06-13 — user direction):** **A few bars** of each — monophonic reduction, ROM presets in `**play_presets.c**`, not full arrangements. Woven with notation variations the interpreter already supports (compact runs, `%`, duty, `@` titles, `?`, repeats where useful).
+**Smoke+ repertoire (locked 2026-06-13 — user direction):** **A few bars** of each — monophonic reduction, ROM presets in `**play_presets.c**`, not full arrangements. Woven with notation variations the interpreter already supports (compact runs, `%`, duty, `?"` titles/lyrics, `@` comments, repeats where useful).
 
 | Excerpt | Source | Planning notes |
 | ------- | ------ | -------------- |
-| **Main-title opening** | *Star Wars* | **Q1** — triplet feel **approximated** with even **I/Q** until **D15**; `@` author note required |
+| **Main-title opening** | *Star Wars* | **Q1** — triplet feel **approximated** with even **I/Q** until **D15**; `?"…"` or `@` author note |
 | ***Raider’s March*** opening | *Raiders of the Lost Ark* | March rhythm + range; good **`T` / `%` / inheritance** exercise |
 | **Additional Williams** (roster TBD) | Author picks — e.g. *Jurassic Park*, *Superman*, *E.T.* fanfare | Same rules: **few bars**, monophonic, v1 durations only |
 
@@ -2855,7 +2838,7 @@ Skill files: **`.grok/skills/playstr|playfile|playtest/SKILL.md`**. Registry: **
 
 | Section                  | Content                                                                                                                              |
 | ------------------------ | ------------------------------------------------------------------------------------------------------------------------------------ |
-| **Lexical**              | Whitespace (**D12**); `**:`** optional hard end-of-command (**D12**); `@ … @` comments (**D9**); title block (**D10**)               |
+| **Lexical**              | Whitespace (**D12**); `**:`** optional hard end-of-command (**D12**); `@ … @` comments (**D9**); score title via `?"…"` (**D14**, **D10** withdrawn)               |
 | **Notes**                | Order-flexible descriptors (D7); duty `_` `!` `;` `;n` (D5); durations W H Q I + dot (D4 🔵 excluded)                                |
 | **Metas**                | `T` `O` `^` `v` `**K"…"`** `**&±n` / `&0**` (D8/D21) `U` `V` `P` (D1/D6)                                                             |
 | **Debug**                | `?"…"` C escapes; bare `?`; `?""` (D14)                                                                                              |
@@ -2941,7 +2924,7 @@ Teach features first with **small** excerpts; grow into the **repertoire roadmap
 | 4 Accidentals & `**n**` natural | `**#` `b` `n**`                                                              | `**F#4Q Bb4Q**`               |
 | 5 Articulation / duty           | `**_` `!` `;` `;n**`                                                         | same pitch, different duty    |
 | 6 Rests & `**~**`               | `**R**`, note-repeat                                                         | call/response 2 bars          |
-| 7 Comments & title              | `**@ … @**`                                                                  | title block + tune            |
+| 7 Comments & optional title     | `**@ … @**` comments; `**?"Title\r\n"**` if desired                         | comment + tune            |
 | 8 Repeats                       | `**[ … ]:N**` (**S4**)                                                       | 4-bar loop fragment           |
 | 9 Labels & jumps                | `**<"…"` / `>"…"`** (**D16/D17**) — goto target must exist; unused labels OK | infinite loop example (small) |
 | 10 Transpose                    | `**&+` / `&-` / `&0`**                                                       | same line, shifted            |

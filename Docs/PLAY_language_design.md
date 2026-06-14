@@ -269,7 +269,7 @@ This is a starting point for a formal grammar (using standard EBNF notation). It
 ```
 play_sequence   = { element } ;
 element         = note_descriptor | command | repeat_block | label_def | goto | comment_block | debug_print_cmd | whitespace ;
-comment_block   = "@" { comment_char } "@" ;  (* skipped during playback except first block → title; see v1 plan D9/D10 *)
+comment_block   = "@" { comment_char } "@" ;  (* skipped during playback; no title role — use ?"…" for titles; D10 withdrawn *)
 comment_char    = ? any char except unescaped "@" ? | "\\@" ;
 debug_print_cmd = "?" [ c_quoted_string ] ;  (* absent → bare-? CRLF; empty "" → no output; else expanded C-string payload — D14 *)
 c_quoted_string   = '"' { c_quoted_char } '"' ;
