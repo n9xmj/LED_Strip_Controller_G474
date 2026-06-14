@@ -452,11 +452,13 @@ static const char *psz_play_dur_suffix(uint8_t u8_dur_x2, bool b_dotted)
 {
     switch (u8_dur_x2)
     {
-        case 8U: return b_dotted ? "W." : "W";
-        case 4U: return b_dotted ? "H." : "H";
-        case 2U: return b_dotted ? "Q." : "Q";
-        case 1U: return b_dotted ? "I." : "I";
-        default: return "?";
+        case 32U: return b_dotted ? "W." : "W";
+        case 16U: return b_dotted ? "H." : "H";
+        case 8U:  return b_dotted ? "Q." : "Q";
+        case 4U:  return b_dotted ? "I." : "I";
+        case 2U:  return b_dotted ? "X." : "X";
+        case 1U:  return b_dotted ? "Y." : "Y";
+        default:  return "?";
     }
 }
 

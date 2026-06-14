@@ -122,15 +122,15 @@
 
 
 
-/** @brief Sticky duration seed — quarter (Cn4Q_; stored as duration_beats×2 → 2). */
+/** @brief Sticky duration seed — quarter (Cn4Q_; stored as duration_beats×4 → 8). */
 
-#define PLAY_DEFAULT_DUR_X2          (2U)
+#define PLAY_DEFAULT_DUR_X2          (8U)
 
 
 
-/** @brief Default beat unit — quarter = one beat (implicit %Q; beats×2 → 2). */
+/** @brief Default beat unit — quarter = one beat (implicit %Q; beats×4 → 8). */
 
-#define PLAY_DEFAULT_BEAT_UNIT_X2    (2U)
+#define PLAY_DEFAULT_BEAT_UNIT_X2    (8U)
 
 
 

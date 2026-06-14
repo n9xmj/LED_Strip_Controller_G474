@@ -6,7 +6,7 @@
 
 **Living document:** Update this file whenever `App/Src/play.c` gains or loses behavior. **Firmware truth:** `App/Src/play.c` + bench presets in `App/Src/play_presets.c`.
 
-**Last updated:** 2026-06-14 (audited against firmware — **G8** key LUT in snapshots; **G5** labels/GOSUB; **G4** pre-parse)
+**Last updated:** 2026-06-14 (audited against firmware — **G9** X/Y durations; **G8** key LUT in snapshots; **G5** labels/GOSUB; **G4** pre-parse)
 
 ---
 
@@ -63,7 +63,7 @@ Template name in spec: **`Cn4Q_`** — first note may omit duration/octave and i
 
 After each note or rest **commits**, these fields live in **note memory** and carry forward until overridden:
 
-- Duration (`W` `H` `Q` `I` + optional dot)
+- Duration (`W` `H` `Q` `I` `X` `Y` + optional dot)
 - Octave digit (`0`–`8`)
 - Duty (`_` `!` `;` `;n`)
 
@@ -110,8 +110,8 @@ Within one note/rest token, suffix pieces may appear in **any order** after the 
 | `Q` | Quarter | **YES** |
 | `I` | Eighth | **YES** |
 | `.` | Dotted (×1.5) | **YES** |
-| `X` | Sixteenth | **DEFERRED** (D4 — not v1) |
-| `Y` | Thirty-second | **DEFERRED** (D4 — not v1) |
+| `X` | Sixteenth | **YES** (v1.1 **G9**) |
+| `Y` | Thirty-second | **YES** (v1.1 **G9**) |
 
 ### Duty inside notes (**YES**)
 

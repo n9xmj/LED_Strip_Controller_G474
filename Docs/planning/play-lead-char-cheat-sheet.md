@@ -104,7 +104,7 @@ Quoted metas (`"` ends token; **optional WS before `"`** per **D8b**): `K"C"C4Q`
 | **n** | Natural accidental — not top-level **`N`** | parse-skip |
 | **0–9** | Octave digit — inherit if omitted | **fw** |
 | **W** **H** **Q** **I** | Whole / half / quarter / eighth | **fw** |
-| **X** **Y** | 16th / 32nd — 🔵 **D4** deferred | |
+| **X** **Y** | 16th / 32nd — **D4** 🟢 v1.1 | **fw** |
 | **.** | Dotted (×1.5) | **fw** |
 | **_** **!** **;** **;n** | Duty: legato / staccato / normal / n-of-8 🟢 | **fw** |
 

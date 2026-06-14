@@ -17,11 +17,13 @@
  * ============================================================================= */
 /** @brief C1 reference for equal-temperament pitch (Hz). */
 #define PLAY_C1_HZ                    (32.703125f)
-/** @brief Duration letter scale: duration_beats×2 in quarter-note units (W=4.0→8 … I=0.5→1). */
-#define PLAY_DUR_W_X2                 (8U)
-#define PLAY_DUR_H_X2                 (4U)
-#define PLAY_DUR_Q_X2                 (2U)
-#define PLAY_DUR_I_X2                 (1U)
+/** @brief Duration letter scale: duration_beats×4 in quarter-note units (W=4.0→32 … Y=0.125→1). */
+#define PLAY_DUR_W_X2                 (32U)
+#define PLAY_DUR_H_X2                 (16U)
+#define PLAY_DUR_Q_X2                 (8U)
+#define PLAY_DUR_I_X2                 (4U)
+#define PLAY_DUR_X_X2                 (2U)
+#define PLAY_DUR_Y_X2                 (1U)
 /* =============================================================================
  * PRIVATE TYPES
  * ============================================================================= */
@@ -1232,6 +1234,8 @@ static bool b_play_x2_from_duration_letter(char c_letter, uint8_t *pu8_x2)
         case 'H': *pu8_x2 = PLAY_DUR_H_X2; return true;
         case 'Q': *pu8_x2 = PLAY_DUR_Q_X2; return true;
         case 'I': *pu8_x2 = PLAY_DUR_I_X2; return true;
+        case 'X': *pu8_x2 = PLAY_DUR_X_X2; return true;
+        case 'Y': *pu8_x2 = PLAY_DUR_Y_X2; return true;
         default:  return false;
     }
 }
@@ -1718,6 +1722,8 @@ static bool b_play_parse_pitch_token(play_runtime_t *px_rt,
             case 'H':
             case 'Q':
             case 'I':
+            case 'X':
+            case 'Y':
                 if (b_saw_dur &&
                     px_rt->e_fault_policy == PLAY_FAULT_POLICY_STRICT)
                 {
@@ -1964,6 +1970,8 @@ static bool b_play_parse_absolute_token(play_runtime_t *px_rt,
             case 'H':
             case 'Q':
             case 'I':
+            case 'X':
+            case 'Y':
                 if (b_saw_dur &&
                     px_rt->e_fault_policy == PLAY_FAULT_POLICY_STRICT)
                 {
@@ -2334,6 +2342,8 @@ static bool b_play_apply_ctx_suffix(play_runtime_t *px_rt, const char *psz_args)
             case 'H':
             case 'Q':
             case 'I':
+            case 'X':
+            case 'Y':
                 if (b_saw_dur &&
                     px_rt->e_fault_policy == PLAY_FAULT_POLICY_STRICT)
                 {

@@ -27,7 +27,7 @@
 | Tier | Target | Deliverables |
 | ---- | ------ | ------------ |
 | **v1** | Feature-complete on bench | **I1** must-ship interpreter in `App/Src/play.c` — **§ MSG** v1 rows **G1**–**G8** ✅ (2026-06-14) |
-| **v1.1** | Same tree, additive code | **D4** `X`/`Y` durations (**G9** / **W1**) — **only required** v1.1 PLAY item. **D5b** raw-percent `;nn` (**G10** / **W2**) **STET** same release |
+| **v1.1** | Same tree, additive code | **D4** `X`/`Y` durations (**G9** ✅). **D5b** raw-percent `;nn` (**G10** / **W2**) **STET** — only remaining required v1.1 PLAY item |
 | **v1.1 stretch** | Infra (not PLAY grammar) | **`uart_stream` on USART2** (**G11** / **W27**) — non-blocking debug console |
 | **Docs (in progress)** | Ship with v1 | [play-lead-char-cheat-sheet.md](play-lead-char-cheat-sheet.md) · [play-v1-chatbot-brief.md](play-v1-chatbot-brief.md) (living fw status) · **T1** implementer trim of parent spec |
 | **Stretch (v1)** | Nice-to-have, not gate | **T4** normative EBNF · **T5** musician howto + tiered repertoire |
@@ -60,7 +60,7 @@ Cross-ref: [Docs/PROJECT.md](../PROJECT.md) long-term goals · deferred briefs u
 | D1  | 🟢     | Voice selection (`P<n>`, note memory); default = sine until more voices exist                                                               |
 | D2  | 🟢     | Note-repeat — `**~`** top-level only (whole smash)                                                                                          |
 | D3  | 🟢     | Octave pitch step (`^` up, `v` down)                                                                                                        |
-| D4  | 🔵     | Sixteenth / thirty-second durations (`X`, `Y`) — v1 or defer                                                                                |
+| D4  | 🟢     | Sixteenth / thirty-second durations (`X`, `Y`) — v1.1 shipped **G9** |
 | D5  | 🟢     | Note duty — `_`/`!`/`;` shorthands + `;n` general (`;` = normal)                                                                            |
 | D5c | 🟢     | `;n` scale — `PLAY_DUTY_NUMERATOR` (default 8), `n`/N, clamp 0 and >N                                                                       |
 | D5d | 🔵     | Pizzicato shorthand — defer; add duty shorthands later                                                                                      |
@@ -161,7 +161,7 @@ Cross-ref: [Docs/PROJECT.md](../PROJECT.md) long-term goals · deferred briefs u
 
 | G | Ord | Ref | Feature | FW | Notes |
 | --- | --- | --- | ------- | -- | ----- |
-| **G9** | 1 | **D4** / **W1** | **`X` / `Y` durations** | ❌ | Sixteenth / thirty-second; `PLAY_DUR_*_X2` + S5; golden: `grammar_torture_v11.play` |
+| **G9** | 1 | **D4** / **W1** | **`X` / `Y` durations** | ✅ | `PLAY_DUR_*_X2` ×4 ladder; S5 X=0.25 Y=0.125; golden `grammar_torture_v11` |
 | **G10** | 1 | **D5b** / **W2** | **Raw-percent `;nn`** | ❌ | 1 digit → n/8 (**D5c** today); 2 digits → 0–100% (`;6` ≠ `;60`) |
 
 *v1.1 has no other **required** PLAY grammar deltas per session roadmap.*
@@ -183,7 +183,7 @@ Cross-ref: [Docs/PROJECT.md](../PROJECT.md) long-term goals · deferred briefs u
 | **GP5** | **T5** | Musician howto + repertoire | 🔴 | v1 **stretch** doc |
 | **GP6** | — | Living docs sync | 🟡 | [play-v1-chatbot-brief.md](play-v1-chatbot-brief.md) · [play-lead-char-cheat-sheet.md](play-lead-char-cheat-sheet.md) after each **G** row closes |
 | **GP7** | — | **`grammar_torture.play`** | ✅ | v1 fence; re-run after each v1 **G** close |
-| **GP8** | — | **`grammar_torture_v11.play`** | 🔴 | After **G9** ships |
+| **GP8** | — | **`grammar_torture_v11.play`** | ✅ | **G9** — X/Y appendix + long-run perf scales |
 
 *Promote a row off MSG when firmware lands; bump **Last audited** and sync **I10** detail + living docs.*
 
@@ -199,7 +199,7 @@ Cross-ref: [Docs/PROJECT.md](../PROJECT.md) long-term goals · deferred briefs u
 
 | ID | Target | Item | Notes |
 | --- | ------ | ---- | ----- |
-| W1 | v1.1 | **`X` / `Y` durations** (D4) | **Required** v1.1 code — sixteenth / thirty-second; parser + `PLAY_DUR_*_X2` + S5 timing |
+| W1 | v1.1 | **`X` / `Y` durations** (D4) | ✅ **G9** shipped 2026-06-14 |
 | W2 | v1.1 | **Raw-percent duty `;nn`** (D5b) | **STET v1.1** (~easy): **1 digit** → n/8 (D5c); **2 digits** → percent 0–100 (e.g. `;60` = 60%). Disambiguates `;6` vs `;60` |
 | W3 | v2 | **Pizzicato shorthand** (D5d) | Likely needs envelope shape, not duty alone |
 | W4 | v2 | **Tuplets / triplets** (D15, Q1) | “N notes in time of M”; Raiders / Star Wars swing; no v1 syntax |
@@ -435,13 +435,9 @@ v    ; current_octave -= 1
 
 ### D4 — `X` / `Y` durations (sixteenth / thirty-second)
 
-**Status:** 🔵 · **Needs user:** optional
+**Status:** 🟢 · **Needs user:** no (shipped **G9** 2026-06-14)
 
-**Question:** Include `X` and `Y` in v1 or defer?
-
-**Leaning:** **v1.1 ship item** (🔵 → implement after v1). Spec keeps letters reserved; v1 accepts W/H/Q/I only (+ dot).
-
-**Resolution:** **Deferred from v1; locked for v1.1** — only **required** firmware delta on the code side for v1.1 (with **D5b** as the small optional companion).
+**Resolution:** **v1.1 shipped** — postfix-only duration letters in note/rest descriptors; S5 table extended (X=0.25, Y=0.125 quarter-note beats); internal `dur_x2` ladder rescaled ×4 (W=32 … Y=1); defaults `PLAY_DEFAULT_DUR_X2` / `PLAY_DEFAULT_BEAT_UNIT_X2` = 8. Top-level `X` remains reserved (**D18**). Golden: `grammar_torture_v11.play`.
 
 ---
 
@@ -1733,7 +1729,7 @@ rest_ms       = note_ms - active_ms
 
 **On device:** the interpreter **does not** run this float path in the hot loop — it uses the **integer tick** equivalent in **I4** (`play_calc_*` shared with host preview). The ms formulas above are the **spec contract** and test oracle.
 
-**Duration map** (in quarter-note fractions; v1 **W/H/Q/I** only — **X/Y** deferred **D4**):
+**Duration map** (in quarter-note fractions; v1.1 adds **X/Y** per **D4** 🟢):
 
 
 | Letter | `duration_beats` |
@@ -1742,6 +1738,8 @@ rest_ms       = note_ms - active_ms
 | H      | 2.0              |
 | Q      | 1.0              |
 | I      | 0.5              |
+| X      | 0.25             |
+| Y      | 0.125            |
 
 
 **Beat unit (`%`) map** — “which written note value = **one beat**” (not a full time signature — **no measure length**):
@@ -2619,7 +2617,7 @@ Smoke+ presets land incrementally (**Star Wars** → **Raiders** → other Willi
 
 ### I10 — MSG detail / firmware audit log (vs I1 fence)
 
-**Status:** 🟡 · **Living companion to § MSG** — update when `App/Src/play.c` grows · **Last audited:** 2026-06-14 (**G5** runtime labels/goto/GOSUB/RETURN shipped)
+**Status:** 🟡 · **Living companion to § MSG** — update when `App/Src/play.c` grows · **Last audited:** 2026-06-14 (**G9** X/Y durations shipped)
 
 > **Scan table:** **§ Must-Ship Gap (MSG)** above — tabular v1/v1.1 “what’s left to code.” This section keeps shipped inventory, partial gaps, bring-up order, and audit notes. **Player verbosity** → **§ I11** (not MSG — cross-cutting diagnostic policy).
 
@@ -2688,7 +2686,7 @@ Smoke+ presets land incrementally (**Star Wars** → **Raiders** → other Willi
 | **I4 scheduler**      | 1 ms shared tick; legato default duty 8/8 |
 | **I8 resolve hook**   | Fires on successful resolve |
 | **I9 bench**          | Submenu `m` → `1`/`2`/`s` |
-| **T3 golden**         | `smoke` · `loop` · `tilde` · `raiders` · `ctx` · `labels_*` · `key_snapshot` · `grammar_torture` in `scripts/play_golden/` |
+| **T3 golden**         | `smoke` · `loop` · `tilde` · `raiders` · `ctx` · `labels_*` · `key_snapshot` · `grammar_torture` · `grammar_torture_v11` in `scripts/play_golden/` |
 
 
 **Safe authoring today (copy-paste patterns):**
@@ -2766,14 +2764,23 @@ All below → `**PLAY fault: unsupported executive**` today.
 
 ---
 
+#### v1.1 must-ship — partial (2026-06-14)
+
+| G | Ref | Feature | Firmware | Notes |
+| --- | --- | ------- | -------- | ----- |
+| **G9** | D4 | **`X` / `Y` durations** | ✅ | Descriptor FSM + `b_play_x2_from_duration_letter`; `PLAY_DUR_W…Y_X2` (×4 ladder); defaults = 8; golden `grammar_torture_v11` |
+| **G10** | D5b | **Raw-percent `;nn`** | ❌ | Next v1.1 row |
+
+---
+
 #### Explicitly out of v1 (🔵 — tracked on MSG v1.1, not v1 gaps)
 
-Per **I1 Out** column — do not file as missing **v1** work (v1.1 items are on **§ MSG — v1.1**):
+Per **I1 Out** column — do not file as missing **v1** work (remaining v1.1 items on **§ MSG — v1.1**):
 
 
 | ID      | Item                                              |
 | ------- | ------------------------------------------------- |
-| D4      | `**X` / `Y**` sixteenth / thirty-second durations — **v1.1 required** |
+| D5b     | Raw-percent `;nn` duty — **G10** v1.1 required    |
 | D15, Q1 | Tuplets / triplet timing                          |
 | S3      | Polyphony / `**                                   |
 | D13     | Envelope / ADSR PLAY syntax                       |
@@ -3290,9 +3297,9 @@ Minimum 🟢 before formal grammar + howto + coding:
 | 🟡 Observations / open design | **S11** |
 
 
-**Next suggested chat prompt:** *"Start **v1.1** — implement **G9** (`X`/`Y` durations) per plan § MSG v1.1; read `grammar_torture_v11.play`."*
+**Next suggested chat prompt:** *"Start **v1.1 G10** — raw-percent `;nn` duty (**D5b**) per plan § MSG; read `grammar_torture` duty regression."*
 
-**Session handoff:** [play-v1-session-handoff-2026-06-14-g8.md](play-v1-session-handoff-2026-06-14-g8.md) — **G8** shipped; **v1 firmware MSG complete**.
+**Session handoff:** [play-v1-session-handoff-2026-06-14-g9.md](play-v1-session-handoff-2026-06-14-g9.md) — **G9** shipped; **G10** next.
 
 ### Cross-reference: punctuator roles (D2, S3, D16, D17, D18)
 
