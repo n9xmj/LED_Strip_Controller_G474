@@ -18,6 +18,13 @@ desktop.ini
 *.tmp
 *.log
 
+# Python bytecode caches
+__pycache__/
+*.py[cod]
+
+# Crossnote / Markdown Preview Enhanced (editor-local preview styling)
+.crossnote/
+
 # External reference / example code from other projects (not part of this tree)
 not-in-project/
 
