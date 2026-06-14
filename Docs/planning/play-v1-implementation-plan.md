@@ -229,9 +229,9 @@ Cross-ref: [Docs/PROJECT.md](../PROJECT.md) long-term goals · deferred briefs u
 | W26 | post-v1 | **vTree+ Mk 5 audio-reactive stack** | I2S mic · analog path · DSP leveling · LED mapping; see **Session & product roadmap** + PROJECT.md lineage |
 | W27 | v1.1 stretch | **`uart_stream` (USART2)** | Non-blocking debug UART — register ISR, HAL init-only; **not** PLAY grammar · [uart_stream-port-notes.md](uart_stream-port-notes.md) · enables terminal piano (**I9** / **I8**) |
 | W28 | v2 · low | **Wall-clock note duration (ms)** | Absolute time per note/rest — **ignores `T`/`%`**; **keeps duty ratio** (`_`/`!`/`;`); bench timing torture / scheduler drift / sync latency; inheritance optional · see **W28** stub |
-| W29 | v2 | **Musical dynamics & volume ramps** | Step markings (pp…ff) + **crescendo** / **decrescendo** (diminuendo) — graduated level change over time; extends **D6** `V` + **D13** envelope path · see **W29** stub |
+| W29 | v2 | **Musical dynamics & volume ramps** | Step markings via **`\"dyn:xxx"`** (D18) — pp…ff, sfz, fp, …; ramps via **`\"cresc:`** / **`\"dim:`** (beats + scale); **V-relative** scaling · see **W29** |
 
-*Last wish-list pass: 2026-06-14 (W29 dynamics/crescendo; W28 wall-clock duration).*
+*Last wish-list pass: 2026-06-14 (W29 **`\"dyn:xxx"`** step-syntax leaning; W28 wall-clock duration).*
 
 ---
 
@@ -266,28 +266,47 @@ Cross-ref: [Docs/PROJECT.md](../PROJECT.md) long-term goals · deferred briefs u
 
 ### W29 — Musical dynamics & volume ramps (v2)
 
-**Status:** 🔵 · **Needs user:** no (idea capture 2026-06-14 — syntax **open**)
+**Status:** 🟡 · **Needs user:** no · **Step-syntax leaning locked 2026-06-14** (user **`\"dyn:xxx"`** — matches agent proposal)
 
 **Intent:** Extend expression beyond v1 **`V<n>`** (instant numeric 0–100 step). Two complementary layers:
 
 | Layer | Musical name | Behavior |
 | ----- | ------------ | -------- |
-| **Step dynamics** | *Dynamics* — pp, p, mp, mf, f, ff (+ sfz, fp, …) | Apply a **scaling factor** to the current **`V<n>` baseline** — not an absolute replacement level. e.g. *fortissimo* = multiply present `V` by a fixed ratio (exact factors TBD at syntax close). Sticky until the next dynamic marking. |
+| **Step dynamics** | *Dynamics* — pp, p, mp, mf, f, ff (+ sfz, fp, …) | Apply a **scaling factor** to the current **`V<n>` baseline** — not an absolute replacement level. e.g. *fortissimo* = multiply present `V` by a fixed ratio (exact factors TBD at implement). **Sticky** until the next dynamic marking. |
 | **Graduated ramps** | **Crescendo** · **Decrescendo** / **diminuendo** | **Interpolate** effective volume over a **beat-count span** (ramp **period in beats** is part of the syntax). **Start** and **stop** volumes are **relative to the set `V` baseline** (same scaling model as step dynamics), not raw 0–100 absolutes. |
 
 **User direction (2026-06-14):** **`V<n>`** remains the author’s master volume knob. Symbolic dynamics and ramps are **multipliers / overlays on that baseline** — step markings nudge level up/down by ratio; ramps specify **beats**, **start scale**, and **stop scale** relative to `V`.
 
+**Syntax leaning (step dynamics — 🟡, user lock 2026-06-14):**
+
+Ship step markings on the existing **D18** expansion surface — **no new top-level lead**.
+
+| Form | Example | Semantics |
+| ---- | ------- | --------- |
+| **`\"dyn:<marking>"`** | `\"dyn:p"` · `\"dyn:ff"` · `\"dyn:mp"` | Zero-time executive; **`dyn` handler** maps `<marking>` → scale factor on current **`V`**. Sticky **`dyn_scale`** (name TBD) until next **`\"dyn:…"`** or explicit **`V<n>`** ( **`V` resets absolute baseline** — interaction with sticky scale TBD at implement; leaning: **`V` sets baseline, dyn scales it**). |
+| **Marking alphabet** | `ppp` `pp` `p` `mp` `mf` `f` `ff` `fff` · `sfz` · `fp` | **Case-sensitive** ASCII tokens; **no spaces**. **`fp`** = forte-piano (W29); prefer standard **`fp`** / **`sfp`** over **`pf`**. Unknown token → **S7** recoverable warn (NORMAL) / fatal (STRICT). |
+| **Args shape** | First `:` splits **cmd** from **args** (D18); **`dyn` handler** owns parsing of **`args`** — core parser treats tail as opaque. | Same dispatch pattern as **`ctx:`**. |
+
+**Syntax leaning (ramps — 🔵 open):**
+
+Separate **cmd** names (avoid overloading **`dyn:`** with beat spans):
+
+| Form | Example | Semantics |
+| ---- | ------- | --------- |
+| **`\"cresc:<beats>"`** or **`\"cresc:<beats>,<start>,<stop>"`** | `\"cresc:8"` | Linear (or curved — TBD) ramp over **N beats** at current **`T`/`%`**. Scale endpoints **relative to `V` baseline** (same model as step row). Exact arg grammar **open**. |
+| **`\"dim:<beats>"`** / **`\"decresc:<beats>"`** | `\"dim:4"` | Decrescendo / diminuendo — alias policy TBD. |
+
 **v1 baseline:** `V<n>` sets level immediately on `PLAY_SCHED_SOUND`; no symbolic names, no ramp between events. `grammar_torture` whole-note V/P blocks are **audibility torture**, not crescendo.
 
-**Syntax sketch (open — do not ship without design close):**
+**Implementation notes (when promoted off wish list):**
 
-- **Ramp:** executive or quoted form carrying **period (beats)**, **start volume scale**, **stop volume scale** — all relative to current `V`. Scheduler linearly (or curved) interpolates effective level across the beat span under active `T`/`%`.
-- **Step dynamic:** single token or short executive mapping pp…ff → scale factor applied to present `V` (composer still sets overall loudness with `V` first).
-- **Parser:** must not collide with note leads or **`V`/`P`** executives; see parent spec candidates in [PLAY_language_design.md](../PLAY_language_design.md).
-- **Scheduler:** ramp during `PLAY_SCHED_SOUND` / gap — may share machinery with **D13** ADSR and **W19** portamento freq ramp.
-- **Resolve hook (I8):** emit baseline `V`, scale endpoints, beat span for bench trace / LED viz (**W23**).
+- **Step (`dyn:`):** zero-time — update play state only (like **`ctx:`**). Effective level at note resolve: **`V * dyn_scale`** (single conversion point with **D6**).
+- **Ramps:** scheduler / **I4** must interpolate during **`PLAY_SCHED_SOUND`** and gaps — may share machinery with **D13** ADSR and **W19** portamento freq ramp.
+- **Parser:** **`\"dyn:…"`** / ramp cmds are top-level **D18** only — not valid inside note descriptors.
+- **Resolve hook (I8):** emit baseline **`V`**, **`dyn_scale`**, ramp endpoints, beat span for bench trace / LED viz (**W23**).
+- **T4 / T5:** register **`dyn`** (and ramp cmds when closed) as **extension productions**; semantics in plan **W29**, not duplicated in EBNF prose.
 
-**Cross-ref:** **D6** (`V`) · **D13** (envelope) · **W5** (VIB/TRM/ADSR syntax) · parent spec dynamics section.
+**Cross-ref:** **D6** (`V`) · **D13** (envelope) · **D18** (`ctx:` precedent) · **W5** (VIB/TRM/ADSR syntax) · [Player/README.md](../Player/README.md) · parent spec dynamics section.
 
 **Promote when:** repertoire demos need audible phrasing beyond on/off `V` steps — e.g. Sousa/Elgar tier (**T5**) or expression-heavy v2 scores.
 
@@ -902,6 +921,7 @@ Runtime hit on undefined ref (should not occur if pre-parse ran) → **hard abor
 | `**ctx:` handler** | **Zero-time note-memory load** — `**args**` parsed with the **same rules as a note/rest descriptor suffix** (octave, duration, dot, duty; **no pitch letter**). Updates note memory; **does not schedule** silence or tone. Alternative to `**R**` when author wants context without a rest gap (**D20**). |
 | **Dispatch**       | Core calls `**play_extension_fn_t(cmd, args, ctx)**` (names TBD at v1 implement). Table of handlers; **NULL / unknown `cmd` → default stub**.                                                                                                                                                              |
 | **v1 stub**        | **`ctx:`** applies note-memory suffix (no schedule). **Unknown `cmd`** → WARNING (optional) + echo **args** to UART (`noop:` silent). |
+| **v2 planned**     | **`dyn:`** step dynamics (**W29** 🟡) — `\"dyn:p"` / `\"dyn:ff"` etc.; **`cresc:`** / **`dim:`** ramps (**W29** 🔵). Not in v1/v1.1 fence. |
 | **I8**             | Emit `**PLAY_RESOLVE_EXTENSION**` (or **DEBUG_PRINT** kind with tag) on successful dispatch.                                                                                                                                                                                                               |
 
 
@@ -3300,9 +3320,9 @@ Minimum 🟢 before formal grammar + howto + coding:
 | 🟡 Observations / open design | **S11** |
 
 
-**Next suggested chat prompt:** *"PLAY v1.1 required MSG complete — optional **G11** `uart_stream` stretch, or pivot to mic/DSP per [PROJECT.md](../PROJECT.md)."*
+**Next suggested chat prompt:** *"**G11** `uart_stream` port (child session) **or** doc Phase 2 — **T4** [`v1_grammar.md`](../Player/v1_grammar.md) in [`Docs/Player/`](../Player/). See [play-v1-session-handoff-2026-06-14-player-docs.md](play-v1-session-handoff-2026-06-14-player-docs.md)."*
 
-**Session handoff:** [play-v1-session-handoff-2026-06-14-g10.md](play-v1-session-handoff-2026-06-14-g10.md) — **G10** shipped; v1.1 required PLAY firmware complete.
+**Session handoff:** [play-v1-session-handoff-2026-06-14-player-docs.md](play-v1-session-handoff-2026-06-14-player-docs.md) — **Player/** Phase 1 + **W29** `dyn:` syntax leaning.
 
 ### Cross-reference: punctuator roles (D2, S3, D16, D17, D18)
 
