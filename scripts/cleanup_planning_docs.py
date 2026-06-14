@@ -36,6 +36,7 @@ FEATURE_MSG_MAP = {
     "labels-gosub": "G5",
     "key-snapshot": "G8",
     "xy-durations": "G9",
+    "duty-percent": "G10",
 }
 
 
