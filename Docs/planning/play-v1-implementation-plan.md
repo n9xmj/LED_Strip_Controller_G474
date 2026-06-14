@@ -86,10 +86,10 @@ Cross-ref: [Docs/PROJECT.md](../PROJECT.md) long-term goals · deferred briefs u
 | D23 | 🔵     | **`L"…"` library GOSUB** — nested **L** stack + **`b_stop_is_return`**; callee `*` / **NUL** = return (deferred)                            |
 | D24 | 🟢     | **Beat unit `%`** — `%W`/`%H`/`%Q`/`%I` sets which note value = one beat; **no measure length**; supersedes draft `**U**`                      |
 | S1  | 🟢     | Polyphony — one monophonic PLAY string = one voice; sync post-v1                                                                            |
-| S2  | 🟢     | Goto / label snapshots — forward keep ctx, backward restore; **undefined `>`/`=` ref → hard abort**                                         |
+| S2  | 🟢     | Goto `>` = **pure PC jump** — inherit/carry ctx, **no save, no restore** (revised 2026-06-14); restore lives on `[ ]` (**S4**) + GOSUB/RETURN (**D19**); **undefined `>`/`=` ref → hard abort** |
 | S3  | 🔵     | Sync barriers — **deferred** (post-v1 polyphony); leaning `**                                                                               |
 | S11 | 🟡     | **v2+ headwind** — multi-instance + NVM/FS load **requires** explicit sync/staging model (observations; design open)                        |
-| S4  | 🟢     | Repeat `[ … ]:N` — re-entry restores `**[` snapshot** (same model as S2 backward)                                                           |
+| S4  | 🟢     | Repeat `[ … ]:N` — re-entry restores `**[` snapshot** (structured-loop reset; goto **S2** no longer restores)                               |
 | S5  | 🟢     | **Timing formula** + `**U`/`W/H/Q/I` tables**; `**PLAY_TEMPO_BPM_MAX=240`**; tick budget → **I4**                                           |
 | S6  | 🟢     | Duty constants — `**#define` only** for v1 (`PLAY_DUTY_*`, `PLAY_DUTY_NUMERATOR`)                                                           |
 | S7  | 🟢     | **Error policy** — **S7i** fault-policy modes (lazy / normal / strict); **S7a–S7e** locked                                                  |
@@ -293,8 +293,8 @@ These are **already chosen** in the spec or firmware; v1 implementation should a
 - **Case + accidentals (D7 🟢)** — note letters `**A`–`G` uppercase only**; flat `**b**` or `**-**`; sharp `**#**` / `**+**`; natural `**n**` (descriptor-only). Top-level `**N**` = absolute semitone (**D22**). `**=` not natural** (GOSUB).
 - **Lexical boundaries (D12 🟢)** — Think **BASIC/C lexer**, not REPL lines. **Whitespace** = skipped readability (mostly), plus soft boundary between executives. **String consumers** (**D8b**): optional WS before `**"**`. `**:**` = optional **end-of-statement** at top level (BASIC mental model — **not required** in our metalanguage). After `**:**`, skip WS → next sig char = top-level lead. `**;**` is **not** PLAY EOS — it is **note duty** (**D5** `;` / `**;n**` inside descriptors only; C’s statement-terminator role **not adopted** at top level). **Exception:** `**]:N**` repeat tail (**S4**). `**:**` / `**;**` literal inside `**"…"**`, `**@ … @**`, note sub-FSM.
 - **Polyphony (S1 🟢)** — **One PLAY string = one monophonic voice** (one note at a time per interpreter instance). **No inline chords** in a single string (e.g. no `C4Q E4Q G4Q` chord tuples in one stream). **Polyphony = multiple concurrent `play_instance`s**, each with its own string + note memory + scheduler — **conductor / sync deferred (S3 🔵)**; **load + readiness sync deferred (S11 🟡)**. v1 ships **one monophonic interpreter**; multi-session mixing is post-v1. `**P<n>` (D1)** = timbre within a voice, not a polyphony slot.
-- **Goto / label context (S2 🟢)** — on each `**<n**` (or `**<"…"**`, **D16**/**D17**) parse during playback, **overwrite** stored label snapshot with current note memory. `**>n` forward** (target offset **>** current): move PC only — **keep** present context. `**>n` backward** (target offset **<** current): move PC **and restore** label snapshot at that define (**overwrites** present context). *(Wire: define `**<**`, goto `**>**` per **D17**; older text used `*` for define.)*
-- **Repeat blocks (S4 🟢)** — same **backward restore** principle as S2, anchored at `**[**` instead of `**<n**`. On `**[**` parse: push stack frame + **overwrite** `**[` open snapshot** with current note memory. **First** entry into the body: continue **without** restore (forward entry). On `**]**` with iterations remaining: **restore `[` snapshot** and jump to after `**[**` (re-entry overwrites mutations from the prior pass). On `**]**` when count exhausted: pop stack, continue forward. Nested repeats: **one snapshot per stack frame**.
+- **Goto / label context (S2 🟢 — revised 2026-06-14)** — `**>n**` / `**>"…"**` (**D16**/**D17**) is a **pure PC jump**: resolve the target via the pre-parse table, set the PC to its `**<**` define offset, and **carry the current note memory unchanged**. **No snapshot is saved at `<` and none is restored at `>`** — forward and backward jumps are identical in the engine (just "set PC"). Context restoration is reserved for **structured** constructs: `**[ … ]:N**` repeat (**S4**) and GOSUB/RETURN (**D19**). A backward-goto loop therefore **carries/accumulates** whatever the body mutates (e.g. `**<l ^C >l**` climbs octaves) — author-intuitive, goto-like; for per-iteration reset use `**[ ]**`. *(Wire: define `**<**`, goto `**>**` per **D17**.)*
+- **Repeat blocks (S4 🟢)** — **structured-loop reset** anchored at `**[**`. On `**[**` parse: push stack frame + **overwrite** `**[` open snapshot** with current note memory. **First** entry into the body: continue **without** restore (forward entry). On `**]**` with iterations remaining: **restore `[` snapshot** and jump to after `**[**` (re-entry overwrites mutations from the prior pass). On `**]**` when count exhausted: pop stack, continue forward. Nested repeats: **one snapshot per stack frame**. *(This is the construct that resets per pass — raw goto **S2** does not.)*
 - **Synth path today** — CORDIC sine + linear attack/decay + fast retrigger release (`synth_engine`); monophonic output first.
 - **Resolve hook (I8 🟢)** — every time the parser finishes one **complete executive** (note, rest, meta, `?`, structural token, …), invoke an optional **Release-safe callback** with source span + resolved semantics + schedule context. Default **NULL** (single branch, near-zero cost). Enables verbose console echo, golden trace tests, virtual synthboard GUI, LED animation — without duplicating the parser. Parameter struct TBD at implementation; see **I8** detail.
 - **Storage direction (post-v1 loader)** — text `.play` on LittleFS / FAT; not blocking first on-device interpreter if strings live in flash/const for tests.
@@ -786,9 +786,9 @@ C4Q ?"after C4" E4Q
 
 | Token              | Meaning                                                                                                |
 | ------------------ | ------------------------------------------------------------------------------------------------------ |
-| `**<"repeat"**`    | Define label `**repeat**` at this offset; capture **S2** snapshot on each pass                         |
+| `**<"repeat"**`    | Define label `**repeat**` at this offset (pre-parse records offset; **no runtime snapshot** — S2 revised 2026-06-14) |
 | `**C4QDEFGABC5R`** | **C4Q** · **D–B** inherit quarter + oct 4 · **C5** top C (oct 5, **Q** inherited) · **R** quarter rest |
-| `**>"repeat"`**    | Goto label `**repeat**` — backward jump → **S2** restore snapshot, replay forever                      |
+| `**>"repeat"`**    | Goto label `**repeat**` — backward PC jump, **carry context**, replay forever (body has no ctx mutation here, so each pass is identical) |
 
 
 **More readable equivalent (optional whitespace):**
@@ -1487,33 +1487,30 @@ Same **`?"…"`** path as lyrics, bench trace, and section headers (**D14**). Ho
 
 ### S2 — Goto / label context snapshots
 
-**Status:** 🟢 · **Needs user:** no (resolved 2026-06-11; wire tokens amended **D17** / **D16** 2026-06-11)
+**Status:** 🟢 · **Needs user:** no (resolved 2026-06-11; wire tokens amended **D17**/**D16** 2026-06-11; **context model revised 2026-06-14** — goto no longer restores)
 
-**Question:** When is note memory restored from a saved snapshot?
+**Question:** What happens to note memory across a goto?
 
 **Wire (D17/D16):** `**<"name"`** or `**<n**` defines a label · `**>"name"**` or `**>n**` gotos to it — **same name/id on both sides** for loops. Goto lead is **single `>`** (not legacy `**><n>**`).
 
-**User direction (locked):**
+**User direction (revised 2026-06-14):** Goto is a **pure PC jump** in both directions — it never saves or restores context.
 
 
-| Jump                                                   | Context rule                                                                                                                                 |
-| ------------------------------------------------------ | -------------------------------------------------------------------------------------------------------------------------------------------- |
-| **Forward goto** (label **ahead** of current position) | **Present context in effect** — goto moves PC only; tempo/key/volume/transpose/voice/duty **unchanged**.                                     |
-| **Backward goto** (label **behind** current position)  | **Context at the label marker** — restore note memory snapshot captured when `**<"`** / `**<n**` was parsed; **overwrites** present context. |
+| Jump                                                   | Context rule                                                                                          |
+| ------------------------------------------------------ | ---------------------------------------------------------------------------------------------------- |
+| **Forward goto** (label ahead)                         | Move PC only; current context (tempo/key/volume/transpose/voice/duty/octave) **carries unchanged**.  |
+| **Backward goto** (label behind)                       | **Identical** — move PC only; context **carries** (accumulates whatever the loop body mutated).       |
 
 
-**Musician rationale:** Forward jumps (D.S. al coda, skip ahead) carry your current interpretation. Backward jumps (D.C., `**>"repeat"`** loops) re-enter the section as it was **marked**. Authors who want different behavior should make the **first note and metas explicit** immediately after the backward target.
+**Rationale (why the 2026-06-11 backward-restore was dropped):** No goto in any language restores machine state; it just moves the PC. Tying reset-per-iteration semantics to raw `**>**` was surprising (a `**<l ^C >l**` loop *should* climb octaves, not silently wipe the `**^**` each pass) and forced per-label runtime snapshot machinery + a forward/backward branch in the hot path. **Restoration now lives only on structured constructs** — `**[ … ]:N**` repeat (**S4**, resets per pass) and GOSUB/RETURN (**D19**, restores caller on `**/**`). Authors who want a non-drifting loop use `**[ ]**`; authors who want explicit re-entry state set `**T`/`K`/`V`** right after the target.
 
-**Implementation rules:**
+**Implementation rules (revised):**
 
-1. **Pre-scan** records `**<"name"`** / `**<n` → offset** only. No context snapshot at pre-scan. **Same pass:** every `**>…`** / `**=…**` must resolve (**missing → FATAL**); **unreferenced `<…`** → **WARNING** at pass end (**S7b**); required-string quote faults → **FATAL** (**D8b**) — refuse to play on **FATAL** only (**S7d**).
-2. **On each label define during playback:** `label_snapshot[key] = current_note_memory` (**overwrite** on every pass over the marker).
-3. **On goto (`>"…"` / `>n`) or GOSUB (`="…"` / `=n`):** resolve key in label table; if **missing** *(pre-parse should have refused)* → **hard abort** (stop playback). Compare **target offset** vs **current offset** *(goto only)*:
-  - **Forward** (`target > current`): set `pos = target`; **do not** restore snapshot.
-  - **Backward** (`target < current`): set `pos = target`; `**note_memory = label_snapshot[key]`**.
-  - **Same offset** (degenerate): treat as **forward** (PC only).
-4. **PC landing:** position at **first char of `<`** — label token is **re-parsed** on continued execution (snapshot refreshed per rule 2).
-5. **Repeat blocks (S4 🟢):** same backward-restore model at `**[`** (distinct storage, identical semantics).
+1. **Pre-scan** records `**<"name"`** / `**<n` → offset** only (unchanged — **G4** ✅). Every `**>…`** / `**=…**` must resolve (**missing → FATAL**, **S7d**); **unreferenced `<…`** → **WARNING** (**S7b**); quote faults → **FATAL** (**D8b**).
+2. **Label define at runtime:** **no-op for context** — just skip the token. (No `label_snapshot` array; that storage is removed.)
+3. **On goto (`>"…"` / `>n`):** resolve key in label table; if **missing** *(pre-parse should have refused)* → **hard abort** (**S7a**). Set `**pos = target_offset`** (the `**<**` define char). **No offset comparison, no snapshot touch** — forward and backward are the same code path.
+4. **PC landing:** position at **first char of `<`** — the define token is re-parsed and skipped on continued execution.
+5. **Where restore still happens:** `**[ … ]:N**` re-entry (**S4**) and `**/**` RETURN (**D19**) — those keep their snapshot save/restore. Goto does not.
 
 **Examples:**
 
@@ -1523,26 +1520,26 @@ Same **`?"…"`** path as lyrics, bench trace, and section headers (**D14**). Ho
 <"repeat"C4QDEFGABC5R>"repeat"
 ```
 
-Backward `**>"repeat"**` each time → restore snapshot from `**<"repeat"**` → scale replays forever.
+Backward `**>"repeat"**` each time → PC jump, **carry context** → scale replays forever (body changes no context, so passes are identical).
 
-**Forward vs backward (numeric):**
+**Context carries across jumps (numeric):**
 
 ```
-T120 <1 C4Q D4Q E4Q >2    ; <1 snapshot = T120; forward to >2 keeps T120
-<2 F4Q G4Q >1             ; backward to >1 → restore T120, replay from <1
+T120 <1 C4Q D4Q E4Q >2    ; forward to >2 — T120 carries
+<2 F4Q G4Q >1             ; backward to >1 — T120 still in effect (no restore); loops forever
 ```
 
 ```
 T120 <1 C4Q
-T140 D4Q >2               ; snapshot at <1 was T120; forward to >2 keeps T140
-<2 E4Q                    ; E4 plays at T140 (not T120)
+T140 D4Q >2               ; forward to >2 — T140 in effect
+<2 E4Q                    ; E4 plays at T140
 ```
 
-**Author escape hatch:** After a backward jump, set `**T` / `K` / `V` / explicit note accidentals** if the restored marker context isn't what you want for this re-entry.
+**Climbing-loop idiom (now works):** `**T120 O4 <l ^C4Q >l**` raises the octave every pass (carry). For a *fixed* repeat use the structured loop: `**[ C4Q ]:4**`.
 
-**Rejected for v1:** Always-restore on any goto · never-restore (breaks D.C./loop idioms).
+**Rejected:** ~~always-restore on any goto~~ · ~~backward-restore only (2026-06-11, superseded)~~ — both replaced by **pure-jump goto** + restore-on-structured-constructs.
 
-**Resolution:** **Forward = PC only; backward = restore snapshot at label define; snapshot updated on every `<` parse; repeats use same restore-on-re-entry at `[` (S4). Wire: `<` define, `>` goto, quoted or numeric id.**
+**Resolution (2026-06-14):** **Goto `>` = pure PC jump, both directions; inherit/carry context; no per-label snapshot saved or restored. Reset-per-iteration = `[ ]:N` (S4); caller-context restore = `/` RETURN (D19). Wire: `<` define, `>` goto, quoted or numeric id.**
 
 ---
 
