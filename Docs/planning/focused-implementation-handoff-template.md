@@ -64,4 +64,17 @@ What MSG row or doc the *following* focused session should read.
 
 **Lifecycle:** when MSG is ✅ and checklist is closed, run **`/cleanup-docs`** — archive or delete this file; facts live in the plan (MSG/I10) and code.
 
+## Child completion summary (required)
+
+When bench is green, post a **copy-paste block** for the parent orchestrator:
+
+```text
+G<n> child complete — <one-line outcome>.
+
+Shipped: <bullets — code + goldens>.
+Bench green (COM9, build #N): <test names>.
+Docs: <plan/chatbot/handoff updates>.
+Next: <next MSG row or opener>.
+```
+
 **End of template**

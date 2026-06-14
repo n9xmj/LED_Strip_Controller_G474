@@ -52,6 +52,6 @@ Read play-v1-implementation-plan.md G9 + grammar_torture_v11.play.
 
 ## Git note
 
-WIP commit from `/wrapup` — G8 firmware + golden + plan/chatbot updates.
+Shipped on `main`: `ee4e064` (G8). Parent cleanup commit pending push.
 
 **End of handoff**
