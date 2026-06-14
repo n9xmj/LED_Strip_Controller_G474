@@ -93,5 +93,12 @@
     "file": "labels_fatal_quote.play",
     "expect_start_fail": true,
     "aliases": ["G4-fatal-quote", "labels-quote"]
+  },
+  "key_snapshot": {
+    "description": "G8 key LUT in repeat/GOSUB snapshots — F vs G on bare B",
+    "tier": "feature",
+    "file": "key_snapshot.play",
+    "policy": "strict",
+    "aliases": ["G8", "key-snapshot"]
   }
 }

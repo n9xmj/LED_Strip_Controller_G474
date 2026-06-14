@@ -1,8 +1,8 @@
 # Agent Handoff: G8 — Key LUT in context snapshots (D8 / S4 / D19)
 
 **Date:** 2026-06-14  
-**Status:** IN PROGRESS (archive candidate after MSG **G8** ✅)  
-**MSG:** **G8** · **Plan refs:** **D8**, **S4**, **D19** (🟢 — do not re-litigate)  
+**Status:** ✅ COMPLETE (archive candidate — run `/cleanup-docs`)  
+**MSG:** **G8** ✅ · **Plan refs:** **D8**, **S4**, **D19** (🟢 — do not re-litigate)  
 **Bench:** COM9 @ 921600 · ST-Link SN from `scripts/bench.defaults.json` (`003C00193137510C39383538`)
 
 **Authoritative plan:** [play-v1-implementation-plan.md](play-v1-implementation-plan.md) — MSG **G8** row, **D8** detail, **S4** repeat snapshot rules  

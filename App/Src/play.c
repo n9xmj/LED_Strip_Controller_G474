@@ -60,6 +60,7 @@ typedef struct
     uint8_t  u8_duty_den;
     int16_t  i16_transpose;
     uint8_t  u8_voice;
+    int8_t   ai8_key_lut[7];
 } play_ctx_snapshot_t;
 /** @brief Last completed note/rest — replay source for top-level ~ (D2/S10). */
 typedef struct
@@ -2175,6 +2176,7 @@ static void v_play_snapshot_save(play_runtime_t *px_rt, play_ctx_snapshot_t *px_
     px_out->u8_duty_den = px_rt->x_note_mem.u8_duty_den;
     px_out->i16_transpose = px_rt->i16_transpose;
     px_out->u8_voice = px_rt->u8_voice;
+    memcpy(px_out->ai8_key_lut, px_rt->ai8_key_lut, sizeof(px_out->ai8_key_lut));
 }
 static void v_play_snapshot_restore(play_runtime_t *px_rt,
                                     const play_ctx_snapshot_t *px_in)
@@ -2194,6 +2196,7 @@ static void v_play_snapshot_restore(play_runtime_t *px_rt,
     px_rt->x_note_mem.u8_duty_den = px_in->u8_duty_den;
     px_rt->i16_transpose = px_in->i16_transpose;
     v_play_apply_voice(px_rt, px_in->u8_voice);
+    memcpy(px_rt->ai8_key_lut, px_in->ai8_key_lut, sizeof(px_rt->ai8_key_lut));
 }
 static void v_play_apply_voice(play_runtime_t *px_rt, uint8_t u8_voice)
 {
@@ -2719,6 +2722,7 @@ static bool b_play_close_repeat(play_runtime_t *px_rt)
     if (px_f->u16_remaining > 1U)
     {
         px_f->u16_remaining--;
+        v_play_snapshot_restore(px_rt, &px_f->x_snap);
         px_rt->x_public.u32_src_offset = px_f->u32_body_start;
     }
     else

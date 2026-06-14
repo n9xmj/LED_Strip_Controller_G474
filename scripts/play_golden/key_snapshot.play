@@ -1,0 +1,10 @@
+@ G8 key LUT in snapshot - repeat + GOSUB restore @
+T120 O4 %Q
+@ Repeat: [ snap = F; body sets G; re-entry must restore F @
+K"F"
+[ K"G" B4Q ]:2
+@ GOSUB: main F; callee G; return restores F @
+K"F"
+B4Q ="sub" B4Q
+*
+<"sub" K"G" B4Q /

@@ -6,7 +6,7 @@
 
 **Living document:** Update this file whenever `App/Src/play.c` gains or loses behavior. **Firmware truth:** `App/Src/play.c` + bench presets in `App/Src/play_presets.c`.
 
-**Last updated:** 2026-06-14 (audited against firmware — **G5** runtime labels/goto/GOSUB/RETURN; **G4** two-pass pre-parse forward refs)
+**Last updated:** 2026-06-14 (audited against firmware — **G8** key LUT in snapshots; **G5** labels/GOSUB; **G4** pre-parse)
 
 ---
 
@@ -153,12 +153,12 @@ These start a new statement at the top level (after whitespace), not inside a no
 | **`=` / `/`** | `="name"` `/` | GOSUB / RETURN (caller snapshot restore) | **YES** — empty `/` stack → **fatal** |
 | **`:`** | | Optional statement terminator (D12) | **NO** — stray `:` warns |
 
-### Repeat blocks — caveat (**YES** with spec drift)
+### Repeat blocks (**YES** — S4 snapshot restore)
 
 Syntax: `[ body ]:N` (e.g. `[CQDQEQ]:4`).
 
-- **YES:** open `[`, close `]:N`, loop body, nested depth limit.
-- **Spec drift:** on `]` re-entry, the **`[` snapshot is not restored** — mutations inside the loop **persist** across iterations (plan amended 2026-06-13). Put **`^`** / **`O`** changes where you intend them.
+- **YES:** open `[` saves ctx snapshot (incl. key LUT); close `]:N`, loop body, nested depth limit.
+- **S4:** on `]` re-entry when iterations remain, **`[` snapshot is restored** then PC jumps to body start — mutations from the prior pass are undone (**G8**).
 - **Goto (`>`):** pure PC jump — **no** snapshot save/restore (S2 revised 2026-06-14). Backward goto loops accumulate context; use `[ ]:N` for per-iteration reset.
 
 ---
@@ -273,7 +273,8 @@ Group checklist for authors and chatbots — **do not rely on these in scores me
 **Structure**
 
 - ~~`<` / `>` labels and gotos~~ — **shipped (G5)** — pre-parse table (**G4**) + runtime PC jump; goto carries ctx (S2)
-- ~~`=` GOSUB / `/` RETURN~~ — **shipped (G5)**
+- ~~`=` GOSUB / `/` RETURN~~ — **shipped (G5)** — caller snapshot includes key LUT (**G8**)
+- ~~Key LUT in repeat/GOSUB snapshots~~ — **shipped (G8)**
 - ~~Startup label pre-scan (S7d)~~ — **shipped (G4)** — two-pass forward refs
 - `:` as statement terminator  
 
