@@ -183,7 +183,7 @@ Cross-ref: [Docs/PROJECT.md](../PROJECT.md) long-term goals · deferred briefs u
 | **GP5** | **T5** | Musician howto + repertoire | 🔴 | v1 **stretch** doc |
 | **GP6** | — | Living docs sync | 🟡 | [play-v1-chatbot-brief.md](play-v1-chatbot-brief.md) · [play-lead-char-cheat-sheet.md](play-lead-char-cheat-sheet.md) after each **G** row closes |
 | **GP7** | — | **`grammar_torture.play`** | ✅ | v1 fence; re-run after each v1 **G** close |
-| **GP8** | — | **`grammar_torture_v11.play`** | ✅ | **G9** — X/Y appendix + long-run perf scales |
+| **GP8** | — | **`grammar_torture_v11.play`** | ✅ | **G9** — N0..N95 chromatic X/Y torture (loops + GOSUB; `--timeout 120`) |
 
 *Promote a row off MSG when firmware lands; bump **Last audited** and sync **I10** detail + living docs.*
 
@@ -2768,7 +2768,7 @@ All below → `**PLAY fault: unsupported executive**` today.
 
 | G | Ref | Feature | Firmware | Notes |
 | --- | --- | ------- | -------- | ----- |
-| **G9** | D4 | **`X` / `Y` durations** | ✅ | Descriptor FSM + `b_play_x2_from_duration_letter`; `PLAY_DUR_W…Y_X2` (×4 ladder); defaults = 8; golden `grammar_torture_v11` |
+| **G9** | D4 | **`X` / `Y` durations** | ✅ | Descriptor FSM + `b_play_x2_from_duration_letter`; `PLAY_DUR_W…Y_X2` (×4 ladder); golden `grammar_torture_v11` (chromatic torture) |
 | **G10** | D5b | **Raw-percent `;nn`** | ❌ | Next v1.1 row |
 
 ---
@@ -3042,7 +3042,7 @@ Skill files: **`.grok/skills/playstr|playfile|playtest/SKILL.md`**. Registry: **
 | **Smoke+** | `**m` → `g`** (golden) | **Musician demo + notation exercise** — few bars each of favorite **John Williams** themes **plus** implemented-executive micro-features | **`PLAY_FAULT_POLICY_STRICT`** · **ENDED** · zero fatals |
 | **Feature** | `**m` → `g` N** or flash table | Per-capability micro-strings (inheritance, `%`, duty, `[ ]:`, …) | STRICT when fw supports token |
 | **Torture** | post-**I10** · `**grammar_torture.play**` | Full **I1** fence in one string — labels, GOSUB, repeat, **K**, **&**, … | STRICT · **`play_bench.py test grammar_torture`** |
-| **Torture v1.1** | post-**D4** · `**grammar_torture_v11.play**` | **X** / **Y** duration appendix only | STRICT · run after v1 torture green |
+| **Torture v1.1** | post-**D4** · `**grammar_torture_v11.play**` | **X**/**Y** + full chromatic **N0..N95** (loops, GOSUB) | STRICT · **`--timeout 120`** |
 
 **Smoke+ repertoire (locked 2026-06-13 — user direction):** **A few bars** of each — monophonic reduction, ROM presets in `**play_presets.c**`, not full arrangements. Woven with notation variations the interpreter already supports (compact runs, `%`, duty, `?"` titles/lyrics, `@` comments, repeats where useful).
 

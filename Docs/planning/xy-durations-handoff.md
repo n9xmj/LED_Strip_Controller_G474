@@ -16,7 +16,7 @@
 - **`dur_x2` ladder ×4:** W=32, H=16, Q=8, I=4, X=2, Y=1
 - **Defaults:** `PLAY_DEFAULT_DUR_X2` / `PLAY_DEFAULT_BEAT_UNIT_X2` = 8
 - **Parser:** `b_play_x2_from_duration_letter` + descriptor sub-FSM (`b_play_parse_pitch_token`, rest, `ctx:`)
-- **Golden:** `grammar_torture_v11.play` — dotted forms + long X/Y scale runs
+- **Golden:** `grammar_torture_v11.play` — N0..N95 chromatic torture (loops + 10-label GOSUB chains; ~1409 chars; use `--timeout 120`)
 - **Regression:** `grammar_torture` (v1) + `smoke` unchanged wall-clock (C4Q @ T240 = 250 ms)
 
 ## Files touched
@@ -26,7 +26,8 @@
 | `App/Src/play.c` | Constants, helper, 3× descriptor FSM |
 | `App/Inc/play_config.h` | Default dur/beat unit ×4 |
 | `App/Src/debug_menu.c` | Resolve trace suffix map |
-| `scripts/play_golden/grammar_torture_v11.play` | Perf scale runs |
+| `scripts/play_golden/grammar_torture_v11.play` | Chromatic N0..N95 torture golden |
+| `scripts/gen_v11_chromatic.py` | Regenerator (PLAY_LABEL_TABLE_MAX=10) |
 
 ## Next
 

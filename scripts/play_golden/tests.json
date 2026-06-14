@@ -53,11 +53,11 @@
     "aliases": ["T3-torture", "grammar-all", "grammar-hil", "I1-torture"]
   },
   "grammar_torture_v11": {
-    "description": "v1.1 appendix — D4 X/Y durations (run after D4 ships)",
+    "description": "v1.1 appendix — D4 X/Y chromatic N0..N95 torture (loops + GOSUB chains)",
     "tier": "torture",
     "file": "grammar_torture_v11.play",
     "policy": "strict",
-    "aliases": ["D4", "XY", "grammar-v11"]
+    "aliases": ["D4", "XY", "grammar-v11", "chromatic-torture"]
   },
   "labels_scan": {
     "description": "G4 pre-parse — label define + ref resolve; music completes",
