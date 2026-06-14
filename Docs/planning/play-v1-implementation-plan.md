@@ -1,7 +1,7 @@
 # PLAY v1 — Implementation readiness plan
 
 **Parent spec:** [Docs/PLAY_language_design.md](../PLAY_language_design.md)  
-**Related:** [co5ths_key_signature_handoff.md](../co5ths_key_signature_handoff.md) · [labels-preparse-handoff.md](labels-preparse-handoff.md) (**G4** focused session) · [tools/play_melody.py](../../tools/play_melody.py) · **[play-lead-char-cheat-sheet.md](play-lead-char-cheat-sheet.md)** (planning quick ref) · **[play-v1-chatbot-brief.md](play-v1-chatbot-brief.md)** (LLM / author copy-paste brief — **living fw status**) · [decision-log-model.md](decision-log-model.md) (**Big Board** + **§ MSG** + **wish list** mechanics)  
+**Related:** [co5ths_key_signature_handoff.md](../co5ths_key_signature_handoff.md) · [focused-implementation-handoff-template.md](focused-implementation-handoff-template.md) (focused MSG sessions) · [tools/play_melody.py](../../tools/play_melody.py) · **[play-lead-char-cheat-sheet.md](play-lead-char-cheat-sheet.md)** (planning quick ref) · **[play-v1-chatbot-brief.md](play-v1-chatbot-brief.md)** (LLM / author copy-paste brief — **living fw status**) · [decision-log-model.md](decision-log-model.md) (**Big Board** + **§ MSG** + **wish list** mechanics)  
 **Branch:** `main` · **Status:** IN PROGRESS (G474 bench — v1 / v1.1 ship target)
 
 > **Goal:** Move PLAY from "early preview" to an **implementation-ready v1 contract**
@@ -3260,9 +3260,9 @@ Minimum 🟢 before formal grammar + howto + coding:
 | 🟡 Observations / open design | **S11** |
 
 
-**Next suggested chat prompt:** *"Close next **I10** row (e.g. **K** or labels/pre-scan) and refresh cheat sheet + chatbot brief."*
+**Next suggested chat prompt:** *"Implement **G5** (labels/goto/GOSUB) — copy [focused-implementation-handoff-template.md](focused-implementation-handoff-template.md) to `labels-gosub-handoff.md` and run a focused session."*
 
-**Session handoff:** [play-v1-session-handoff-2026-06-11.md](play-v1-session-handoff-2026-06-11.md) — roadmap lock 2026-06-13: **v1 + v1.1** on G474; **T4/T5** stretch; post-v1 → mic/DSP/audio-reactive per [PROJECT.md](../PROJECT.md).
+**Session handoff:** [play-v1-session-handoff-2026-06-13.md](play-v1-session-handoff-2026-06-13.md) — **G4** shipped; **G5** + **G8** remain on MSG v1.
 
 ### Cross-reference: punctuator roles (D2, S3, D16, D17, D18)
 

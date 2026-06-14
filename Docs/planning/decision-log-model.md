@@ -160,6 +160,19 @@ Resolved items keep their history (options + rationale) so handoffs stay auditab
 
 **Session end** — run **`/wrapup`** (`.grok/skills/wrapup/SKILL.md`): sanity-check docs, refresh handoff, commit WIP (no push by default).
 
+**After MSG ships** — run **`/cleanup-docs`** (`.grok/skills/cleanup-docs/SKILL.md`): archive completed feature briefs, delete superseded session handoffs, fix stale links. Permanent template: [`focused-implementation-handoff-template.md`](focused-implementation-handoff-template.md).
+
+### Handoff doc lifecycle (ephemeral vs permanent)
+
+| Artifact | Pattern | Lifecycle |
+| -------- | ------- | --------- |
+| Session handoff | `*-session-handoff-YYYY-MM-DD.md` | Keep **newest 1**; delete older via `/cleanup-docs` |
+| Feature impl brief | `<topic>-handoff.md` | Copy from template; **archive** when MSG **✅** |
+| Template | `focused-implementation-handoff-template.md` | **Permanent** |
+| Plan / MSG / I10 | `*-implementation-plan.md` | **Permanent** contract |
+
+Automation: `python scripts/cleanup_planning_docs.py` (dry-run) · `--apply` to execute.
+
 ---
 
 ## Related project docs

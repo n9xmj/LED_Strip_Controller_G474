@@ -1,6 +1,6 @@
 # PLAY v1 session handoff — 2026-06-13 (G4 pre-parse)
 
-**Branch:** `main` (uncommitted WIP)  
+**Branch:** `main` (G4 + cleanup-docs committed; pushed)  
 **Bench:** COM9 @ 921600 · ST-Link `003C00193137510C39383538`  
 **Firmware:** 3.0.7 build **8** (incremental — no bump this session)
 
@@ -49,13 +49,13 @@ Harness: `expect_start_fail` in `tests.json` + `play_test_client.assess_log()`.
 | `scripts/play_bench.py` | Wire manifest flags to client |
 | `Docs/planning/play-v1-implementation-plan.md` | MSG **G4** ✅, I10 audit |
 | `Docs/planning/play-v1-chatbot-brief.md` | Pre-scan YES; runtime goto still NO |
-| `Docs/planning/labels-preparse-handoff.md` | Checklist closed |
+| `Docs/planning/archive/labels-preparse-handoff.md` | Archived after G4 ✅ (`/cleanup-docs`) |
 
 ---
 
 ## Next session — **G5** (D16–D19)
 
-Read [`labels-preparse-handoff.md`](labels-preparse-handoff.md) §10 + plan **G5** row.
+Read plan **G5** row + copy [focused-implementation-handoff-template.md](focused-implementation-handoff-template.md) → `labels-gosub-handoff.md`. G4 archive: [archive/labels-preparse-handoff.md](archive/labels-preparse-handoff.md) §10.
 
 Implement runtime:
 
@@ -74,6 +74,13 @@ Implement runtime:
 | - | ------- | ------ |
 | **G5** | Runtime labels / goto / GOSUB / RETURN | ❌ next |
 | **G8** | Key LUT in repeat/label snapshots | 🟡 partial |
+
+---
+
+## Parent orchestrator log
+
+- **2026-06-13:** G4 child shipped (`48d4819`); `/cleanup-docs` landed; next child = **G5** from [focused-implementation-handoff-template.md](focused-implementation-handoff-template.md).
+- **Parent role:** plan/MSG triage, commit/push, brief authoring — not large firmware edits.
 
 ---
 

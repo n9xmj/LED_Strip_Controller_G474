@@ -76,7 +76,7 @@ For specs or features with many open decisions (e.g. PLAY meta-language v1), use
 
 Also indexed in [`.grok/memory/MEMORY.md`](.grok/memory/MEMORY.md). Loaded on `/bootstrap` / `/read-the-docs`.
 
-**Session boundaries:** run **`/wrapup`** before leaving a long planning/coding session (handoff doc + WIP commit, no push by default). Start the next session with **`/read-the-docs`**. Both skills must print **clickable markdown links** (repo-relative paths) to active WIP docs — especially the planning plan and handoff — so you can reopen them in the editor or side pane in one click.
+**Session boundaries:** run **`/wrapup`** before leaving a long planning/coding session (handoff doc + WIP commit, no push by default). Start the next session with **`/read-the-docs`**. After an MSG row ships (**✅**), run **`/cleanup-docs`** to archive feature briefs and prune old session handoffs (see [`focused-implementation-handoff-template.md`](Docs/planning/focused-implementation-handoff-template.md)). Both skills must print **clickable markdown links** (repo-relative paths) to active WIP docs — especially the planning plan and handoff — so you can reopen them in the editor or side pane in one click.
 
 ## Sources of Truth
 

@@ -151,5 +151,6 @@ PLAY planning lives in this repo (`LED_Strip_Controller_G474`). Mirror/STM32 rep
 ## Related skills
 
 - `/read-the-docs` / `/bootstrap` — session **start** (reads handoff)
+- `/cleanup-docs` — after MSG **✅**; prune session handoffs + archive feature briefs
 - `/update-docs` — broader doc sync after **features** ship
 - `/commit` — ad-hoc commit; wrapup owns end-of-session WIP commit discipline
