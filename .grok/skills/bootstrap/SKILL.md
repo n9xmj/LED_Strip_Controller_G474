@@ -44,7 +44,7 @@ Use **markdown links** with **repo-relative paths** from the project root (Curso
 
 - [play-v1-session-handoff-YYYY-MM-DD.md](Docs/planning/play-v1-session-handoff-YYYY-MM-DD.md) — prior session handoff (start here if in-flight)
 - [play-v1-implementation-plan.md](Docs/planning/play-v1-implementation-plan.md) — master decision log
-- [play-lead-char-cheat-sheet.md](Docs/planning/play-lead-char-cheat-sheet.md)
+- [Player/cheat_sheet.md](Docs/Player/cheat_sheet.md)
 - [decision-log-model.md](Docs/planning/decision-log-model.md)
 - [AGENTS.md](AGENTS.md)
 - [Docs/PROJECT.md](Docs/PROJECT.md)

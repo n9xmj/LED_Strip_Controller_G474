@@ -1,23 +1,18 @@
 # PLAY Meta-Language Design (Player-Piano / Sequencer)
 
-> **Implementation readiness:** open decisions are tracked in the living plan
-> [`Docs/planning/play-v1-implementation-plan.md`](planning/play-v1-implementation-plan.md)
-> (resolve by ID in chat: D1, S2, I1, …). Planning workflow:
-> [`Docs/planning/decision-log-model.md`](planning/decision-log-model.md).
+> **Legacy design notebook** — historical exploration and rationale. **User-facing docs:** [`Docs/Player/README.md`](Player/README.md) (cheat sheet, chatbot brief, planned howto + EBNF). **Locked v1 contract:** [`Docs/planning/play-v1-implementation-plan.md`](planning/play-v1-implementation-plan.md). **Firmware truth:** `App/Src/play.c`.
 
-**Status:** Early preview / evolving → **v1 contract in progress** (see plan above).  
-**Owner:** User (full spec coming).  
-**Current driver:** `tools/play_melody.py` (host-side, drives the terminal note player over serial).  
-**Recent progress (as of this session):** CORDIC-based sine synth now has linear attack (~7 ms) + decay (~4 ms) envelope + special fast transition release logic (3 ms) for clean note changes in the live 'p' player (no more audible pops on key-to-key or octave shifts). Hot-swap of tones without stopping the I2S stream. Linear envelopes noted as acceptable for de-popping; proper ADSR will want exponential/log ramps later.  
-**Future target:** On-device interpreter that can load strings from LittleFS (SPI NOR flash) or FAT32 (SD card) and drive the `synth_engine` autonomously (extending it for multiple waveforms).
+**Status (2026-06-14):** v1 + v1.1 required PLAY firmware **shipped** on G474 (MSG **G1–G10**). This file is **not** the authoring manual or normative grammar — see **Player/** folder and plan **T1/T4/T5**.
+
+**Owner:** User · **On-device driver:** `App/Src/play.c` · **Host piano (legacy):** `tools/play_melody.py`
 
 ---
 
 **Handoff / Current State Summary (as of late June 2026)**
 
-This document is the single source of truth for the PLAY meta-language. All major design decisions from iterative sessions are captured here with "current thinking + wiggle room" language.
+This document captured early design iterations. Decisions that **shipped** are authoritative in the **implementation plan** and **Player/** living docs. Sections below may describe **superseded** syntax (e.g. `S` transpose → **`&`**, `*` label define → **`<`**, `U` beat unit → **`%`**, unquoted `K` → **`K"…"`** only).
 
-**Core model (solid, low risk of change):**
+**Core model (still valid):**
 - Unified per-voice "note memory" (static struct) holding both note attributes and command-driven state (tempo, key, volume, transposition, instrument, note/rest ratio, etc.).
 - Inheritance/default propagation is a deliberate win for compactness and parser simplicity.
 - Lead characters (notes A–G and command leads) must be unique for immediate top-level dispatch. Metadata/suffix characters (durations W H Q I X Y, dot, `_` `!`, duty) may overlap because they only appear after a note lead.
@@ -42,22 +37,13 @@ This document is the single source of truth for the PLAY meta-language. All majo
 - Exact multi-voice conductor implementation details and low-level tick fencing.
 - Compiled binary event format (text remains primary for authoring/storage).
 
-**Related artifacts for hand-off:**
-- This file (PLAY_language_design.md) — primary.
-- co5ths_key_signature_handoff.md — theory/LUT details for K command (already incorporated).
-- PROJECT.md — only high-level references + pointer to this doc (per explicit prior instruction).
-- Interactive noteplayer spec.txt — legacy terminal piano (precursor).
-- Current synth_engine + note_player implementation (CORDIC direct sine + linear envelope + note memory usage).
-
-The document is intentionally written so another agent (or human) can pick it up with minimal re-derivation. All character decisions, parser constraints from prior constrained-platform experience, and the unified note-memory + snapshot model are here.
+**Related artifacts:**
+- [`Docs/Player/README.md`](Player/README.md) — user doc suite (primary for authors)
+- [`Docs/planning/play-v1-implementation-plan.md`](planning/play-v1-implementation-plan.md) — decision log + MSG
+- [`Docs/co5ths_key_signature_handoff.md`](co5ths_key_signature_handoff.md) — theory/LUT for **K**
+- [`Docs/PROJECT.md`](PROJECT.md) — project status + lineage
 
 ---
-
-**Status:** Early preview / evolving.  
-**Owner:** User (full spec coming).  
-**Current driver:** `tools/play_melody.py` (host-side, drives the terminal note player over serial).  
-**Recent progress (as of this session):** CORDIC-based sine synth now has linear attack (~7 ms) + decay (~4 ms) envelope + special fast transition release logic (3 ms) for clean note changes in the live 'p' player (no more audible pops on key-to-key or octave shifts). Hot-swap of tones without stopping the I2S stream. Linear envelopes noted as acceptable for de-popping; proper ADSR will want exponential/log ramps later.  
-**Future target:** On-device interpreter that can load strings from LittleFS (SPI NOR flash) or FAT32 (SD card) and drive the `synth_engine` autonomously (extending it for multiple waveforms).
 
 ## Goals
 - Compact, human-readable / human-writable notation for melodies and sequences.
@@ -263,56 +249,17 @@ CH GH FQ EQ DQ C5Q GH FQ EQ DQ C5H GH FQ EQ FQ DH
 
 This is a tied-triplet / dotted-quarter feel on the FQ EQ DQ group (not pure quarters). Exact values can be adjusted with dots or future triplet syntax once defined.
 
-### EBNF Grammar (Draft for Current Syntax)
-This is a starting point for a formal grammar (using standard EBNF notation). It will be refined as the full spec (triplets, note-descriptor expansions for articulation/ADSR, exact key-sig and transposition encoding, etc.) is written.
+### EBNF Grammar — withdrawn draft
 
-```
-play_sequence   = { element } ;
-element         = note_descriptor | command | repeat_block | label_def | goto | comment_block | debug_print_cmd | whitespace ;
-comment_block   = "@" { comment_char } "@" ;  (* skipped during playback; no title role — use ?"…" for titles; D10 withdrawn *)
-comment_char    = ? any char except unescaped "@" ? | "\\@" ;
-debug_print_cmd = "?" [ c_quoted_string ] ;  (* absent → bare-? CRLF; empty "" → no output; else expanded C-string payload — D14 *)
-c_quoted_string   = '"' { c_quoted_char } '"' ;
-c_quoted_char     = ? any char except '"' and '\\' ? | "\\" escape_seq ;
-escape_seq        = ( "n" | "r" | "t" | "0" | "a" | "b" | "f" | "v" | "\\" | "\"" | "'" | "?" | "x" hex_digit { hex_digit } | octal_digit { octal_digit } ) ;
-quoted_string     = '"' { k_quoted_char } '"' ;  (* K key payload — minimal escapes only, D8b *)
-k_quoted_char     = ? any char except '"' and '\\' ? | "\\" ( "\\" | "\"" ) ;
-note_descriptor = note , { ( accidental | octave | duration [ dot ] [ modifier ] [ duty ] ) } ;  (* After the note letter, accidental, octave, duration+attachments may appear in any order. Only the note letter is required and must come first. *)
-modifier        = "_" | "!" ;
-duty            = ( "D" digits "/" "8" ) | ( digits "%" ) ;  (* proposed; e.g. D4/8 or 75%; TBD exact syntax per user: percentage or n/8 value, n=note play time over 8, modified by duration spec *)
-note            = "C" | "D" | "E" | "F" | "G" | "A" | "B" ;
-accidental      = "#" | "+" | "b" | "-" ;
-octave          = digit ;
-duration        = "W" | "H" | "Q" | "I" | "X" | "Y" ;
-dot             = "." ;
-modifier        = "_" | "!" ;
-duty            = ( "D" digits "/" "8" ) | ( digits "%" ) ;  (* e.g. D4/8 or 50%; TBD exact prefix/syntax *)
-command         = tempo_cmd | octave_cmd | octave_up_cmd | octave_down_cmd | key_cmd | transpose_cmd | beat_cmd | volume_cmd | voice_cmd | instrument_cmd | rest_cmd ;
-tempo_cmd       = "T" digits ;
-octave_cmd      = "O" digit ;  (* single-digit parser is sufficient and efficient *)
-octave_up_cmd   = "^" ;        (* increment current octave by 1; shorthand for transcription *)
-octave_down_cmd = "v" ;        (* decrement current octave by 1; supplements O<n> *)
-key_cmd         = "K" root [ accidental ] [ "m" ] whitespace
-                | "K" quoted_string ;  (* quoted payload: same root/acc/m grammar inside quotes *)
-voice_cmd       = "P" digits ;  (* voice/timbre index; v1 plan D1 — default sine P0 *)
-transpose_cmd   = "S" signed_digits ;  (* e.g. S+1, S-2, S0; semitone shift applied after key sig accidentals. 'S' for Shift, avoiding duration 'X' conflict. Only command where the sign is semantically meaningful. *)
-beat_cmd        = "U" duration ;  (* set which note value gets one beat, e.g. UQ, UE. Affects duration-to-time mapping. *)
-volume_cmd      = "V" number ;  (* full numeric (0-100 or 0-127 range); multi-digit parser required *)
-instrument_cmd  = <TBD-char> ( digits | identifier ) ;  (* e.g. 0/sine, 1/tri, 2/saw, ... ; sets waveform for the voice. TBD-char must be unique per the Character Allocation Guidelines. *)
-rest_cmd        = "R" duration [ dot ] ;
-repeat_block    = "[" play_sequence "]" ":" repeat_count ;
-repeat_count    = digits ;
-label_def       = "*" label_id ;
-goto            = ">" label_id ;
-label_id        = digits ;   (* limit TBD, e.g. 0-255 or higher *)
-digits          = digit { digit } ;
-digit           = "0" | "1" | "2" | "3" | "4" | "5" | "6" | "7" | "8" | "9" ;
-number          = digits [ "." digits ] ;   (* for volume etc. – variable-width numeric parser *)
-signed_digits   = ( "+" | "-" )? digits ;   (* only semantically used by transposition; other commands may accept but ignore sign for robustness *)
-whitespace      = { " " | "\t" | "\n" } ;   (* optional for compactness, useful for disambiguation *)
-```
+The informal EBNF block that lived here is **obsolete** (wrong transpose **`S`→`&`**, label **`*`→`<`**, beat **`U`→`%`**, duty **`D4/8`→`;n`/”;nn`**, unquoted **`K`**, etc.).
 
-Notes on the grammar:
+**Normative v1+v1.1 grammar (planned):** [`Docs/Player/v1_grammar.md`](Player/v1_grammar.md) — plan **T4**. Until that file lands, use:
+
+- [`Docs/Player/cheat_sheet.md`](Player/cheat_sheet.md) — quick lead-char map
+- [`Docs/planning/play-v1-implementation-plan.md`](planning/play-v1-implementation-plan.md) — locked D/S/I semantics
+- [`scripts/play_golden/grammar_torture.play`](../scripts/play_golden/grammar_torture.play) — v1 acceptance string
+
+**Notes on parsing (still broadly valid):**
 - The top-level is a sequence of elements (notes, commands, structural constructs).
 - Note descriptors can appear standalone or inside rests (parser reuses the rule and discards non-duration fields).
 - Label IDs are numeric for simplicity and compact storage; alphanumeric can be considered later.

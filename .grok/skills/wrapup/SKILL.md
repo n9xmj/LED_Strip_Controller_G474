@@ -117,7 +117,7 @@ Help the user re-open WIP files in the editor or side pane with **one click**.
 
 - [play-v1-implementation-plan.md](Docs/planning/play-v1-implementation-plan.md) — master decision log
 - [play-v1-session-handoff-YYYY-MM-DD.md](Docs/planning/play-v1-session-handoff-YYYY-MM-DD.md) — start here next session
-- [play-lead-char-cheat-sheet.md](Docs/planning/play-lead-char-cheat-sheet.md)
+- [Player/cheat_sheet.md](Docs/Player/cheat_sheet.md)
 - [decision-log-model.md](Docs/planning/decision-log-model.md)
 - [AGENTS.md](AGENTS.md)
 ```

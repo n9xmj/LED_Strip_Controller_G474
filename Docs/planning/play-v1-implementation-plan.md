@@ -1,7 +1,7 @@
 # PLAY v1 — Implementation readiness plan
 
 **Parent spec:** [Docs/PLAY_language_design.md](../PLAY_language_design.md)  
-**Related:** [co5ths_key_signature_handoff.md](../co5ths_key_signature_handoff.md) · [focused-implementation-handoff-template.md](focused-implementation-handoff-template.md) (focused MSG sessions) · [tools/play_melody.py](../../tools/play_melody.py) · **[play-lead-char-cheat-sheet.md](play-lead-char-cheat-sheet.md)** (planning quick ref) · **[play-v1-chatbot-brief.md](play-v1-chatbot-brief.md)** (LLM / author copy-paste brief — **living fw status**) · [decision-log-model.md](decision-log-model.md) (**Big Board** + **§ MSG** + **wish list** mechanics)  
+**Related:** [co5ths_key_signature_handoff.md](../co5ths_key_signature_handoff.md) · [focused-implementation-handoff-template.md](focused-implementation-handoff-template.md) (focused MSG sessions) · [tools/play_melody.py](../../tools/play_melody.py) · **[Player/](../Player/)** user docs — [README.md](../Player/README.md) · [cheat_sheet.md](../Player/cheat_sheet.md) · [chatbot_brief.md](../Player/chatbot_brief.md) · [decision-log-model.md](decision-log-model.md) (**Big Board** + **§ MSG** + **wish list** mechanics)  
 **Branch:** `main` · **Status:** IN PROGRESS (G474 bench — v1 / v1.1 ship target)
 
 > **Goal:** Move PLAY from "early preview" to an **implementation-ready v1 contract**
@@ -29,7 +29,7 @@
 | **v1** | Feature-complete on bench | **I1** must-ship interpreter in `App/Src/play.c` — **§ MSG** v1 rows **G1**–**G8** ✅ (2026-06-14) |
 | **v1.1** | Same tree, additive code | **D4** `X`/`Y` durations (**G9** ✅). **D5b** raw-percent `;nn` (**G10** / **W2**) ✅ — **v1.1 required PLAY firmware complete** (2026-06-14) |
 | **v1.1 stretch** | Infra (not PLAY grammar) | **`uart_stream` on USART2** (**G11** / **W27**) — non-blocking debug console |
-| **Docs (in progress)** | Ship with v1 | [play-lead-char-cheat-sheet.md](play-lead-char-cheat-sheet.md) · [play-v1-chatbot-brief.md](play-v1-chatbot-brief.md) (living fw status) · **T1** implementer trim of parent spec |
+| **Docs (in progress)** | Ship with v1 | [Player/](../Player/) — [cheat_sheet.md](../Player/cheat_sheet.md) · [chatbot_brief.md](../Player/chatbot_brief.md) · **T1** legacy trim · **T4/T5** → same folder |
 | **Stretch (v1)** | Nice-to-have, not gate | **T4** normative EBNF · **T5** musician howto + tiered repertoire |
 
 **v2 and beyond:**
@@ -119,7 +119,7 @@ Cross-ref: [Docs/PROJECT.md](../PROJECT.md) long-term goals · deferred briefs u
 | I10 | 🟡     | **MSG detail / audit log** — expanded firmware notes under **§ I10**; **scan table = § MSG** |
 | I11 | 🟡     | **Player verbosity** — cumulative log-level enum (`_SILENT`…`_DEBUG`); **§ I11**; orthogonal to **S7i** |
 | MSG | 🟡     | **Must-Ship Gap** — **`G1`…`Gn`** firmware gaps; scan table **§ MSG** (detail: **§ I10**) |
-| T1  | 🔴     | `PLAY_language_design.md` dedupe + implementer quick-ref (not user howto)                                                                   |
+| T1  | 🟡     | `PLAY_language_design.md` dedupe + implementer quick-ref (header trim done 2026-06-14; full dedupe pending)                                                                   |
 | T2  | 🟡     | **Host + serial test harness** — `play_melody.py` / **`play_scenarios.py`**; dual-track with **T3** / **I9** (**user lock 2026-06-13**) |
 | T3  | 🟢     | **Golden tiers + menu order** — Smoke → Smoke+ (Williams) → Feature → Torture; **`m` → `g`** STRICT (**user lock 2026-06-13**) |
 | T4  | 🔴     | **Normative EBNF** — standalone formal grammar (**stretch** for v1 ship)                                                                  |
@@ -177,12 +177,12 @@ Cross-ref: [Docs/PROJECT.md](../PROJECT.md) long-term goals · deferred briefs u
 
 | GP | Ref | Item | Status | Notes |
 | --- | --- | ---- | ------ | ----- |
-| **GP1** | **T1** | Implementer trim of `PLAY_language_design.md` | 🔴 | Dedupe + 1-page quick-ref; link **T4**/**T5** |
+| **GP1** | **T1** | Implementer trim of `PLAY_language_design.md` | 🟡 | Header + EBNF withdrawal done; link **Player/** + **T4**/**T5** |
 | **GP2** | **T3** | **`m` → `g`** on-device golden runner | 🟡 | Menu + STRICT banner; shares `scripts/play_golden/` |
 | **GP3** | **T2** | **`play_scenarios.py`** host matrix | 🟡 | Dual-track with **T3**; smoke/feature scenarios |
-| **GP4** | **T4** | Normative EBNF | 🔴 | v1 **stretch** doc |
-| **GP5** | **T5** | Musician howto + repertoire | 🔴 | v1 **stretch** doc |
-| **GP6** | — | Living docs sync | 🟡 | [play-v1-chatbot-brief.md](play-v1-chatbot-brief.md) · [play-lead-char-cheat-sheet.md](play-lead-char-cheat-sheet.md) after each **G** row closes |
+| **GP4** | **T4** | Normative EBNF | 🔴 | [`Docs/Player/v1_grammar.md`](../Player/v1_grammar.md) — v1 **stretch** doc |
+| **GP5** | **T5** | Musician howto + repertoire | 🔴 | [`Docs/Player/howto.md`](../Player/howto.md) — v1 **stretch** doc |
+| **GP6** | — | Living docs sync | 🟡 | [Player/chatbot_brief.md](../Player/chatbot_brief.md) · [Player/cheat_sheet.md](../Player/cheat_sheet.md) — Phase 1 **2026-06-14** |
 | **GP7** | — | **`grammar_torture.play`** | ✅ | v1 fence; re-run after each v1 **G** close |
 | **GP8** | — | **`grammar_torture_v11.play`** | ✅ | **G9** — N0..N95 chromatic X/Y torture (loops + GOSUB; `--timeout 120`) |
 
@@ -1064,7 +1064,7 @@ B#,      O0  → pc 11 → absolute = 11
 
 **Snapshots (`~`, repeats, labels):** store **resolved absolute semitone** (and spell for trace), not letter alone — avoids misleading echo labels.
 
-**Cross-ref:** [PLAY_language_design.md](../PLAY_language_design.md) inheritance · [play-v1-chatbot-brief.md](play-v1-chatbot-brief.md) author rules.
+**Cross-ref:** [PLAY_language_design.md](../PLAY_language_design.md) inheritance · [Player/chatbot_brief.md](../Player/chatbot_brief.md) author rules.
 
 ---
 
@@ -2808,7 +2808,7 @@ Ordered to maximize score expressiveness per commit (aligns with bench `**playst
 8. **GP2** `m` → `g` STRICT golden runner on device (**I9** follow-on)
 9. **GP3** golden host runner — `play_scenarios.py`
 
-**Cross-refs:** **I1** fence · **I9** presets · [play-lead-char-cheat-sheet.md](play-lead-char-cheat-sheet.md) · **T3** acceptance strings (🔴)
+**Cross-refs:** **I1** fence · **I9** presets · [Player/cheat_sheet.md](../Player/cheat_sheet.md) · **T3** acceptance strings (🔴)
 
 **Resolution:** *Living document — mark **G*n*** ✅ as they land; bump **Last audited** date.*
 
@@ -2897,11 +2897,11 @@ Examples:
 
 **Status:** 🔴 · **Needs user:** no (agent task after spec-lock gate)
 
-**Scope:** Remove duplicate sections in `PLAY_language_design.md`; add a short **implementer** quick-ref (1 page) at top; link this plan + **T4** + **T5**. **Do not** put the full EBNF or musician tutorial here — those are **T4** / **T5**.
+**Scope:** Remove duplicate sections in `PLAY_language_design.md`; legacy banner + EBNF withdrawal done **2026-06-14**; link [`Docs/Player/`](../Player/) + **T4** + **T5**. **Do not** put the full EBNF or musician tutorial in the legacy notebook — those are **T4** / **T5** in **Player/**.
 
-**Gate:** Start after **T4/T5** outline approved, or in parallel once **S5 + S7 + I1** are 🟢.
+**Gate:** Full dedupe after **T4/T5** outline approved.
 
-**Resolution:** *(pending spec-lock gate)*
+**Resolution:** **Partial 2026-06-14** — header trim, obsolete EBNF removed, **Player/** suite Phase 1 shipped.
 
 ---
 
@@ -3075,7 +3075,7 @@ Skill files: **`.grok/skills/playstr|playfile|playtest/SKILL.md`**. Registry: **
 
 **Status:** 🔴 · **Needs user:** no (agent task; formal review welcome)
 
-**Deliverable:** New file `**Docs/PLAY_v1_grammar.md`** (name TBD) — **complete, v1-only** syntax in standard EBNF (or BNF + EBNF where clarity needs both). Replaces the draft grammar fragment in `PLAY_language_design.md`.
+**Deliverable:** [`Docs/Player/v1_grammar.md`](../Player/v1_grammar.md) — **complete, v1+v1.1** syntax in standard EBNF (or BNF + EBNF where clarity needs both). Replaces the withdrawn draft in `PLAY_language_design.md`.
 
 **Must include:**
 
@@ -3102,7 +3102,7 @@ Skill files: **`.grok/skills/playstr|playfile|playtest/SKILL.md`**. Registry: **
 
 **Status:** 🔴 · **Needs user:** review examples (especially Star Wars / Q1)
 
-**Deliverable:** New file `**Docs/PLAY_howto.md*`* (name TBD) — **non-programmer**, musician-friendly. This is the **authoring manual**, not the implementer spec.
+**Deliverable:** [`Docs/Player/howto.md`](../Player/howto.md) — **non-programmer**, musician-friendly. This is the **authoring manual**, not the implementer spec.
 
 **Pedagogy (locked 2026-06-11 — user direction):**
 

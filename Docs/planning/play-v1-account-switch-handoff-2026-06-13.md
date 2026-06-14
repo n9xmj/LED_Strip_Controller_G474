@@ -105,7 +105,7 @@ Full table: [`play-v1-implementation-plan.md`](play-v1-implementation-plan.md) �
 | ---- | ---- |
 | Interpreter | `App/Src/play.c` |
 | Plan / Big Board / MSG | `Docs/planning/play-v1-implementation-plan.md` |
-| Author/chatbot status | `Docs/planning/play-v1-chatbot-brief.md` |
+| Author/chatbot status | `Docs/Player/chatbot_brief.md` |
 | Agent contract | `AGENTS.md` |
 | Focused-session template | `Docs/planning/focused-implementation-handoff-template.md` |
 | Bench harness | `scripts/play_bench.py` · goldens in `scripts/play_golden/` |
@@ -148,4 +148,4 @@ Do not re-litigate green D16/D17/S7d decisions.
 
 ---
 
-**Related:** [decision-log-model.md](decision-log-model.md) · [play-v1-chatbot-brief.md](play-v1-chatbot-brief.md)
+**Related:** [decision-log-model.md](decision-log-model.md) · [Player/chatbot_brief.md](../Player/chatbot_brief.md)

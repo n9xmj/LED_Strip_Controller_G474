@@ -5,7 +5,8 @@
 ## Quick links
 
 - [play-v1-implementation-plan.md](play-v1-implementation-plan.md) — master decision log
-- [play-v1-chatbot-brief.md](play-v1-chatbot-brief.md) — author-facing status
+- [../Player/README.md](../Player/README.md) — user doc suite
+- [../Player/chatbot_brief.md](../Player/chatbot_brief.md) — author-facing status
 - [archive/duty-percent-handoff.md](archive/duty-percent-handoff.md) — G10 feature brief (archived)
 - [decision-log-model.md](decision-log-model.md)
 - [duty_percent.play](../../scripts/play_golden/duty_percent.play) — G10 golden
@@ -15,7 +16,7 @@
 | Doc | Why |
 | --- | --- |
 | [play-v1-implementation-plan.md](play-v1-implementation-plan.md) | **§ MSG v1.1** — closed; optional **G11** stretch |
-| [play-v1-chatbot-brief.md](play-v1-chatbot-brief.md) | `;nn` percent duty **YES** |
+| [../Player/chatbot_brief.md](../Player/chatbot_brief.md) | `;nn` percent duty **YES** |
 | [archive/duty-percent-handoff.md](archive/duty-percent-handoff.md) | G10 implementation notes (archived) |
 
 ## Suggested opener
