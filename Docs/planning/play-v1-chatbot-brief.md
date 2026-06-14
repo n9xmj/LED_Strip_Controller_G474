@@ -6,7 +6,7 @@
 
 **Living document:** Update this file whenever `App/Src/play.c` gains or loses behavior. **Firmware truth:** `App/Src/play.c` + bench presets in `App/Src/play_presets.c`.
 
-**Last updated:** 2026-06-13 (audited against firmware — inheritance, order-flex, `%`, S7i, duty, `~`, `&` transpose, **`K"…"`** key LUT, top-level **`S`** playstr hook)
+**Last updated:** 2026-06-13 (audited against firmware — inheritance, order-flex, `%`, S7i, duty, `~`, `&` transpose, **`K"…"`** key LUT, **`G4`** label pre-parse, top-level **`S`** playstr hook)
 
 ---
 
@@ -149,8 +149,8 @@ These start a new statement at the top level (after whitespace), not inside a no
 | **`V`** | `V80` | Volume 0…100 | **YES** |
 | **`P`** | `P0` / `P1` | Voice/timbre: **0** sine · **1** triangle | **YES** |
 | **`\`** | `\"ctx:4Q"` | Extension / context load | **YES** (`ctx:` memory · `noop:`/unknown echo) |
-| **`<` / `>`** | `<"lbl"` `>"lbl"` | Label define / goto | **NO** |
-| **`=` / `/`** | `="name"` `/` | GOSUB / RETURN | **NO** |
+| **`<` / `>`** | `<"lbl"` `>"lbl"` | Label define / goto | **PARTIAL** — **G4** pre-parse + table ✅; runtime PC jump **NO** (**G5**) |
+| **`=` / `/`** | `="name"` `/` | GOSUB / RETURN | **NO** (**G5**) |
 | **`:`** | | Optional statement terminator (D12) | **NO** — stray `:` warns |
 
 ### Repeat blocks — caveat (**YES** with spec drift)

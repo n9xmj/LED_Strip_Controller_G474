@@ -1,5 +1,7 @@
 # PLAY v1 session handoff — 2026-06-13 (G4 pre-parse)
 
+> **Resuming on personal Cursor account?** Read **[play-v1-account-switch-handoff-2026-06-13.md](play-v1-account-switch-handoff-2026-06-13.md)** first — it has the copy-paste initial prompt and switch steps.
+
 **Branch:** `main` (G4 + cleanup-docs committed; pushed)  
 **Bench:** COM9 @ 921600 · ST-Link `003C00193137510C39383538`  
 **Firmware:** 3.0.7 build **8** (incremental — no bump this session)
@@ -79,7 +81,8 @@ Implement runtime:
 
 ## Parent orchestrator log
 
-- **2026-06-13:** G4 child shipped (`48d4819`); `/cleanup-docs` landed; next child = **G5** from [focused-implementation-handoff-template.md](focused-implementation-handoff-template.md).
+- **2026-06-13:** G4 child shipped (`48d4819`); `/cleanup-docs` landed (`7a20622`); next child = **G5** from [focused-implementation-handoff-template.md](focused-implementation-handoff-template.md).
+- **2026-06-13:** Work-account parent session closed; [account-switch handoff](play-v1-account-switch-handoff-2026-06-13.md) prepared for personal Pro account.
 - **Parent role:** plan/MSG triage, commit/push, brief authoring — not large firmware edits.
 
 ---

@@ -156,7 +156,7 @@ Resolved items keep their history (options + rationale) so handoffs stay auditab
 1. This file (`Docs/planning/decision-log-model.md`) — the mechanics.
 2. Any **active** plan linked from `Docs/PROJECT.md` or `.grok/memory/MEMORY.md`.
 3. For PLAY work: `Docs/planning/play-v1-implementation-plan.md`.
-4. **Newest** `Docs/planning/*-session-handoff-*.md` if present — written by **`/wrapup`** at end of prior session; read **before** diving into the full plan.
+4. **Newest** `Docs/planning/*-session-handoff-*.md` if present — written by **`/wrapup`** at end of prior session; read **before** diving into the full plan. **Cursor account switch:** `play-v1-account-switch-handoff-*.md` when resuming on a different login.
 
 **Session end** — run **`/wrapup`** (`.grok/skills/wrapup/SKILL.md`): sanity-check docs, refresh handoff, commit WIP (no push by default).
 
@@ -167,6 +167,7 @@ Resolved items keep their history (options + rationale) so handoffs stay auditab
 | Artifact | Pattern | Lifecycle |
 | -------- | ------- | --------- |
 | Session handoff | `*-session-handoff-YYYY-MM-DD.md` | Keep **newest 1**; delete older via `/cleanup-docs` |
+| Account switch | `*-account-switch-handoff-*.md` | **Permanent** until next switch; resume steps + initial prompt |
 | Feature impl brief | `<topic>-handoff.md` | Copy from template; **archive** when MSG **✅** |
 | Template | `focused-implementation-handoff-template.md` | **Permanent** |
 | Plan / MSG / I10 | `*-implementation-plan.md` | **Permanent** contract |

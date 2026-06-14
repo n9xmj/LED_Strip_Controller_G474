@@ -72,7 +72,7 @@ For specs or features with many open decisions (e.g. PLAY meta-language v1), use
 - **Deferred work briefs (read when tackling):**
   - [`Docs/planning/uart_stream-port-notes.md`](Docs/planning/uart_stream-port-notes.md) — non-blocking **USART2** ISR port; HAL init-only
   - [`Docs/planning/terminal-piano-and-player-notes.md`](Docs/planning/terminal-piano-and-player-notes.md) — PLAY bench menu (**I9**), **I8** hook, ANSI piano UI wishlist
-- **Session handoff (read on new chat):** newest [`Docs/planning/play-v1-session-handoff-*.md`](Docs/planning/) — updated by **`/wrapup`**
+- **Session handoff (read on new chat):** newest [`Docs/planning/play-v1-session-handoff-*.md`](Docs/planning/) — updated by **`/wrapup`**. **Cursor account switch:** [`Docs/planning/play-v1-account-switch-handoff-2026-06-13.md`](Docs/planning/play-v1-account-switch-handoff-2026-06-13.md) (resume steps + initial parent prompt).
 
 Also indexed in [`.grok/memory/MEMORY.md`](.grok/memory/MEMORY.md). Loaded on `/bootstrap` / `/read-the-docs`.
 
