@@ -1,0 +1,7 @@
+@ G10 duty percent - ;6 vs ;60 disambiguation @
+T120 O4 %Q
+C4Q;6
+C4Q;60
+C4Q;4
+R4Q;6
+*

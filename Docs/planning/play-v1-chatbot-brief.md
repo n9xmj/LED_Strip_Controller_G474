@@ -6,7 +6,7 @@
 
 **Living document:** Update this file whenever `App/Src/play.c` gains or loses behavior. **Firmware truth:** `App/Src/play.c` + bench presets in `App/Src/play_presets.c`.
 
-**Last updated:** 2026-06-14 (audited against firmware — **G9** X/Y durations; **G8** key LUT in snapshots; **G5** labels/GOSUB; **G4** pre-parse)
+**Last updated:** 2026-06-14 (audited against firmware — **G10** `;nn` percent duty; **G9** X/Y; **G8** key LUT in snapshots; **G5** labels/GOSUB; **G4** pre-parse)
 
 ---
 
@@ -65,7 +65,7 @@ After each note or rest **commits**, these fields live in **note memory** and ca
 
 - Duration (`W` `H` `Q` `I` `X` `Y` + optional dot)
 - Octave digit (`0`–`8`)
-- Duty (`_` `!` `;` `;n`)
+- Duty (`_` `!` `;` `;n` `;nn`)
 
 **Letter-only** tokens inherit everything above: `DEFGAB` after `C4Q` plays six quarters at the current octave.
 
@@ -120,7 +120,8 @@ Within one note/rest token, suffix pieces may appear in **any order** after the 
 | `_` | Legato (full note sounding) |
 | `!` | Staccato |
 | `;` | Normal (6/8 of note time) |
-| `;n` | n of 8 quanta sounding (n = 0…8) |
+| `;n` | n of 8 quanta sounding (n = 0…8) — **D5c** |
+| `;nn` | Raw percent 0–100 (two digits) — **D5b** / **G10** (e.g. `;60` = 60%, `;6` = 75%) |
 
 Duty affects **sound vs gap** within the note’s time slot; default legato **8/8**.
 
@@ -196,7 +197,7 @@ CQ4DEFGABC5 *
 
 **Fatals always stop** (bad tempo, unclosed `@`, repeat stack overflow, etc.) in every mode.
 
-**Multi-digit cap (S7j):** executives reading numeric runs (`T`, `V`, `P`, `&±n`, `N`, `[ ]:N`, `;n`, …) accept at most **5** ASCII digits, stored as **uint16/int16**. More than 5 → **WARN** (skip excess digits, use first 5) in NORMAL/LAZY; **fatal** in STRICT. Per-command range limits apply after that (e.g. `T≤240`, `V≤100`).
+**Multi-digit cap (S7j):** executives reading numeric runs (`T`, `V`, `P`, `&±n`, `N`, `[ ]:N`, …) accept at most **5** ASCII digits, stored as **uint16/int16**. Duty `;` suffix uses a **2-digit cap** (**G10** / **D5b**). More than 5 (executive) or 3rd digit after `;nn` → **WARN** (skip excess digits, use first 5) in NORMAL/LAZY; **fatal** in STRICT. Per-command range limits apply after that (e.g. `T≤240`, `V≤100`).
 
 **Player verbosity (I11 — not yet in firmware):** cumulative log level `SILENT` → `ERROR` → `WARN` → `INFO` → `DEBUG`. Controls interpreter diagnostics (`PLAY warn`/`fault`, lifecycle lines) — **not** score-directed `?"…"` output (lyrics always print, even in SILENT).
 
@@ -248,7 +249,7 @@ C4Q D4Q E4Q F4Q G4Q A4Q B4Q C5Q *
 | Bad pattern | Why |
 |-------------|-----|
 | `R I.` with spaces | Use **`RI.`** — one rest token |
-| `X` / `Y` durations | **DEFERRED** — use `I` or `Q` |
+| `X` / `Y` durations | **YES** (v1.1 **G9**) — sixteenth / thirty-second |
 | `C#4` / `Fb3` without key context | Use **`K"…"`** or explicit accidentals in each note cluster |
 | `K"C"` then bare letters in that key | **YES** — LUT applies until next valid `K"…"` |
 | lowercase `c4q` | Invalid — **uppercase letters only** |
@@ -291,7 +292,6 @@ Group checklist for authors and chatbots — **do not rely on these in scores me
 
 ## DEFERRED (not v1 — not “missing firmware bugs”)
 
-- **`X` / `Y`** sixteenth / thirty-second note durations (D4)  
 - **Tuplets** / triplet syntax (D15) — approximate with even `I`/`Q`  
 - **Polyphony** / inline chords / `|"` sync (S3)  
 - **LittleFS / file loader** on device (I7) — host feeds string via UART today  

@@ -100,5 +100,12 @@
     "file": "key_snapshot.play",
     "policy": "strict",
     "aliases": ["G8", "key-snapshot"]
+  },
+  "duty_percent": {
+    "description": "G10 D5b — raw-percent ;nn duty (1-digit n/8 vs 2-digit nn%)",
+    "tier": "feature",
+    "file": "duty_percent.play",
+    "policy": "strict",
+    "aliases": ["G10", "duty-nn", "D5b"]
   }
 }

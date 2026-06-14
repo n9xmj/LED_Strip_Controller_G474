@@ -27,7 +27,7 @@
 | Tier | Target | Deliverables |
 | ---- | ------ | ------------ |
 | **v1** | Feature-complete on bench | **I1** must-ship interpreter in `App/Src/play.c` — **§ MSG** v1 rows **G1**–**G8** ✅ (2026-06-14) |
-| **v1.1** | Same tree, additive code | **D4** `X`/`Y` durations (**G9** ✅). **D5b** raw-percent `;nn` (**G10** / **W2**) **STET** — only remaining required v1.1 PLAY item |
+| **v1.1** | Same tree, additive code | **D4** `X`/`Y` durations (**G9** ✅). **D5b** raw-percent `;nn` (**G10** / **W2**) ✅ — **v1.1 required PLAY firmware complete** (2026-06-14) |
 | **v1.1 stretch** | Infra (not PLAY grammar) | **`uart_stream` on USART2** (**G11** / **W27**) — non-blocking debug console |
 | **Docs (in progress)** | Ship with v1 | [play-lead-char-cheat-sheet.md](play-lead-char-cheat-sheet.md) · [play-v1-chatbot-brief.md](play-v1-chatbot-brief.md) (living fw status) · **T1** implementer trim of parent spec |
 | **Stretch (v1)** | Nice-to-have, not gate | **T4** normative EBNF · **T5** musician howto + tiered repertoire |
@@ -63,6 +63,7 @@ Cross-ref: [Docs/PROJECT.md](../PROJECT.md) long-term goals · deferred briefs u
 | D4  | 🟢     | Sixteenth / thirty-second durations (`X`, `Y`) — v1.1 shipped **G9** |
 | D5  | 🟢     | Note duty — `_`/`!`/`;` shorthands + `;n` general (`;` = normal)                                                                            |
 | D5c | 🟢     | `;n` scale — `PLAY_DUTY_NUMERATOR` (default 8), `n`/N, clamp 0 and >N                                                                       |
+| D5b | 🟢     | Raw-percent `;nn` duty — 1 digit → n/8 (D5c); 2 digits → nn% (**G10** ✅ 2026-06-14) |
 | D5d | 🔵     | Pizzicato shorthand — defer; add duty shorthands later                                                                                      |
 | D6  | 🟢     | Volume `V` — range 0..100; overflow clamps to max                                                                                           |
 | D7  | 🟢     | Case-sensitive `**A`–`G**`; flat `**b`/`-**`; sharp `**#`/`+**`; natural `**n**` (descriptor-only)                                          |
@@ -132,7 +133,7 @@ Cross-ref: [Docs/PROJECT.md](../PROJECT.md) long-term goals · deferred briefs u
 
 ## Must-Ship Gap (MSG)
 
-*“Mine-Shaft-Gap” — what **I1** says must exist in `App/Src/play.c` but does not yet. **Scan here first** for coding work; peripheral docs/tests at **§ MSG-GP** below. Wish-list rows (**W3+**) are **not** MSG — they are v2+ or optional stretch. **Last audited:** 2026-06-13 (post-**G4** startup pre-parse + label table).*
+*“Mine-Shaft-Gap” — what **I1** says must exist in `App/Src/play.c` but does not yet. **Scan here first** for coding work; peripheral docs/tests at **§ MSG-GP** below. Wish-list rows (**W3+**) are **not** MSG — they are v2+ or optional stretch. **Last audited:** 2026-06-14 (post-**G10** raw-percent `;nn` duty — **v1.1 required PLAY firmware complete**).*
 
 **Row IDs:** **`G1`…`Gn`** = firmware gap rows (append-only — **never renumber** when a row ships; mark **FW** ✅ instead). **`GP1`…** = peripheral rows (**§ MSG-GP**). Resolve in chat by gap ID (*"close G4"*, *"G9 next"*). **Ord** = bring-up order tier (1 before 2) — **not** PLAY voice **`P<n>`**.
 
@@ -162,7 +163,7 @@ Cross-ref: [Docs/PROJECT.md](../PROJECT.md) long-term goals · deferred briefs u
 | G | Ord | Ref | Feature | FW | Notes |
 | --- | --- | --- | ------- | -- | ----- |
 | **G9** | 1 | **D4** / **W1** | **`X` / `Y` durations** | ✅ | `PLAY_DUR_*_X2` ×4 ladder; S5 X=0.25 Y=0.125; golden `grammar_torture_v11` |
-| **G10** | 1 | **D5b** / **W2** | **Raw-percent `;nn`** | ❌ | 1 digit → n/8 (**D5c** today); 2 digits → 0–100% (`;6` ≠ `;60`) |
+| **G10** | 1 | **D5b** / **W2** | **Raw-percent `;nn`** | ✅ | `v_play_apply_duty_percent`; shared `;` suffix parser (≤2 digits); golden `duty_percent` |
 
 *v1.1 has no other **required** PLAY grammar deltas per session roadmap.*
 
@@ -458,7 +459,7 @@ v    ; current_octave -= 1
 | `**;n`**            | **General case** — read digit `**n`**, then `**duty = clamp(n) / PLAY_DUTY_NUMERATOR**` (D5c). Default `**PLAY_DUTY_NUMERATOR = 8**`. Example: `**AN5Q;6**` → **75%** on (6/8). Order-flexible. |
 
 
-**Encoding:** `**;n`** uses **n/N** scale per **D5c 🟢**. Named shorthands use separate tunable constants. Raw `**;nn` percent** deferred (D5b 🔵).
+**Encoding:** `**;n`** uses **n/N** scale per **D5c 🟢**. Named shorthands use separate tunable constants. Raw `**;nn` percent** shipped (**D5b 🟢** — **G10**): 1 digit → D5c; 2 digits → `num/den = nn/100`.
 
 **Precedence (S9 🟢):** Last duty modifier wins. Examples: `AN5Q!;6` → **75%** (`;6` last); `AN5Q;6!` → staccato constant.
 
@@ -470,7 +471,7 @@ v    ; current_octave -= 1
 
 ### D5b — Raw-percent `;nn` encoding (v1.1)
 
-**Status:** 🟡 · **Needs user:** no (v1.1 STET 2026-06-13 — easy disambiguation)
+**Status:** 🟢 · **Needs user:** no (shipped **G10** 2026-06-14)
 
 **Question:** Allow `**;60`** meaning 60% directly (two-digit percent)?
 
@@ -478,7 +479,7 @@ v    ; current_octave -= 1
 
 **Implementation size:** ~same order as adding one duration letter — extend the existing `;` digit-run in `b_play_parse_pitch_token`, no new executive.
 
-**Resolution:** **v1.1 STET** (user: move to v2 only if scope tightens; agent assessment = easy enough to keep).
+**Resolution:** **Shipped v1.1** — `b_play_apply_duty_semicolon_suffix` in `play.c`: 0 digits → normal; 1 → D5c n/8; 2 → percent nn/100 (`;6` ≠ `;60`). Golden `duty_percent.play`.
 
 ---
 
@@ -2617,7 +2618,7 @@ Smoke+ presets land incrementally (**Star Wars** → **Raiders** → other Willi
 
 ### I10 — MSG detail / firmware audit log (vs I1 fence)
 
-**Status:** 🟡 · **Living companion to § MSG** — update when `App/Src/play.c` grows · **Last audited:** 2026-06-14 (**G9** X/Y durations shipped)
+**Status:** 🟡 · **Living companion to § MSG** — update when `App/Src/play.c` grows · **Last audited:** 2026-06-14 (**G10** raw-percent `;nn` duty shipped — **v1.1 required PLAY firmware complete**)
 
 > **Scan table:** **§ Must-Ship Gap (MSG)** above — tabular v1/v1.1 “what’s left to code.” This section keeps shipped inventory, partial gaps, bring-up order, and audit notes. **Player verbosity** → **§ I11** (not MSG — cross-cutting diagnostic policy).
 
@@ -2672,7 +2673,7 @@ Smoke+ presets land incrementally (**Star Wars** → **Raiders** → other Willi
 | **`K"…"`** key signature | Co5ths LUT on bare letters (D8); minor = relative major |
 | **`R` rest**          | Full sub-parser — same postfix as notes |
 | **`~` note-repeat**   | Replay last completed note/rest; S10 template + WARNING if none (D2) |
-| **Duty `_` `!` `;` `;n`** | Parsed on notes/rests; S9 last-wins in STRICT |
+| **Duty `_` `!` `;` `;n` `;nn`** | Parsed on notes/rests/**`ctx:`**; S9 last-wins; **G10** 2-digit percent |
 | **`[ … ]:N`**         | Repeat stack; `]` re-entry **restores `[` snapshot** (**S4**/**G8**) |
 | **`?"…"` / bare `?`** | Print / lyrics; C escapes |
 | **`*` END**           | Hard stop + synth off; NUL = implicit `*` |
@@ -2686,7 +2687,7 @@ Smoke+ presets land incrementally (**Star Wars** → **Raiders** → other Willi
 | **I4 scheduler**      | 1 ms shared tick; legato default duty 8/8 |
 | **I8 resolve hook**   | Fires on successful resolve |
 | **I9 bench**          | Submenu `m` → `1`/`2`/`s` |
-| **T3 golden**         | `smoke` · `loop` · `tilde` · `raiders` · `ctx` · `labels_*` · `key_snapshot` · `grammar_torture` · `grammar_torture_v11` in `scripts/play_golden/` |
+| **T3 golden**         | `smoke` · `loop` · `tilde` · `raiders` · `ctx` · `labels_*` · `key_snapshot` · `duty_percent` · `grammar_torture` · `grammar_torture_v11` in `scripts/play_golden/` |
 
 
 **Safe authoring today (copy-paste patterns):**
@@ -2764,12 +2765,14 @@ All below → `**PLAY fault: unsupported executive**` today.
 
 ---
 
-#### v1.1 must-ship — partial (2026-06-14)
+#### v1.1 must-ship — closed (2026-06-14)
 
 | G | Ref | Feature | Firmware | Notes |
 | --- | --- | ------- | -------- | ----- |
 | **G9** | D4 | **`X` / `Y` durations** | ✅ | Descriptor FSM + `b_play_x2_from_duration_letter`; `PLAY_DUR_W…Y_X2` (×4 ladder); golden `grammar_torture_v11` (chromatic torture) |
-| **G10** | D5b | **Raw-percent `;nn`** | ❌ | Next v1.1 row |
+| **G10** | D5b | **Raw-percent `;nn`** | ✅ | `v_play_apply_duty_percent` + `b_play_apply_duty_semicolon_suffix` (≤2 digit cap); golden `duty_percent` |
+
+**v1.1 required PLAY firmware MSG closed 2026-06-14** (stretch **G11** `uart_stream` remains optional).
 
 ---
 
@@ -2780,7 +2783,7 @@ Per **I1 Out** column — do not file as missing **v1** work (remaining v1.1 ite
 
 | ID      | Item                                              |
 | ------- | ------------------------------------------------- |
-| D5b     | Raw-percent `;nn` duty — **G10** v1.1 required    |
+| D5b     | ~~Raw-percent `;nn` duty~~ — **G10** ✅ 2026-06-14 |
 | D15, Q1 | Tuplets / triplet timing                          |
 | S3      | Polyphony / `**                                   |
 | D13     | Envelope / ADSR PLAY syntax                       |
@@ -3297,9 +3300,9 @@ Minimum 🟢 before formal grammar + howto + coding:
 | 🟡 Observations / open design | **S11** |
 
 
-**Next suggested chat prompt:** *"Start **v1.1 G10** — raw-percent `;nn` duty (**D5b**) per plan § MSG; read `grammar_torture` duty regression."*
+**Next suggested chat prompt:** *"PLAY v1.1 required MSG complete — optional **G11** `uart_stream` stretch, or pivot to mic/DSP per [PROJECT.md](../PROJECT.md)."*
 
-**Session handoff:** [play-v1-session-handoff-2026-06-14-g9.md](play-v1-session-handoff-2026-06-14-g9.md) — **G9** shipped; **G10** next.
+**Session handoff:** [play-v1-session-handoff-2026-06-14-g10.md](play-v1-session-handoff-2026-06-14-g10.md) — **G10** shipped; v1.1 required PLAY firmware complete.
 
 ### Cross-reference: punctuator roles (D2, S3, D16, D17, D18)
 

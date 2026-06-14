@@ -1,8 +1,8 @@
 # Agent Handoff: G10 — Raw-percent `;nn` duty (D5b / W2)
 
 **Date:** 2026-06-14  
-**Status:** IN PROGRESS (archive candidate after MSG **G10** ✅)  
-**MSG:** **G10** · **Plan refs:** **D5b**, **D5c**, **S9** (🟢 — do not re-litigate)  
+**Status:** COMPLETE — archive via **`/cleanup-docs`** after WIP commit  
+**MSG:** **G10** ✅ · **Plan refs:** **D5b** 🟢, **D5c**, **S9**  
 **Bench:** COM9 @ 921600 · ST-Link SN from `scripts/bench.defaults.json` (`003C00193137510C39383538`)
 
 **Authoritative plan:** [play-v1-implementation-plan.md](play-v1-implementation-plan.md) — MSG **G10** row, **D5b** / **D5c** detail  
@@ -70,13 +70,13 @@ Today `;` uses `b_play_consume_digit_run_u16` (up to **5** digits) and always ro
 
 ## 4. Implementation checklist
 
-- [ ] Add **`v_play_apply_duty_percent(play_note_memory_t *, uint8_t u8_pct)`** — sets `num=pct`, `den=100`, clamp pct **0–100**.
-- [ ] Add shared **`;` suffix parser** — 0 digits → normal; 1 → D5c shorthand; 2 → D5b percent; **≤2 digit cap**.
-- [ ] Wire helper into **all three** `case ';':` sites (pitch, rest/N, ctx).
-- [ ] Create **`scripts/play_golden/duty_percent.play`** + **`tests.json`** entry (STRICT).
-- [ ] Bench green (§5); **`grammar_torture`** **`;6`** / **`ctx:…;4`** unchanged behavior.
-- [ ] MSG **G10** → ✅; **D5b** → 🟢; **I10** + [play-v1-chatbot-brief.md](play-v1-chatbot-brief.md).
-- [ ] `/wrapup` → session handoff noting **v1.1 required MSG complete**.
+- [x] Add **`v_play_apply_duty_percent(play_note_memory_t *, uint8_t u8_pct)`** — sets `num=pct`, `den=100`, clamp pct **0–100**.
+- [x] Add shared **`;` suffix parser** — 0 digits → normal; 1 → D5c shorthand; 2 → D5b percent; **≤2 digit cap**.
+- [x] Wire helper into **all three** `case ';':` sites (pitch, rest/N, ctx).
+- [x] Create **`scripts/play_golden/duty_percent.play`** + **`tests.json`** entry (STRICT).
+- [x] Bench green (§5); **`grammar_torture`** **`;6`** / **`ctx:…;4`** unchanged behavior.
+- [x] MSG **G10** → ✅; **D5b** → 🟢; **I10** + [play-v1-chatbot-brief.md](play-v1-chatbot-brief.md).
+- [x] `/wrapup` → session handoff noting **v1.1 required MSG complete**.
 
 ---
 

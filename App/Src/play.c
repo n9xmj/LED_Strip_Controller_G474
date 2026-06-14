@@ -185,6 +185,12 @@ static uint32_t u32_play_calc_note_ticks(uint16_t u16_tempo_bpm,
                                          bool b_dotted);
 static void v_play_apply_duty_shorthand(play_note_memory_t *px_mem,
                                         uint8_t u8_num);
+static void v_play_apply_duty_percent(play_note_memory_t *px_mem,
+                                      uint8_t u8_pct);
+static bool b_play_apply_duty_semicolon_suffix(play_runtime_t *px_rt,
+                                               play_note_memory_t *px_mem,
+                                               const char *psz,
+                                               uint32_t *pu32_off);
 static bool b_play_parse_pitch_token(play_runtime_t *px_rt,
                                      bool b_is_rest,
                                      char c_lead_letter,
@@ -1663,6 +1669,95 @@ static void v_play_apply_duty_shorthand(play_note_memory_t *px_mem, uint8_t u8_n
     px_mem->u8_duty_num = u8_num;
     px_mem->u8_duty_den = PLAY_DUTY_NUMERATOR;
 }
+static void v_play_apply_duty_percent(play_note_memory_t *px_mem, uint8_t u8_pct)
+{
+    if (px_mem == NULL)
+    {
+        return;
+    }
+    if (u8_pct > 100U)
+    {
+        u8_pct = 100U;
+    }
+    px_mem->u8_duty_num = u8_pct;
+    px_mem->u8_duty_den = 100U;
+}
+#define PLAY_DUTY_SEMICOLON_DIGIT_MAX (2U)
+static bool b_play_scan_duty_digit_run(const char *psz,
+                                       uint32_t u32_off_in,
+                                       uint32_t *pu32_off_out,
+                                       uint16_t *pu16_out,
+                                       uint8_t *pu8_digit_count,
+                                       bool *pb_excess_digit)
+{
+    uint32_t u32_acc = 0U;
+    uint8_t u8_count = 0U;
+    uint32_t u32_off = u32_off_in;
+    bool b_excess = false;
+    if (psz == NULL || pu32_off_out == NULL || pu16_out == NULL ||
+        pu8_digit_count == NULL || pb_excess_digit == NULL)
+    {
+        return false;
+    }
+    while (psz[u32_off] >= '0' && psz[u32_off] <= '9')
+    {
+        if (u8_count < PLAY_DUTY_SEMICOLON_DIGIT_MAX)
+        {
+            u32_acc = (u32_acc * 10U) + (uint32_t)(psz[u32_off] - '0');
+            u8_count++;
+        }
+        else
+        {
+            b_excess = true;
+        }
+        u32_off++;
+    }
+    *pu16_out = (uint16_t)u32_acc;
+    *pu8_digit_count = u8_count;
+    *pb_excess_digit = b_excess;
+    *pu32_off_out = u32_off;
+    return true;
+}
+static bool b_play_apply_duty_semicolon_suffix(play_runtime_t *px_rt,
+                                               play_note_memory_t *px_mem,
+                                               const char *psz,
+                                               uint32_t *pu32_off)
+{
+    uint16_t u16_n = 0U;
+    uint8_t u8_digits = 0U;
+    bool b_excess = false;
+    uint32_t u32_new = 0U;
+    if (px_rt == NULL || px_mem == NULL || psz == NULL || pu32_off == NULL)
+    {
+        return false;
+    }
+    if (!b_play_scan_duty_digit_run(psz, *pu32_off, &u32_new, &u16_n,
+                                    &u8_digits, &b_excess))
+    {
+        return false;
+    }
+    *pu32_off = u32_new;
+    if (b_excess)
+    {
+        if (!b_play_fault(px_rt, PLAY_FAULT_CLASS_RECOVERABLE, "too many digits"))
+        {
+            return false;
+        }
+    }
+    if (u8_digits == 0U)
+    {
+        v_play_apply_duty_shorthand(px_mem, PLAY_DUTY_NORMAL_NUM);
+    }
+    else if (u8_digits == 1U)
+    {
+        v_play_apply_duty_shorthand(px_mem, (uint8_t)u16_n);
+    }
+    else
+    {
+        v_play_apply_duty_percent(px_mem, (uint8_t)u16_n);
+    }
+    return true;
+}
 static bool b_play_parse_pitch_token(play_runtime_t *px_rt,
                                      bool b_is_rest,
                                      char c_lead_letter,
@@ -1788,25 +1883,10 @@ static bool b_play_parse_pitch_token(play_runtime_t *px_rt,
                     return false;
                 }
                 px_rt->x_public.u32_src_offset++;
+                if (!b_play_apply_duty_semicolon_suffix(px_rt, &x_work, psz,
+                                                        &px_rt->x_public.u32_src_offset))
                 {
-                    uint16_t u16_n = 0U;
-                    bool b_have_n = false;
-                    if (!b_play_consume_digit_run_u16(px_rt, &u16_n, &b_have_n))
-                    {
-                        return false;
-                    }
-                    if (b_have_n)
-                    {
-                        if (u16_n > (uint16_t)UINT8_MAX)
-                        {
-                            u16_n = (uint16_t)UINT8_MAX;
-                        }
-                        v_play_apply_duty_shorthand(&x_work, (uint8_t)u16_n);
-                    }
-                    else
-                    {
-                        v_play_apply_duty_shorthand(&x_work, PLAY_DUTY_NORMAL_NUM);
-                    }
+                    return false;
                 }
                 b_saw_duty = true;
                 break;
@@ -2036,25 +2116,10 @@ static bool b_play_parse_absolute_token(play_runtime_t *px_rt,
                     return false;
                 }
                 px_rt->x_public.u32_src_offset++;
+                if (!b_play_apply_duty_semicolon_suffix(px_rt, &x_work, psz,
+                                                        &px_rt->x_public.u32_src_offset))
                 {
-                    uint16_t u16_n = 0U;
-                    bool b_have_n = false;
-                    if (!b_play_consume_digit_run_u16(px_rt, &u16_n, &b_have_n))
-                    {
-                        return false;
-                    }
-                    if (b_have_n)
-                    {
-                        if (u16_n > (uint16_t)UINT8_MAX)
-                        {
-                            u16_n = (uint16_t)UINT8_MAX;
-                        }
-                        v_play_apply_duty_shorthand(&x_work, (uint8_t)u16_n);
-                    }
-                    else
-                    {
-                        v_play_apply_duty_shorthand(&x_work, PLAY_DUTY_NORMAL_NUM);
-                    }
+                    return false;
                 }
                 b_saw_duty = true;
                 break;
@@ -2400,10 +2465,6 @@ static bool b_play_apply_ctx_suffix(play_runtime_t *px_rt, const char *psz_args)
                 break;
             case ';':
             {
-                uint16_t u16_n = 0U;
-                bool b_have_n = false;
-                bool b_excess = false;
-                uint32_t u32_new = 0U;
                 if (b_saw_duty &&
                     px_rt->e_fault_policy == PLAY_FAULT_POLICY_STRICT)
                 {
@@ -2412,31 +2473,10 @@ static bool b_play_apply_ctx_suffix(play_runtime_t *px_rt, const char *psz_args)
                     return false;
                 }
                 u32_i++;
-                if (!b_play_scan_digit_run_u16(psz_args, u32_i, &u32_new,
-                                               &u16_n, &b_have_n, &b_excess))
+                if (!b_play_apply_duty_semicolon_suffix(px_rt, &x_work, psz_args,
+                                                        &u32_i))
                 {
                     return false;
-                }
-                u32_i = u32_new;
-                if (b_excess)
-                {
-                    if (!b_play_fault(px_rt, PLAY_FAULT_CLASS_RECOVERABLE,
-                                      "too many digits"))
-                    {
-                        return false;
-                    }
-                }
-                if (b_have_n)
-                {
-                    if (u16_n > (uint16_t)UINT8_MAX)
-                    {
-                        u16_n = (uint16_t)UINT8_MAX;
-                    }
-                    v_play_apply_duty_shorthand(&x_work, (uint8_t)u16_n);
-                }
-                else
-                {
-                    v_play_apply_duty_shorthand(&x_work, PLAY_DUTY_NORMAL_NUM);
                 }
                 b_saw_duty = true;
                 break;
