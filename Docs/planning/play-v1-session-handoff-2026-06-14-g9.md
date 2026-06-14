@@ -6,7 +6,7 @@
 
 - [play-v1-implementation-plan.md](play-v1-implementation-plan.md) — master decision log
 - [play-v1-chatbot-brief.md](play-v1-chatbot-brief.md) — author-facing status
-- [xy-durations-handoff.md](xy-durations-handoff.md) — G9 feature brief (archive candidate)
+- [archive/xy-durations-handoff.md](archive/xy-durations-handoff.md) — G9 brief (archived)
 - [decision-log-model.md](decision-log-model.md)
 - [grammar_torture_v11.play](../../scripts/play_golden/grammar_torture_v11.play) — v1.1 torture golden
 - [gen_v11_chromatic.py](../../scripts/gen_v11_chromatic.py) — golden regenerator (10-label cap)
@@ -17,7 +17,7 @@
 | --- | --- |
 | [play-v1-implementation-plan.md](play-v1-implementation-plan.md) | **§ MSG v1.1** — **G10** next |
 | [play-v1-chatbot-brief.md](play-v1-chatbot-brief.md) | X/Y **YES** in duration table |
-| [xy-durations-handoff.md](xy-durations-handoff.md) | G9 firmware notes |
+| [archive/xy-durations-handoff.md](archive/xy-durations-handoff.md) | G9 firmware notes |
 
 ## Suggested opener
 
@@ -93,10 +93,10 @@ Next: G10 — raw-percent ;nn duty (D5b)
 
 ## Known doc drift
 
-- Run **`/cleanup-docs`** to archive `xy-durations-handoff.md` when convenient.
+- Run **`/cleanup-docs`** — `xy-durations-handoff.md` archived; keep this `-g9` handoff as newest.
 
 ## Git note
 
-Branch `main` · see wrapup commit hash below (no push by default).
+Shipped on `main`: `8b3f621` (G9 firmware) + `d36b356` (chromatic golden + docs).
 
 **End of handoff**

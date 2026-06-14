@@ -34,6 +34,8 @@ KEEP_SESSION_COUNT = 1
 FEATURE_MSG_MAP = {
     "labels-preparse": "G4",
     "labels-gosub": "G5",
+    "key-snapshot": "G8",
+    "xy-durations": "G9",
 }
 
 
@@ -105,7 +107,10 @@ def inventory(keep_session_count: int = KEEP_SESSION_COUNT) -> list[DocItem]:
     sessions: list[tuple[datetime | None, Path]] = []
     for p in sorted(PLANNING.glob(SESSION_GLOB)):
         sessions.append((_parse_session_date(p), p))
-    sessions.sort(key=lambda t: (t[0] is None, t[0] or datetime.min), reverse=True)
+    sessions.sort(
+        key=lambda t: (t[0] is None, t[0] or datetime.min, t[1].name),
+        reverse=True,
+    )
 
     for i, (dt, p) in enumerate(sessions):
         if i < keep_session_count:

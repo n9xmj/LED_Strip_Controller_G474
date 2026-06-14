@@ -1,6 +1,6 @@
 # PLAY v1 — personal-account session handoff (2026-06-13)
 
-> **Continuity superseded (2026-06-14):** **v1 firmware MSG complete** (`ee4e064` G8). Read **[play-v1-session-handoff-2026-06-14-g8.md](play-v1-session-handoff-2026-06-14-g8.md)** — next work is **v1.1 G9/G10**. This file remains for account-switch steps and parent/child workflow notes.
+> **Continuity superseded (2026-06-14):** **G9** shipped (`8b3f621`/`d36b356`). Read **[play-v1-session-handoff-2026-06-14-g9.md](play-v1-session-handoff-2026-06-14-g9.md)** — **G10** (`;nn` duty) is the only remaining required v1.1 PLAY row.
 
 **Read this first** after switching Cursor to your **personal Pro** account and opening this repo fresh.
 
@@ -14,12 +14,12 @@
 
 | Item | Status |
 | ---- | ------ |
-| **G1–G8** firmware | ✅ on `main` — **v1 MSG closed** (2026-06-14) |
-| **G9** / **G10** | ❌ v1.1 next (`X`/`Y`, `;nn`) |
-| Plan MSG table + I10 audit | ✅ through G8 |
-| Chatbot brief | ✅ through G8 / S4 repeat restore |
-| G8 feature brief | ✅ archived → `archive/key-snapshot-handoff.md` |
-| Session continuity doc | ✅ [play-v1-session-handoff-2026-06-14-g8.md](play-v1-session-handoff-2026-06-14-g8.md) |
+| **G1–G9** firmware | ✅ on `main` — v1 + **G9** v1.1 X/Y |
+| **G10** | ❌ v1.1 next (`;nn` duty) |
+| Plan MSG table + I10 audit | ✅ through G9 |
+| Chatbot brief | ✅ X/Y durations YES |
+| G9 feature brief | ✅ archived → `archive/xy-durations-handoff.md` |
+| Session continuity doc | ✅ [play-v1-session-handoff-2026-06-14-g9.md](play-v1-session-handoff-2026-06-14-g9.md) |
 
 **Do not depend on old chat history.** Continuity lives in git + these docs.
 
@@ -109,7 +109,7 @@ Full table: [`play-v1-implementation-plan.md`](play-v1-implementation-plan.md) �
 | Agent contract | `AGENTS.md` |
 | Focused-session template | `Docs/planning/focused-implementation-handoff-template.md` |
 | Bench harness | `scripts/play_bench.py` · goldens in `scripts/play_golden/` |
-| Prior session notes | [play-v1-session-handoff-2026-06-14-g8.md](play-v1-session-handoff-2026-06-14-g8.md) |
+| Prior session notes | [play-v1-session-handoff-2026-06-14-g9.md](play-v1-session-handoff-2026-06-14-g9.md) |
 
 **Prime command:** `/read-the-docs` (loads memory index + `AGENTS.md` + plan context).
 
@@ -144,7 +144,7 @@ Do not re-litigate green D16/D17/S7d decisions.
 | ---- | ----- |
 | 2026-06-13 | G4 + cleanup-docs pushed; work-account parent session ends |
 | 2026-06-13 | Personal-account handoff prepared — **G5 brief is first task** |
-| 2026-06-14 | **G8** shipped (`ee4e064`); v1 firmware MSG closed; `/cleanup-docs` archived G8 brief |
+| 2026-06-14 | **G9** shipped (`8b3f621`, `d36b356`); chromatic v11 torture; **G10** next |
 
 ---
 
