@@ -21,6 +21,7 @@
 
 #include <stdint.h>
 #include <stdbool.h>
+#include <stddef.h>     /* size_t */
 
 #include "ansi.h"   /* ESC, CSI_S, terminal-control output macros */
 
@@ -154,6 +155,43 @@ extern void v_term_set_lead_chars(const uint8_t *pu8_leads, uint8_t u8_count);
  * @param u16_count  Number of entries.
  */
 extern void v_term_register_keymap(const term_keymap_t *px_map, uint16_t u16_count);
+
+/** Minimum caller-buffer size (incl. NUL) to hold any visible token: the
+ *  widest is "\\xHH" (4 chars) -> 5 bytes. Use for pc_term_char_to_str(). */
+#define TERM_VISIBLE_BUFSZ          5u
+
+/**
+ * @brief Convert one byte to its human-readable ("visible") token, caret-
+ *        notation style, into a caller-supplied buffer (thread-safe / no
+ *        shared state). Printable ASCII (0x20..0x7E) maps to itself; the rest
+ *        become a short, tight token (NO trailing space, so it nests cleanly
+ *        as e.g. a "[<tok>]" menu-key echo):
+ *          - ESC (0x1B) : "ESC"       \ named mnemonics (the 3 common
+ *          - CR  (0x0D) : "ENT"       |  control codes that earn a friendly
+ *          - DEL (0x7F) : "DEL"       /  3-char name instead of caret/hex)
+ *          - 0x00..0x1F : "^@".."^_"  (caret notation, c XOR 0x40)
+ *          - 0x80..0xFF : "\\xHH"     (C-style hex escape)
+ *
+ *        Output is always NUL-terminated and truncated to fit @p sz_max
+ *        (size at least @ref TERM_VISIBLE_BUFSZ to avoid truncation).
+ *
+ * @param c_in     Byte to render.
+ * @param pc_out   Destination buffer (must be non-NULL).
+ * @param sz_max   Capacity of @p pc_out in bytes (incl. NUL).
+ * @return @p pc_out (for call chaining), or NULL on a bad argument.
+ */
+extern char *pc_term_char_to_str(char c_in, char *pc_out, size_t sz_max);
+
+/**
+ * @brief Print one byte's visible token (see pc_term_char_to_str) followed by
+ *        a single trailing space -- the streaming/dump-friendly convenience
+ *        wrapper. For a tight, space-free token (e.g. "[ESC]") call
+ *        pc_term_char_to_str() and print "%s" yourself.
+ *
+ * @param u8_ch  Byte to render.
+ * @return Number of characters written (token width + 1 for the space).
+ */
+extern int i_term_putc_visible(uint8_t u8_ch);
 
 /******************************************************************************
  * Reference: Tera Term / xterm key sequences (decoded by the standard keymap)

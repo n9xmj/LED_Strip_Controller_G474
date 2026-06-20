@@ -1480,7 +1480,7 @@ void v_debug_menu_service(void)
     b_reentry_lock = true;
 
     int i_key;
-    char ac_key[4];
+    char ac_key[TERM_VISIBLE_BUFSZ];
 
     do
     {
@@ -1490,8 +1490,7 @@ void v_debug_menu_service(void)
             break;
         }
 
-        pc_char_to_str((char) i_key, ac_key);
-
+        pc_term_char_to_str((char) i_key, ac_key, sizeof ac_key);
         printf("Cmd [%s]\r\n", ac_key);
         v_debug_menu_exec((char) i_key);
     }

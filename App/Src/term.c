@@ -6,6 +6,7 @@
  ******************************************************************************/
 
 #include <stdio.h>          /* getchar (newlib stdio; retargeted to debug UART) */
+#include <string.h>         /* strncpy */
 
 #include "platform.h"       /* HAL_GetTick, ELAPSED_TIME */
 #include "utils.h"          /* v_app_polling_task (declaration) */
@@ -331,4 +332,50 @@ void v_term_register_keymap(const term_keymap_t *px_map, uint16_t u16_count)
 
     s_px_user_map = px_map;
     s_u16_user_count = u16_count;
+}
+
+char *pc_term_char_to_str(char c_in, char *pc_out, size_t sz_max)
+{
+    uint8_t u8_ch = (uint8_t) c_in;
+    char    ac_tmp[TERM_VISIBLE_BUFSZ];     /* local scratch; refilled per call */
+
+    if ((pc_out == NULL) || (sz_max == 0u))
+    {
+        return pc_out;
+    }
+
+    /* Named mnemonics for the 3 "common" control codes (deviation from the
+     * pure caret/hex pattern; keeps a bracketed menu echo like "[ESC]" tidy). */
+    switch (u8_ch)
+    {
+        case 0x1Bu: (void) snprintf(ac_tmp, sizeof ac_tmp, "ESC"); break;   /* Escape     */
+        case 0x0Du: (void) snprintf(ac_tmp, sizeof ac_tmp, "ENT"); break;   /* Enter / CR */
+        case 0x7Fu: (void) snprintf(ac_tmp, sizeof ac_tmp, "DEL"); break;   /* Delete     */
+        default:
+            if ((u8_ch >= 0x20u) && (u8_ch <= 0x7Eu))
+            {
+                (void) snprintf(ac_tmp, sizeof ac_tmp, "%c", (char) u8_ch);          /* printable */
+            }
+            else if (u8_ch < 0x20u)
+            {
+                (void) snprintf(ac_tmp, sizeof ac_tmp, "^%c", (char) (u8_ch + '@')); /* C0: ^@..^_ */
+            }
+            else
+            {
+                (void) snprintf(ac_tmp, sizeof ac_tmp, "\\x%02X", (unsigned) u8_ch); /* high-bit */
+            }
+            break;
+    }
+
+    (void) strncpy(pc_out, ac_tmp, sz_max - 1u);
+    pc_out[sz_max - 1u] = '\0';
+    return pc_out;
+}
+
+int i_term_putc_visible(uint8_t u8_ch)
+{
+    char ac_tok[TERM_VISIBLE_BUFSZ];
+
+    (void) pc_term_char_to_str((char) u8_ch, ac_tok, sizeof ac_tok);
+    return printf("%s ", ac_tok);           /* token + single trailing space */
 }
