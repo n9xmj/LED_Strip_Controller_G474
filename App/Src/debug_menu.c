@@ -6,12 +6,15 @@
 
 #include "app_global.h"
 #include <stdlib.h>
+#include <math.h>
 
 #include "ansi.h"
+#include "i2s.h"
 #include "menu-api.h"
 #include "utils.h"
 #include "led_strip_control.h"
 #include "i2s_test_tone.h"
+#include "audio_in_service.h"
 #include "synth_engine.h"   // new non-blocking CORDIC synth (direct sine for v1)
 #include "note_player.h"    // interactive terminal piano / note player ('p' from top menu)
 #include "play.h"
@@ -775,13 +778,260 @@ static void v_debug_i2s_tone_stop(void)
 }
 
 //------------------------------------------------------------------------------
+// INMP441 bench tools (I2S2). VU meter ('m') and DMA stream bench ('r') both run
+// off the audio_in_service job-queue stream; rendering helpers are shared below.
+
+#define DEBUG_MIC_METER_BAR_WIDTH       (60u)
+#define DEBUG_MIC_METER_FULL_SCALE_F    (32768.0f)     /* 1 << 15, int16 PCM full scale (0 dBFS) */
+#define DEBUG_MIC_METER_FLOOR_DB        (60.0f)        /* bar bottom = -60 dBFS */
+#define DEBUG_MIC_METER_DISPLAY_MS      (100u)         /* ~10 Hz screen refresh */
+#define DEBUG_MIC_METER_ATTACK_ALPHA    (0.50f)        /* envelope rise — fast */
+#define DEBUG_MIC_METER_RELEASE_ALPHA   (0.10f)        /* envelope fall — slow */
+#define DEBUG_MIC_METER_GAIN_STEP_DB    (3)            /* +/- key step */
+#define DEBUG_MIC_METER_GAIN_MAX_DB     (60)           /* display-only digital gain ceiling */
+#define DEBUG_MIC_DIAG_DISPLAY_MS       (1000u)        /* DMA stream bench print rate */
+
+/** AC RMS (int16 scale) → dBFS. Returns a deep floor for sub-LSB input. */
+static float f_debug_mic_rms_to_dbfs(float f_rms)
+{
+    if (f_rms < 1.0f)
+    {
+        return -120.0f;
+    }
+
+    return 20.0f * log10f(f_rms / DEBUG_MIC_METER_FULL_SCALE_F);
+}
+
+/** Map dBFS over [-FLOOR_DB, 0] to a 0..65535 bar level. */
+static uint16_t u16_debug_mic_dbfs_to_level(float f_dbfs)
+{
+    float f_norm = (f_dbfs + DEBUG_MIC_METER_FLOOR_DB) / DEBUG_MIC_METER_FLOOR_DB;
+
+    if (f_norm < 0.0f)
+    {
+        f_norm = 0.0f;
+    }
+    if (f_norm > 1.0f)
+    {
+        f_norm = 1.0f;
+    }
+
+    return (uint16_t) (f_norm * 65535.0f);
+}
+
+/** First-order attack/release envelope (operates in the dB domain here). */
+static float f_debug_mic_smooth_level(float f_new_level, float f_envelope)
+{
+    float f_alpha;
+
+    if (f_new_level > f_envelope)
+    {
+        f_alpha = DEBUG_MIC_METER_ATTACK_ALPHA;
+    }
+    else
+    {
+        f_alpha = DEBUG_MIC_METER_RELEASE_ALPHA;
+    }
+
+    return (f_alpha * f_new_level) + ((1.0f - f_alpha) * f_envelope);
+}
+
+/**
+ * Render the meter line. @p f_meas_dbfs is the true (pre-gain) smoothed level
+ * shown as the numeric readout; @p i_gain_db is a display-only digital boost
+ * applied to the bar so ambient-level sound shows meaningful deflection.
+ */
+static void v_debug_mic_meter_print_line(float f_meas_dbfs, int i_gain_db)
+{
+    uint16_t u16_level = u16_debug_mic_dbfs_to_level(f_meas_dbfs + (float) i_gain_db);
+    uint8_t u8_fill = (uint8_t) (((uint32_t) u16_level * DEBUG_MIC_METER_BAR_WIDTH + 32767u) / 65535u);
+    char ac_bar[DEBUG_MIC_METER_BAR_WIDTH + 1u];
+    uint8_t u8_i;
+
+    for (u8_i = 0u; u8_i < DEBUG_MIC_METER_BAR_WIDTH; u8_i++)
+    {
+        ac_bar[u8_i] = (u8_i < u8_fill) ? '|' : ' ';
+    }
+    ac_bar[DEBUG_MIC_METER_BAR_WIDTH] = '\0';
+
+    printf("\r%4d dBFS  g+%02d [%s]" ANSI_CLEAR_EOL,
+           (int) lrintf(f_meas_dbfs), i_gain_db, ac_bar);
+}
+
+static void v_debug_i2s_mic_level_meter(void)
+{
+    audio_in_service_config_t x_cfg;
+    i2s_audio_in_err_t x_err;
+    float f_env_dbfs = -DEBUG_MIC_METER_FLOOR_DB;
+    int i_gain_db = 0;
+    uint32_t u32_last_display_ms = HAL_GetTick();
+
+    printf("\r\nINMP441 level meter (I2S2 DMA / job queue, dBFS).\r\n");
+    printf("Keys: '+' / '-' digital gain (bar only), '0' reset, ESC exit.\r\n");
+
+    if (b_audio_in_service_is_running())
+    {
+        v_audio_in_service_stop();
+    }
+    else if (!b_i2s_audio_in_is_idle())
+    {
+        v_i2s_audio_in_stop();
+    }
+
+    x_cfg.pfn_chunk_handler = NULL;     // default handler tracks AC RMS + peak
+    x_cfg.p_pv_user = NULL;
+    x_cfg.u16_mono_frames_per_half = I2S_AUDIO_IN_DEFAULT_FRAMES_PER_HALF;
+
+    x_err = x_audio_in_service_init(&x_cfg);
+    if (x_err != I2S_AUDIO_IN_ERR_OK)
+    {
+        printf("audio_in_service init failed (%d)\r\n", (int) x_err);
+        return;
+    }
+
+    x_err = x_audio_in_service_start();
+    if (x_err != I2S_AUDIO_IN_ERR_OK)
+    {
+        printf("audio_in_service start failed (%d)\r\n", (int) x_err);
+        return;
+    }
+
+    for (;;)
+    {
+        int i_key;
+
+        i_key = i_getchar_blocking_with_timeout(0u);
+        if (i_key == 0x1B)
+        {
+            break;
+        }
+        else if ((i_key == '+') || (i_key == '='))
+        {
+            i_gain_db += DEBUG_MIC_METER_GAIN_STEP_DB;
+            if (i_gain_db > DEBUG_MIC_METER_GAIN_MAX_DB)
+            {
+                i_gain_db = DEBUG_MIC_METER_GAIN_MAX_DB;
+            }
+        }
+        else if ((i_key == '-') || (i_key == '_'))
+        {
+            i_gain_db -= DEBUG_MIC_METER_GAIN_STEP_DB;
+            if (i_gain_db < 0)
+            {
+                i_gain_db = 0;
+            }
+        }
+        else if (i_key == '0')
+        {
+            i_gain_db = 0;
+        }
+
+        if (ELAPSED_TIME(u32_last_display_ms) >= DEBUG_MIC_METER_DISPLAY_MS)
+        {
+            float f_dbfs = f_debug_mic_rms_to_dbfs((float) u32_audio_in_service_get_last_ac_rms());
+
+            f_env_dbfs = f_debug_mic_smooth_level(f_dbfs, f_env_dbfs);
+            v_debug_mic_meter_print_line(f_env_dbfs, i_gain_db);
+            u32_last_display_ms = HAL_GetTick();
+        }
+
+        v_app_polling_task();
+    }
+
+    v_audio_in_service_stop();
+
+    while (!b_i2s_audio_in_is_idle())
+    {
+        v_app_polling_task();
+    }
+
+    printf("\r\nMic meter stopped.\r\n");
+}
+
+//------------------------------------------------------------------------------
+// DMA mic stream bench (audio_in_service → job queue → main context).
+
+static void v_debug_i2s_mic_dma_stream(void)
+{
+    audio_in_service_config_t x_cfg;
+    i2s_audio_in_err_t x_err;
+    uint32_t u32_last_print_ms = 0u;
+    uint32_t u32_last_chunks = 0u;
+
+    printf("\r\nINMP441 DMA stream (audio_in_service / job queue). 1 line/s. ESC exit.\r\n");
+
+    if (b_audio_in_service_is_running())
+    {
+        v_audio_in_service_stop();
+    }
+    else if (!b_i2s_audio_in_is_idle())
+    {
+        v_i2s_audio_in_stop();
+    }
+
+    x_cfg.pfn_chunk_handler = NULL;
+    x_cfg.p_pv_user = NULL;
+    x_cfg.u16_mono_frames_per_half = I2S_AUDIO_IN_DEFAULT_FRAMES_PER_HALF;
+
+    x_err = x_audio_in_service_init(&x_cfg);
+    if (x_err != I2S_AUDIO_IN_ERR_OK)
+    {
+        printf("audio_in_service init failed (%d)\r\n", (int) x_err);
+        return;
+    }
+
+    x_err = x_audio_in_service_start();
+    if (x_err != I2S_AUDIO_IN_ERR_OK)
+    {
+        printf("audio_in_service start failed (%d)\r\n", (int) x_err);
+        return;
+    }
+
+    for (;;)
+    {
+        int i_key;
+        uint32_t u32_chunks;
+
+        i_key = i_getchar_blocking_with_timeout(0u);
+        if (i_key == 0x1B)
+        {
+            break;
+        }
+
+        if (ELAPSED_TIME(u32_last_print_ms) >= DEBUG_MIC_DIAG_DISPLAY_MS)
+        {
+            u32_chunks = u32_audio_in_service_get_chunks_processed();
+            printf("chunks=%lu (+%lu) ac=%lu pk=%lu tick=%lu\r\n",
+                   (unsigned long) u32_chunks,
+                   (unsigned long) (u32_chunks - u32_last_chunks),
+                   (unsigned long) u32_audio_in_service_get_last_ac_rms(),
+                   (unsigned long) u32_audio_in_service_get_peak_abs(),
+                   (unsigned long) HAL_GetTick());
+            u32_last_chunks = u32_chunks;
+            u32_last_print_ms = HAL_GetTick();
+        }
+
+        v_app_polling_task();
+    }
+
+    v_audio_in_service_stop();
+
+    while (!b_i2s_audio_in_is_idle())
+    {
+        v_app_polling_task();
+    }
+
+    printf("DMA mic stream stopped.\r\n");
+}
+
+//------------------------------------------------------------------------------
 
 static const menu_item_t x_i2s_audio_tests_submenu[] =
 {
     {
         .x_type = MENU_ITEM_HELP_TEXT_FIXED,
         .c_key = 0,
-        .p_c_text = "\r\n--- I2S audio tests (SAI1 -> MAX98357) ---\r\n"
+        .p_c_text = "\r\n--- I2S audio tests (SAI1 out / I2S2 INMP441 mic) ---\r\n"
     },
     {
         .x_type = MENU_ITEM_HELP,
@@ -816,6 +1066,18 @@ static const menu_item_t x_i2s_audio_tests_submenu[] =
         .c_key = 's',
         .p_c_text = "Stop current tone (explicit stop + silence)",
         .pfn_function = v_debug_i2s_tone_stop
+    },
+    {
+        .x_type = MENU_ITEM_FUNCTION,
+        .c_key = 'm',
+        .p_c_text = "INMP441 mic level meter (dBFS bar, +/- gain, ESC to exit)",
+        .pfn_function = v_debug_i2s_mic_level_meter
+    },
+    {
+        .x_type = MENU_ITEM_FUNCTION,
+        .c_key = 'r',
+        .p_c_text = "INMP441 DMA stream bench (job queue, ESC to exit)",
+        .pfn_function = v_debug_i2s_mic_dma_stream
     },
     {
         .x_type = MENU_ITEM_RETURN_TO_PREVIOUS_MENU,

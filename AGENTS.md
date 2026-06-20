@@ -45,7 +45,22 @@ This document tells you how to work effectively and safely in this project. Read
 - DMA: circular, M2P, WORD-aligned mem and peripheral.
 - Public API uses `i2s_audio_out_` prefix + Hungarian (e.g. `x_i2s_audio_out_init()`, `v_i2s_audio_out_start()`).
 - Debug menu `i` for sine tests (clean 440 Hz achieved on bench).
-- Future reuse path for I2S mic input (24b→16b compression is acceptable for initial audition).
+
+### Audio Input — INMP441 mic streaming (`App/i2s_audio_in.*` + `App/audio_in_service.*`)
+
+Working end-to-end on the bench (mic → DMA → job queue → main-context handler). Two layers:
+
+1. **`i2s_audio_in` (driver, RTOS-agnostic):** I2S2 (SPI2) **circular DMA ping-pong** RX from the INMP441. Each completed DMA half is decoded to **16-bit mono PCM** into one of two ping-pong PCM buffers, then handed to a `pfn_consume` callback **in ISR context** (do not block there). API: `x_i2s_audio_in_init/start`, `v_i2s_audio_in_stop`, `b_i2s_audio_in_is_idle`, chunk/time/Fs getters. Default 128 mono frames/half (~4 ms @ 32 kHz), ~250 chunks/s.
+   - **Decode (critical):** 24-bit-in-32-bit Philips frame, MSB-first. The DMA stores the **first** halfword (sample bits [23:8]) at `pair[0]`, the **second** ([7:0]) at `pair[1]`. Reassemble `raw = (pair[0]<<16)|pair[1]`, then `(int32_t)raw >> 8`. **Do not swap the halfwords** (pegs meters at full scale).
+   - **DMA config (in `.ioc`, SPI2_RX):** Mode = **Circular**, Data Width = **Half Word** (peripheral + memory). CubeMX originally emitted Byte/Normal — wrong; corrupts the stream. There is **no** runtime override anymore; the `.ioc` is the source of truth.
+   - **Mono on shared SD:** INMP441 is L/R→GND (left slot only); per WS pair take `max(|L|,|R|)`. See `.grok/memory/inmp441_i2s_wiring.md`.
+2. **`audio_in_service` (main-context ingest via Job queue):** registers as the driver's consume callback; the ISR only **posts `JOB_I2S_AUDIO_IN_CHUNK`** (`param1`=half index, `param2`=frame count, pointer=PCM half) to `gx_job_queue`. `v_process_next_job` (in `app_main.c`) then runs the registered `audio_in_chunk_handler_fn_t` **in main context** — this is where real DSP/LED work belongs. A NULL handler uses the built-in level stats (AC RMS + peak), exposed via `u32_audio_in_service_get_last_ac_rms/peak_abs/chunks_processed`.
+   - **Why:** keeps heavy work out of the DMA ISR; the super-loop drains jobs via `v_app_polling_task`. The main loop must **not** be starved — any in-loop waits must pump `v_app_polling_task` (use `i_getchar_blocking*` / `v_app_delay_ms`).
+
+**Bench test tools (debug menu `i` submenu):**
+- **`m`** — INMP441 VU meter. dBFS-scaled bar (−60…0 dBFS) off the job-queue stream, with a display-only digital **gain knob** (`+`/`-` 3 dB steps, `0` reset). Numeric readout is the true (pre-gain) level. Mirrors level to an LED bargraph on `LED_CHANNEL_2` (10-LED SK6812: 5 green / 3 yellow / 2 red), DMA fire-and-forget.
+- **`r`** — DMA stream bench: prints `chunks/ac/pk` once per second to confirm the stream + job path are alive.
+- Sensitivity note: INMP441 is a fixed-gain digital mic (sens −26 dBFS @ 94 dB SPL, SNR ~61 dB, overload ~120 dB SPL). Ambient sound is small in *linear* terms but well above the noise floor — meter/DSP should work in **dB** and apply digital gain/AGC. 16-bit truncation is fine (mic SNR fits in 16 bits).
 
 ### When to Introduce RTOS (FreeRTOS)
 - Current super-loop + blocking debug menu is sufficient for bring-up and static tests.

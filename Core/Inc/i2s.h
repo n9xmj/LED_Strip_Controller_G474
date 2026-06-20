@@ -36,6 +36,8 @@ extern I2S_HandleTypeDef hi2s2;
 
 /* USER CODE BEGIN Private defines */
 
+extern DMA_HandleTypeDef hdma_spi2_rx;
+
 /* USER CODE END Private defines */
 
 void MX_I2S2_Init(void);

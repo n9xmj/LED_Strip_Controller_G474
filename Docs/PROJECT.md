@@ -95,7 +95,7 @@ Future work on **audio-reactive lighting** (mic → analysis → LED mapping) sh
 
 **Current / planned test hardware:**
 - WS2812B and SK6812 LED strips
-- INMP441 I2S microphone
+- INMP441 I2S microphone (**L/R → GND, left channel only** on current bench — right I2S slot tri-states; see [`.grok/memory/inmp441_i2s_wiring.md`](../.grok/memory/inmp441_i2s_wiring.md))
 - Electret microphone + preamp (see `Docs/Analog Electret Microphone Preamp.md`)
 - MAX98357 I2S amplifier breakout
 - TFT displays (ST7789 class)

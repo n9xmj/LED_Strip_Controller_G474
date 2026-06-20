@@ -9,6 +9,8 @@
 #include "debug_menu.h"
 #include "led_strip_control.h"
 #include "i2s_audio_out.h"
+#include "i2s_audio_in.h"
+#include "audio_in_service.h"
 #include "synth_engine.h"
 #include "play.h"
 #include "uart_stream.h"
@@ -94,6 +96,21 @@ void HAL_SAI_TxCpltCallback(SAI_HandleTypeDef *hsai)
 void HAL_SAI_ErrorCallback(SAI_HandleTypeDef *hsai)
 {
     v_i2s_audio_out_sai_error(hsai);
+}
+
+void HAL_I2S_RxHalfCpltCallback(I2S_HandleTypeDef *hi2s)
+{
+    v_i2s_audio_in_i2s_rx_half_cplt(hi2s);
+}
+
+void HAL_I2S_RxCpltCallback(I2S_HandleTypeDef *hi2s)
+{
+    v_i2s_audio_in_i2s_rx_cplt(hi2s);
+}
+
+void HAL_I2S_ErrorCallback(I2S_HandleTypeDef *hi2s)
+{
+    v_i2s_audio_in_i2s_error(hi2s);
 }
 
 /******************************************************************************
@@ -218,6 +235,10 @@ void v_process_next_job(void)
 
         case JOB_SYNTH_SERVICE:
             v_synth_engine_service();
+            break;
+
+        case JOB_I2S_AUDIO_IN_CHUNK:
+            v_audio_in_service_process_job(&x_job);
             break;
 
         case JOB_QUEUE_OVERFLOW:

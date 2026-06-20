@@ -31,6 +31,7 @@ All automation lives in the `scripts/` directory at the project root.
 | PLAY golden test by name | `python scripts/play_bench.py test smoke` (skill: `/playtest`) |
 | List PLAY golden tests | `python scripts/play_bench.py list` |
 | PLAY P0 scenario batch | `python scripts/play_scenarios.py --scenario P0` or `scripts/run_play_tests.ps1` |
+| Memory usage (linker map) | `scripts/memreport.ps1` (skills: `/memused`, `/memory`, `/memreport`) |
 
 ## Environment Variables (stock, preferred)
 

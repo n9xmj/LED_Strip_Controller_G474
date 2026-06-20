@@ -169,4 +169,7 @@ void v_i2s_audio_out_sai_error(SAI_HandleTypeDef *p_x_sai);
  * 24-bit mic samples to 16-bit before feeding the existing 16-bit
  * mono output path. No changes to the core 16-bit wire format are
  * required for initial bring-up.
+ * Bench wiring: single INMP441, L/R→GND (left channel). Process left
+ * slots only — right-channel samples are garbage (mic tri-states SD).
+ * See .grok/memory/inmp441_i2s_wiring.md.
  */

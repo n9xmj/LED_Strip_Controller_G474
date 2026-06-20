@@ -56,6 +56,8 @@ enum
 
     JOB_SYNTH_SERVICE,   // Periodic service for synth engine (CORDIC tone gen, future sequencing)
 
+    JOB_I2S_AUDIO_IN_CHUNK,   // INMP441 DMA half decoded — process in main context
+
     // ---------------------------------------------------
 
     // JOB_QUEUE_OVERFLOW must be declared/present

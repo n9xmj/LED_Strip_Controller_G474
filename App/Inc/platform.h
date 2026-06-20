@@ -119,7 +119,8 @@ do { \
 
 /** SAI1 block A — I2S master TX to MAX98357 (see @c i2s_audio_out). */
 #define I2S_AUDIO_OUT_SAI_HANDLE    hsai_BlockA1
-/** I2S2 — I2S master RX to INMP441 (see @c i2s_audio_in). */
+/** I2S2 — I2S master RX to INMP441 (see @c i2s_audio_in).
+ *  Bench: L/R→GND (left slot only); right slot tri-states — ignore in handlers. */
 #define I2S_AUDIO_IN_I2S_HANDLE     hi2s2
 
 /** SPI1 - SPI LCD */

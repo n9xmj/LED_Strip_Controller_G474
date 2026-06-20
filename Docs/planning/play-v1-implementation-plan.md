@@ -230,8 +230,9 @@ Cross-ref: [Docs/PROJECT.md](../PROJECT.md) long-term goals · deferred briefs u
 | W27 | v1.1 stretch | **`uart_stream` (USART2)** | Non-blocking debug UART — register ISR, HAL init-only; **not** PLAY grammar · [uart_stream-port-notes.md](uart_stream-port-notes.md) · enables terminal piano (**I9** / **I8**) |
 | W28 | v2 · low | **Wall-clock note duration (ms)** | Absolute time per note/rest — **ignores `T`/`%`**; **keeps duty ratio** (`_`/`!`/`;`); bench timing torture / scheduler drift / sync latency; inheritance optional · see **W28** stub |
 | W29 | v2 | **Musical dynamics & volume ramps** | Step markings via **`\"dyn:xxx"`** (D18) — pp…ff, sfz, fp, …; ramps via **`\"cresc:`** / **`\"dim:`** (beats + scale); **V-relative** scaling · see **W29** |
+| W30 | v2+ | **Deadline-driven PLAY service** (event not poll) | One-shot HW compare or job post only at **sound-off** + **rest-end**; drop per-loop `v_play_poll` spin while idle/in-note · see **W30** |
 
-*Last wish-list pass: 2026-06-14 (W29 **`\"dyn:xxx"`** step-syntax leaning; W28 wall-clock duration).*
+*Last wish-list pass: 2026-06-14 (W30 deadline-driven scheduler idea; W29 **`\"dyn:xxx"`** step-syntax leaning; W28 wall-clock duration).*
 
 ---
 
@@ -309,6 +310,125 @@ Separate **cmd** names (avoid overloading **`dyn:`** with beat spans):
 **Cross-ref:** **D6** (`V`) · **D13** (envelope) · **D18** (`ctx:` precedent) · **W5** (VIB/TRM/ADSR syntax) · [Player/README.md](../Player/README.md) · parent spec dynamics section.
 
 **Promote when:** repertoire demos need audible phrasing beyond on/off `V` steps — e.g. Sousa/Elgar tier (**T5**) or expression-heavy v2 scores.
+
+---
+
+### W30 — Deadline-driven PLAY service (v2+ · optimization)
+
+**Status:** 🔵 · **Needs user:** no (idea capture 2026-06-14 — author hand-transcription workflow)
+
+**Problem (v1 today):** The dedicated **I4** 1 ms HW timer only **increments** `su32_sched_tick` in its ISR. **`v_play_poll()`** runs from **`v_app_polling_task()`** on **every main-loop spin**; for each RUNNING instance, **`v_play_service()`** compares the global tick against **`u32_deadline_tick`** and **returns immediately** while a note is sounding or a rest gap is open. Parser work happens only in **`PLAY_SCHED_PARSE`** or when a deadline is reached — but the **poll entry itself** is still O(main-loop rate), not O(musical events).
+
+**Author proposal:** A note like **`C4Q.`** with duty 2/8 sounding + 6/8 gap needs **two** scheduler entries (sound-off, rest-end), not a check every 1 ms (or every super-loop pass). Schedule interpreter/parser entry **only** at those boundaries — e.g. program a **one-shot timer compare**, or post a **deferred job** at `now + active_ticks` and again at `now + note_ticks`.
+
+**Current state machine (already event-shaped — v1 just polls for the events):**
+
+| Phase | What happens | Next deadline |
+| ----- | ------------ | ------------- |
+| **`PLAY_SCHED_PARSE`** | `b_play_exec_next()` — parse token, start tone or rest | immediate (same poll) |
+| **`PLAY_SCHED_SOUND`** | Synth sounding; wait until `su32_sched_tick >= u32_deadline_tick` | **`u32_deadline_tick = now + active_ticks`** (duty sound-off); **`u32_note_end_tick = now + note_ticks`** |
+| **`PLAY_SCHED_GAP`** | Silence / rest tail; wait until tick ≥ deadline | **`u32_deadline_tick = u32_note_end_tick`** → then re-enter **PARSE** |
+
+Duty partition (S5 / **I4**): `active_ticks = (note_ticks * duty_num) / duty_den`; gap = remainder. Rest-only tokens skip **SOUND** and go straight to **GAP** until `note_end_tick`.
+
+**Why v1 kept the 1 ms tick + poll:**
+
+- **Shared monotonic clock** for future multi-voice sync (**S3** / **W8**) — every instance compares the **same** `su32_sched_tick`.
+- **Simple bring-up** — super-loop + cheap compare; ISR stays minimal (increment only).
+- **Integer tick math** — durations compile to tick counts once per note; no float in the hot path.
+
+**W30 direction (when promoted):**
+
+| Piece | Option |
+| ----- | ------ |
+| **Time base** | Keep **`su32_sched_tick`** @ 1 ms **or** move to µs counter; deadlines stay **absolute tick integers** |
+| **Wake mechanism** | (A) TIM compare one-shot reprogrammed on each `v_play_start_note`; (B) **`v_job_add(JOB_PLAY_TICK)`** only when deadline elapses (requires **time-aware job queue** — not in v1); (C) RTOS software timer per instance |
+| **Idle cost** | **`v_play_poll()`** no-op or not called when no RUNNING instance and no pending deadline |
+| **Polyphony** | Next wake = **min(deadline)** across instances (priority queue or HW compare chain) |
+
+**Preserve:** **`max(1, note_ticks)`**, duty integer partition, in-flight deadlines not rescaling on mid-note **`T`** change (**I4** locked rules).
+
+**Out of scope:** replacing musical tick math (**S5**); wall-clock durations (**W28**).
+
+**Promote when:** main-loop PLAY poll cost matters (fast tempos + other subsystems contending) or RTOS lands.
+
+**Firmware refs:** `App/Src/play.c` (`v_play_service`, `v_play_start_note`, `su32_sched_tick`); `App/Src/app_main.c` (`v_periodic_timer_service`, `v_app_polling_task`); **I4** section above. **RTOS + NVIC:** see **RTOS migration — PLAY timer, NVIC, and FreeRTOS tick** (below).
+
+---
+
+### RTOS migration — PLAY timer, NVIC, and FreeRTOS tick
+
+**Status:** 🔵 · **Needs user:** no (planning notes 2026-06-14 — author + agent session; implement when FreeRTOS lands per **AGENTS.md** / **PROJECT.md**)
+
+**Trigger (unchanged):** Add FreeRTOS only when a feature needs **real concurrency** (e.g. continuous I2S/analog mic capture + LED animation + PLAY). **`led_strip_control`** and other drivers stay **RTOS-agnostic**; glue lives in **`App/`** (tasks, queues, NVIC policy).
+
+**Cross-ref:** **W30** (deadline-driven PLAY) · **I4** (musical tick math) · **S11** (loader task must not block tick/ISR) · [terminal-piano-and-player-notes.md](terminal-piano-and-player-notes.md)
+
+#### Two clocks — do not conflate them
+
+| Clock | Owner | Typical rate | Purpose |
+| ----- | ----- | -------------- | ------- |
+| **FreeRTOS kernel tick** | `configTICK_RATE_HZ` (often **1000 Hz → 1 ms**) | 1 ms (2 ms OK; 500 µs only if RTOS APIs need it) | `vTaskDelay`, queue timeouts, software timers, housekeeping |
+| **PLAY musical timeline** | Dedicated HW timer + integer **`su32_sched_tick`** (or successor) | **1 ms grid today** (**I4** `PLAY_SCHED_TICK_US`); compare/one-shot for **W30** | Note/rest deadlines, duty partition (**S5**), multi-voice sync (**S3**) |
+
+**Locked intent:** Raising **`configTICK_RATE_HZ`** to 2 kHz is **not** the way to improve PLAY timing. Musical deadlines stay on the **PLAY timer**; the RTOS tick stays a coarse task scheduler.
+
+**FreeRTOS tick overhead (G474 ballpark):** Each tick runs **`xTaskIncrementTick()`** in ISR — not a full context switch every tick. Switches happen only when a **higher-priority** task becomes ready. On Cortex-M4 @ ~170 MHz, tick ISR alone is often **~1–5 µs**; a switch adds **~5–20+ µs** (FPU/config dependent). **1 kHz** tick is usually **&lt;1% CPU** under light load; **2 kHz** roughly doubles tick ISR cost — tolerable but rarely justified for PLAY alone. **`configUSE_TICKLESS_IDLE`** optional when the CPU is often idle.
+
+#### W30 on RTOS — recommended shape
+
+Replace super-loop **`v_play_poll()`** with:
+
+1. **PLAY task** — blocked on queue or task notification; runs **`b_play_exec_next()`** / state machine (**not** in ISR).
+2. **Dedicated PLAY HW timer** — compare or one-shot reprogrammed at each **`v_play_start_note`** boundary (**sound-off**, **rest-end**; see **W30** table).
+3. **Deadline ISR** — minimal: post event (**`xQueueSendFromISR`** / **`vTaskNotifyGiveFromISR`**) + reprogram next compare; **no** parser, float, or logging.
+4. **Optional 1 ms counter** — keep incrementing **`su32_sched_tick`** in a lightweight ISR (or derive from same TIM timebase) for integer deadline math and future **S3** alignment.
+
+**Anti-pattern:** FreeRTOS at 1 ms **and** still polling PLAY every loop iteration — pays both costs.
+
+#### NVIC on STM32G474 (Cortex-M4F) — priority model
+
+ARM rule: **lower numeric priority value = more urgent** (preempts higher numbers).
+
+The RTOS “scheduler” is **not** the highest-priority ISR. **`PendSV`** (context switch) and typically **`SysTick`** (kernel tick) run at the **lowest** hardware urgency (highest numeric priority, e.g. **15** on a 4-bit NVIC).
+
+**Recommended stack (most urgent at top):**
+
+```
+  SAI / I2S DMA half/complete     (e.g. priority 2–4)   — short; NO FreeRTOS FromISR
+  Other time-critical HW (LED DMA completion, etc.)
+  ── above configMAX_SYSCALL_INTERRUPT_PRIORITY ──
+  PLAY deadline timer ISR           (mid band, syscall-safe) — queue/notify only
+  UART / debug (if FromISR used)
+  ── configMAX_SYSCALL_INTERRUPT_PRIORITY (library value in FreeRTOSConfig.h) ──
+  FreeRTOS SysTick                  (low urgency)
+  PendSV                            (lowest urgency)
+```
+
+**Common misconception:** PLAY timer does **not** need “lower IPL than the scheduler” in the sense of *weaker* than PendSV. It usually **preempts** PendSV when it fires. What it **must** respect is the **FreeRTOS syscall ceiling**.
+
+#### `configMAX_SYSCALL_INTERRUPT_PRIORITY`
+
+Any ISR that calls **`FromISR`** APIs (`xQueueSendFromISR`, `vTaskNotifyGiveFromISR`, …) must have NVIC priority **numerically ≥** that config value (same or **less** urgent than the cutoff).
+
+| PLAY timer NVIC priority | Post to queue from deadline ISR? |
+| ------------------------ | -------------------------------- |
+| More urgent than ceiling (lower number) | **Unsafe** — do not call FromISR |
+| At or below ceiling (higher number) | **OK** |
+
+If PLAY deadline must be **above** the ceiling (tighter than syscall allows): ISR sets a **flag** or writes a **slot** only; defer RTOS wake via a **lower-priority** “defer” ISR or a polling hook — same pattern as keeping **I2S** fill RTOS-free.
+
+**Audio rule:** **I2S/SAI DMA** stays **above** PLAY timer priority so audio never waits on parser scheduling.
+
+#### CubeMX / bring-up checklist (when promoted)
+
+- Document NVIC priorities in **`.ioc` comments** or **`App/Inc/platform.h`** USER block — single source of truth for agents.
+- Verify **`configLIBRARY_MAX_SYSCALL_INTERRUPT_PRIORITY`** matches Cube NVIC grouping (priority bits / `PRIGROUP`).
+- PLAY task priority: below audio-related tasks if any; above background/menu idle work.
+- Loader / FS (**S11**): dedicated task; **never** in PLAY deadline ISR or **I4** tick path.
+- Bench: golden traces still inject **`su32_sched_tick`**; RTOS is transport, not oracle.
+
+**Resolution:** Planning notes only — no firmware change until FreeRTOS milestone. Implement **W30** event queue + **syscall-safe** PLAY timer ISR as the default RTOS integration pattern.
 
 ---
 
@@ -1666,7 +1786,7 @@ T140 D4Q >2               ; forward to >2 — T140 in effect
 **Headaches to plan for (non-exhaustive):**
 
 1. **Variable start skew** — Voice 1 starts from flash instantly; voice 2 `**playfile**` on SD takes 40–400 ms. Without staging, “measure 1 downbeat” is undefined.
-2. **Blocking on the wrong thread** — FS/NVM reads **must not** run inside menu callbacks, **I4** tick context, or parser hot paths. Loader work belongs in **jobs** (or dedicated task when RTOS lands) with completion posted back to the instance state machine.
+2. **Blocking on the wrong thread** — FS/NVM reads **must not** run inside menu callbacks, **I4** tick context, or parser hot paths. Loader work belongs in **jobs** (or dedicated task when RTOS lands — see **RTOS migration — PLAY timer, NVIC, and FreeRTOS tick**) with completion posted back to the instance state machine.
 3. **Pre-parse vs play start** — **S7d** label resolver may scan the whole file. On slow media that scan is itself a **non-deterministic delay**; cannot gate “group play” on synchronous `**b_play_start(path)**` returning only when audio-ready.
 4. **Partial group failure** — Voice 3 missing file / corrupt NVM entry while voices 1–2 are **READY** — conductor must define **abort-all**, **start subset**, or **timeout → S7** policy before **S3** barriers mean anything.
 5. **Mid-performance reload** — Streaming next movement from FS while others continue — needs **double-buffer / swap** semantics; not the v1 “immutable `**psz_src**` for life of session” rule.
@@ -2336,6 +2456,8 @@ Separate stacks, **shared numeric limit**. Depth **10** is `**#define`-able** on
 **Test seam:** unit tests inject tick advances without audio — `**g_u32_play_sched_tick`** (or test double) is the deterministic “when” (golden traces).
 
 **Resolution:** `**PLAY_TEMPO_BPM_MAX=240`**, `**PLAY_SCHED_TICK_US=1000**`, dedicated shared HW timer, integer tick math, `**max(1, …)**` anti-zero rule locked.
+
+**Future (RTOS):** v1 **poll + increment** is intentional bring-up; **W30** deadline wake + **RTOS migration — PLAY timer, NVIC, and FreeRTOS tick** (wish-list section above **LOCKED CONTEXT**) documents FreeRTOS integration without replacing **I4** integer math.
 
 ---
 
