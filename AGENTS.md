@@ -34,9 +34,10 @@ This document tells you how to work effectively and safely in this project. Read
 ### LED Driver (`App/led_strip_control.*`)
 - Must remain **RTOS-agnostic**. No FreeRTOS includes or task primitives inside the driver.
 - Uses USART + DMA line-encoding trick (7N1, ~2.4 Mbaud, TX inversion, half-duplex Tx-only).
-- Completion signaled via `v_led_strip_uart_tx_complete()` / error callback forwarded from HAL in `app_main.c`.
-- 5 strips supported (USART1, USART3, UART4, LPUART1, UART5). See `platform.h` for handles and `LED_CHANNEL_*` defines.
-- Test via debug menu `t` command.
+- Completion is taken from the **DMA transfer-complete IRQ** (forwarded `HAL_UART_TxCpltCallback` → `v_led_strip_uart_tx_complete()` / error twin, in `app_main.c`). The LED UARTs' own **NVIC global IRQs are intentionally off**, so these hooks also *finish HAL's transmit* — clear `TCIE`, return `gState` to `READY` — mirroring `UART_EndTransmit_IT`. Without that, `gState` stays `BUSY_TX` after the first frame and every later `HAL_UART_Transmit_DMA` returns `HAL_BUSY` (this bit the VU bargraph, the first create-once/update-**many** consumer; one-shot users were masked by abort-on-`destroy`). **Do not** enable the LED UART global IRQs unless you also remove the manual `it.c` callback calls (otherwise the cplt callback double-fires).
+- 5 strips supported (USART1, USART3, UART4, LPUART1, UART5 → `LED_CHANNEL_1..5`; note `LED_CHANNEL_2` = **LPUART1**). See `platform.h` for handles and `LED_CHANNEL_*` defines.
+- Lifecycle is **fopen-style**: `x_led_strip_create()` once, `x_led_strip_update()` many, `x_led_strip_destroy()` when done (do not create/destroy per frame).
+- Test via debug menu `t` command; live audio-reactive bargraph via `i` → `m` (LED_CHANNEL_2, 10-LED SK6812).
 
 ### Audio Output (`App/i2s_audio_out.*`)
 - Current path: SAI1 Block A (Master TX) → MAX98357 clone (single-speaker hardware).
