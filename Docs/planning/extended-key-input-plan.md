@@ -40,10 +40,10 @@ general, higher-functionality** replacements. So:
 | **D1** | 🟢 | Module `term.*`, tag `term_` (`i16_term_get_key()`) — **locked** |
 | **D2** | 🟢 | Return-code map: grouped ranges + `EXT_MOD_*` flag bits — **locked** |
 | **D3** | 🟢 | Hybrid parser+LUT + **configurable lead-char set** API — **locked** |
-| **D4** | 🟢 | v1 = basic editing/cursor keys; F-keys + Alt = planned, deferred — **locked** |
-| **D5** | 🟢 | Lead-ins: CSI `ESC [` + SS3 `ESC O` (v1); Alt `ESC <ch>` wired, decode deferred |
+| **D4** | 🟢 | v1 editing/cursor + F1–F12 + Alt-meta (**D7**) shipped — **locked** |
+| **D5** | 🟢 | Lead-ins: CSI `ESC [` + SS3 `ESC O`; Alt `ESC <ch>` **decoded** (D7) |
 | **D6** | 🟢 | `ANSI.h` standalone (output ctrl); all `term` types in `term.h` — **locked** |
-| **D7** | 🔵 | Alt-meta decode — planned, **deferred** past v1 (not immediate) |
+| **D7** | 🟢 | Alt-meta decode — `ESC <ch>` → `EXT_MOD_ALT \| ch` — **shipped** |
 | **S1** | 🟢 | Non-blocking contract: `timeout=0` ⇒ near-zero block in typical case — **locked** |
 | **S2** | 🟢 | Inter-byte gap applies only **after a lead char**; early-out on complete seq — **locked** |
 | **S3** | 🟢 | Bare-ESC returns `ESC` after gap; accepted latency — **locked** |
@@ -53,7 +53,7 @@ general, higher-functionality** replacements. So:
 | **I2** | 🟢 | Hand-roll the dual-timeout loop on non-blocking `getchar()` — **locked** |
 | **I3** | 🟢 | Compact data-driven table (tuple match), code-space-minded — **locked** |
 | **T1** | 🟢 | Reference + HuIL debug-menu test, reusable for automated injection — **locked** |
-| **T2** | 🔵 | Bench test impl (debug-menu echo + playstr-style injection) — approach set |
+| **T2** | 🟢 | Golden-vector harness (`term_key_bench.py` + `term_golden/keys.json`) — **shipped** |
 | **Q1** | 🟢 | Target terminal = **Tera Term v5.3+** (its VT100/VT220/xterm support) |
 | **Q2** | 🟢 | Control chars pass bare; Alt-meta deferred (→ D7) — **locked** |
 | **Q3** | 🔵 | Terminal-size / cursor-pos query — **deferred** (do key reader first) |
@@ -351,11 +351,16 @@ blockers:
    (**S2/S3**). This is the same trade-off `readline`/vim make; the timeout
    already handles it. Accept it.
 
-**Resolution (2026-06-20 🔵):** **Deferred past v1** — Alt-meta is *planned for* but
-not needed immediately (author). The architecture leaves it free: the configurable
-lead-char path + parser + the `EXT_MOD_ALT` (`0x2000`) flag (**D2**) are all in
-place, so enabling it later is a small decode addition, not a redesign. Re-open
-when a consumer needs it.
+**Resolution (2026-06-20 🔵 → 🟢 SHIPPED):** Implemented exactly as advised. In
+`i16_gather_and_decode()`, the `ESC + <byte that is not '[' / 'O'>` branch now
+returns **`EXT_MOD_ALT | <ch>`** (`0x2000 | ch`) instead of draining→UNKNOWN. No
+look-ahead/drain is needed — a keyboard Alt-meta is exactly two bytes and a lone
+ESC already returned earlier (it produced no intro byte). The two recorded caveats
+stand and are non-blocking: (1) requires Tera Term **Meta key** enabled, else Alt
+drives TT shortcuts and never reaches us (graceful no-op); (2) the lone-ESC vs Alt
+ambiguity is bounded by the inter-byte gap (**S2/S3**), the same trade-off
+readline/vim make. The `[k]` test renders a `CTRL+/ALT+/SHIFT+` prefix by masking
+the `EXT_MOD_*` bits off the base code, so future Ctrl/Shift forms display for free.
 
 ---
 
@@ -532,13 +537,69 @@ kept here in the plan as the discovery record. **Testing is dual:**
 ---
 
 ### T2 — Bench test method
-**Status:** 🔵 · **Needs user:** no (approach decided; impl during build phase)
+**Status:** 🔵 → 🟢 (SHIPPED) · **Needs user:** no
 
 **Approach (decided via T1):** one **debug-menu decode-echo** function serves both
 roles — interactive HuIL testing *and* the target for **automated** `playstr`-style
-paced UART injection (raw escape bursts in, compare printed decode to golden). Build
-it alongside `term.c`; wire a golden vector set for the v1 editing keys (incl. both
-Home/End encodings) + bare-ESC + overflow + unknown cases.
+paced UART injection (raw escape bursts in, compare printed decode to golden).
+
+**Resolution (2026-06-20 🟢):** Built the `term.*` analogue of the PLAY harness,
+then **superseded the menu path with a deterministic automation REPL** (see the
+*Automation harness* section below — the host now reads to a framed terminator,
+not a timer):
+- **`scripts/term_golden/keys.json`** — golden vector set: `{name → {send (hex
+  burst), expect (**exact** uint16 result code), desc}}`. Covers arrows (CSI **and**
+  SS3), both Home/End encodings (PC `H`/`F`, VT220 `1~`/`4~`, SS3), Ins/Del/PgUp/
+  PgDn, F1/F4 (SS3) + F5/F10/F12 (CSI `~`), **Alt-meta** (`ESC a`/`ESC Z` → `0x2061`/
+  `0x205A`, D7), bare printable + bare control byte, **unknown** (`0xFFFE`: CSI `Z`
+  back-tab and `;mod` Ctrl-Right), and **overflow** (`0xFFFD`).
+- **`scripts/term_key_bench.py`** — harness client (same `bench.defaults.json` /
+  ST-Link discipline as `play_bench.py`). Enters the REPL (`0xDA`), sends
+  `K <hex>\r` per vector, reads to `<HRN K res=0xRRRR …>`, compares the **exact**
+  code, quits (`0xA5`). Subcommands `run [names…]` / `list` / `send <hex>`.
+  Run: `python scripts/term_key_bench.py run` (needs the COM port free — close any
+  Tera Term session holding it first).
+
+Follow-on (optional): register a `/keytest` skill mirroring `/playtest`, and fold
+the vector run into a CI/roundtrip step. Tracked loosely; not a v1 blocker.
+
+---
+
+### Automation harness — deterministic REPL (built 2026-06-20, beyond v1)
+
+Replaces the fragile *ESC×3 → menu-key → read-for-timeout* automation entry with
+a resident, framed command REPL. Author-approved design (all points greenlit):
+
+- **Entry/exit:** a high-bit sentinel `0xDA` (= `0x5A|0x80`, un-typeable / can't
+  collide with an ASCII menu key) enters; `0xA5` (or `Q`) exits. Resident mode
+  (many ops per session), **not** auto-return-after-one — kills the "next byte
+  leaks into the menu" race.
+- **Framing:** `<HRN v1 RDY>` on entry, a `<HRN …>` line per op, `<HRN BYE>` on
+  exit — host reads to a terminator, fully deterministic.
+- **Protocol:** line-oriented text (CR-terminated). Built-ins `V` (version/ping,
+  pins firmware), `L`/`?` (list ops), `Q`/`0xA5` (quit). Domain ops come from a
+  caller table (`harness_op_t`): **`K <hex>`** = inject a burst into the real
+  decoder and report the exact result code; **`P`** = reuse the human/menu PLAY
+  string entry verbatim (`v_debug_play_playstr`).
+- **Safety:** 15 s inactivity timeout auto-exits (anti-wedge); cooperative
+  `v_app_polling_task()` pumped every spin.
+- **Module boundary (author directive, 2026-06-20):** *all* test logic lives in
+  `App/Src/test_harness.c` (+ `App/Inc/test_harness.h`, gated `TEST_HARNESS_ENABLED`):
+  the executive, the `K`/`P` op handlers + table, **and** the interactive `[k]`
+  HuIL decode test (`v_test_harness_key_huil`). `debug_menu.c` keeps only thin
+  hooks — the sentinel→`v_test_harness_run()` intercept and the `[k]` menu entry
+  pointing at the exported HuIL fn — and **exports** `v_debug_play_playstr()` for
+  the `P` op to reuse. The test module legitimately depends on the app modules it
+  exercises (`term`, `debug_menu`/PLAY); other modules export the hooks it needs.
+- **term test-only surface:** `v_term_inject` (+ `TERM_INJECT_MAX`) is grouped in
+  `term.h` under a *"Testing / HIL hooks — NOT for normal app use"* banner.
+  `pc_term_key_name` stays in the normal API (a display helper, cf. ncurses
+  `keyname()`).
+- **Known nit:** Tera Term `Meta8Bit` would make `Alt+Z` emit `0xDA` (the enter
+  byte). Non-default; noted.
+- **Follow-on:** migrate the *remaining* menu test entries (LED/I2S/quick tests)
+  behind the harness as desired; ESP-IDF `console`/`linenoise` is a reference for
+  a future richer REPL.
 
 ---
 
@@ -605,9 +666,9 @@ menu); keep thin `utils` aliases where call sites are many, retire later.
 
 ## Global notes / footer
 
-- **Plan status:** 🔴 ×0 · 🟡 ×0 · 🟢 ×17 · 🔵 ×3 (D7, T2, Q3). **All v1 design
-  rows resolved** — cleared to implement.
-- **Deferred (not v1 blockers):** D7 Alt-meta decode · Q3/W3 terminal-size query ·
+- **Plan status:** 🔴 ×0 · 🟡 ×0 · 🟢 ×19 · 🔵 ×1 (Q3). D7 (Alt-meta) and T2
+  (golden-vector harness) shipped 2026-06-20.
+- **Deferred (not v1 blockers):** Q3/W3 terminal-size query (next focus) ·
   W5 migration sweep · W6 user-macro decode. Architecture leaves room for all.
 
 ---
@@ -633,11 +694,13 @@ on the bench (banner shows the new `[k]` menu item).
   `-3`; modified (`;mod`) forms → UNKNOWN.
 - [x] **P5 — Reference comment block** in `term.h` (**T1/D6**).
 - [x] **P6a — Debug-menu decode-echo** test fn (`[k]` top menu) — **HuIL tool done**.
-- [ ] **P6b — Automated golden vectors** (`playstr`-style UART injection vs expected
-  decodes) — **follow-on** (reuses the `[k]` hook).
+- [x] **P6b — Automated golden vectors** (**T2**): `scripts/term_key_bench.py` +
+  `scripts/term_golden/keys.json` inject raw bursts into `[k]` and match the decode.
+- [x] **P8 — Alt-meta decode** (**D7**): `ESC <ch>` → `EXT_MOD_ALT | ch`; `[k]`
+  test prints `ALT+` (and any `CTRL+/SHIFT+`) prefix.
 - [~] **P7 — Build/flash/smoke** done (boots, menu present). **Live key-decode
   verification is HuIL** — press arrows / nav cluster / bare ESC / a bad burst at
-  Tera Term via `[k]` and confirm the decodes.
+  Tera Term via `[k]` and confirm the decodes; or run the T2 harness on a free port.
 
 Implemented in `App/`; **no Core/ edits**. Built/flashed/smoked via project skills.
 

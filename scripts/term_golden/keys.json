@@ -1,0 +1,41 @@
+{
+  "_about": "Golden vectors for the term.c extended-key decoder (T2), driven via the test-harness REPL 'K <hex>' op. Each entry: a raw byte burst (hex, no spaces) injected into the real decoder; 'expect' is the EXACT int16 result code (as uint16 hex) the firmware reports in '<HRN K res=0x....>'. ESC=1B, CSI='1B5B', SS3='1B4F'. Codes: 0x00xx bare byte, 0x010x editing/cursor, 0x020x F-keys, 0x20xx Alt-meta, 0xFFFE unknown, 0xFFFD overflow.",
+
+  "byte_printable": { "desc": "bare printable byte 'x'",        "send": "78",             "expect": "0x0078" },
+  "byte_ctrl":      { "desc": "bare control byte CR (0x0D)",    "send": "0D",             "expect": "0x000D" },
+
+  "up_csi":    { "desc": "Up arrow, CSI (normal)",        "send": "1B5B41",   "expect": "0x0100" },
+  "down_csi":  { "desc": "Down arrow, CSI",               "send": "1B5B42",   "expect": "0x0101" },
+  "right_csi": { "desc": "Right arrow, CSI",              "send": "1B5B43",   "expect": "0x0102" },
+  "left_csi":  { "desc": "Left arrow, CSI",               "send": "1B5B44",   "expect": "0x0103" },
+
+  "up_ss3":    { "desc": "Up arrow, SS3 (app-cursor)",    "send": "1B4F41",   "expect": "0x0100" },
+  "down_ss3":  { "desc": "Down arrow, SS3",               "send": "1B4F42",   "expect": "0x0101" },
+  "right_ss3": { "desc": "Right arrow, SS3",              "send": "1B4F43",   "expect": "0x0102" },
+  "left_ss3":  { "desc": "Left arrow, SS3",               "send": "1B4F44",   "expect": "0x0103" },
+
+  "home_pc":   { "desc": "Home, PC-style CSI H",          "send": "1B5B48",   "expect": "0x0104" },
+  "home_vt":   { "desc": "Home, VT220 CSI 1~",            "send": "1B5B317E", "expect": "0x0104" },
+  "home_ss3":  { "desc": "Home, SS3 H",                   "send": "1B4F48",   "expect": "0x0104" },
+  "end_pc":    { "desc": "End, PC-style CSI F",           "send": "1B5B46",   "expect": "0x0105" },
+  "end_vt":    { "desc": "End, VT220 CSI 4~",             "send": "1B5B347E", "expect": "0x0105" },
+  "end_ss3":   { "desc": "End, SS3 F",                    "send": "1B4F46",   "expect": "0x0105" },
+
+  "insert":    { "desc": "Insert, CSI 2~",                "send": "1B5B327E", "expect": "0x0106" },
+  "delete":    { "desc": "Delete, CSI 3~",                "send": "1B5B337E", "expect": "0x0107" },
+  "pgup":      { "desc": "Page Up, CSI 5~",               "send": "1B5B357E", "expect": "0x0108" },
+  "pgdn":      { "desc": "Page Down, CSI 6~",             "send": "1B5B367E", "expect": "0x0109" },
+
+  "f1":        { "desc": "F1, SS3 P",                     "send": "1B4F50",     "expect": "0x0200" },
+  "f4":        { "desc": "F4, SS3 S",                     "send": "1B4F53",     "expect": "0x0203" },
+  "f5":        { "desc": "F5, CSI 15~",                   "send": "1B5B31357E", "expect": "0x0204" },
+  "f10":       { "desc": "F10, CSI 21~",                  "send": "1B5B32317E", "expect": "0x0209" },
+  "f12":       { "desc": "F12, CSI 24~",                  "send": "1B5B32347E", "expect": "0x020B" },
+
+  "alt_a":     { "desc": "Alt+a meta (D7): ESC 'a'",      "send": "1B61",       "expect": "0x2061" },
+  "alt_z":     { "desc": "Alt+Z meta (D7): ESC 'Z'",      "send": "1B5A",       "expect": "0x205A" },
+
+  "unknown":   { "desc": "CSI Z (back-tab) — not in v1 table", "send": "1B5B5A",           "expect": "0xFFFE" },
+  "modified":  { "desc": "Ctrl-Right CSI 1;5C — ;mod deferred","send": "1B5B313B3543",     "expect": "0xFFFE" },
+  "overflow":  { "desc": "over-long CSI burst (>5 bytes)",     "send": "1B5B313233343536", "expect": "0xFFFD" }
+}

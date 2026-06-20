@@ -46,6 +46,12 @@ void __attribute__((weak)) v_app_polling_task(void)
 static uint8_t s_au8_lead[TERM_MAX_LEAD_CHARS] = { ESC };
 static uint8_t s_u8_lead_count = 1u;
 
+/* Optional injected byte burst (test harness). Consumed ahead of the live
+ * console by i_term_getbyte(); see v_term_inject(). */
+static uint8_t  s_au8_inject[TERM_INJECT_MAX];
+static uint16_t s_u16_inject_len = 0u;
+static uint16_t s_u16_inject_pos = 0u;
+
 static const term_keymap_t *s_px_user_map = NULL;
 static uint16_t s_u16_user_count = 0u;
 
@@ -100,6 +106,17 @@ static const term_keymap_t s_ax_std_keymap[] =
 // Private helpers
 //------------------------------------------------------------------------------
 
+/* One byte from the input stream: drained injected bytes first (test harness),
+ * then the live non-blocking console. Returns 1..255, or 0 when nothing now. */
+static int i_term_getbyte(void)
+{
+    if (s_u16_inject_pos < s_u16_inject_len)
+    {
+        return (int) s_au8_inject[s_u16_inject_pos++];
+    }
+    return getchar();
+}
+
 static bool b_is_lead_char(uint8_t u8_ch)
 {
     for (uint8_t u8_i = 0u; u8_i < s_u8_lead_count; u8_i++)
@@ -122,7 +139,7 @@ static int i_get_inter_byte(void)
     for (;;)
     {
         v_app_polling_task();
-        i_ch = getchar();
+        i_ch = i_term_getbyte();
         if (i_ch > 0)
         {
             return i_ch;
@@ -206,9 +223,13 @@ static int16_t i16_gather_and_decode(uint8_t u8_lead)
     }
     else
     {
-        /* ESC + other byte: Alt-meta / unknown (decode deferred). */
-        v_drain_burst();
-        return TERM_KEY_UNKNOWN;
+        /* ESC + a byte that is neither '[' nor 'O' => Alt-meta (D7): Alt+<ch>.
+         * Needs Tera Term "Meta key" (MetaKey=on); otherwise Alt drives TT/Windows
+         * shortcuts and never reaches us, so the reader degrades gracefully. The
+         * lone-ESC vs Alt ambiguity is already bounded by the inter-byte gap
+         * (S2/S3): a bare ESC produced no intro byte and returned above. A real
+         * keyboard Alt-meta is exactly two bytes, so there is nothing to drain. */
+        return (int16_t) (EXT_MOD_ALT | (uint16_t) (uint8_t) i_ch);
     }
 
     /* SS3: the next byte is the final. */
@@ -280,7 +301,7 @@ int16_t i16_term_get_key(uint32_t u32_timeout_ms)
     for (;;)
     {
         v_app_polling_task();
-        i_ch = getchar();
+        i_ch = i_term_getbyte();
         if (i_ch > 0)
         {
             break;
@@ -378,4 +399,56 @@ int i_term_putc_visible(uint8_t u8_ch)
 
     (void) pc_term_char_to_str((char) u8_ch, ac_tok, sizeof ac_tok);
     return printf("%s ", ac_tok);           /* token + single trailing space */
+}
+
+void v_term_inject(const uint8_t *pu8_bytes, uint16_t u16_count)
+{
+    if ((pu8_bytes == NULL) || (u16_count == 0u))
+    {
+        s_u16_inject_len = 0u;
+        s_u16_inject_pos = 0u;
+        return;
+    }
+
+    if (u16_count > TERM_INJECT_MAX)
+    {
+        u16_count = TERM_INJECT_MAX;
+    }
+
+    for (uint16_t u16_i = 0u; u16_i < u16_count; u16_i++)
+    {
+        s_au8_inject[u16_i] = pu8_bytes[u16_i];
+    }
+    s_u16_inject_len = u16_count;
+    s_u16_inject_pos = 0u;
+}
+
+const char *pc_term_key_name(int16_t i16_key)
+{
+    switch (i16_key)
+    {
+        case EXT_KEY_UP:     return "UP";
+        case EXT_KEY_DOWN:   return "DOWN";
+        case EXT_KEY_RIGHT:  return "RIGHT";
+        case EXT_KEY_LEFT:   return "LEFT";
+        case EXT_KEY_HOME:   return "HOME";
+        case EXT_KEY_END:    return "END";
+        case EXT_KEY_INSERT: return "INSERT";
+        case EXT_KEY_DELETE: return "DELETE";
+        case EXT_KEY_PGUP:   return "PGUP";
+        case EXT_KEY_PGDN:   return "PGDN";
+        case EXT_KEY_F1:     return "F1";
+        case EXT_KEY_F2:     return "F2";
+        case EXT_KEY_F3:     return "F3";
+        case EXT_KEY_F4:     return "F4";
+        case EXT_KEY_F5:     return "F5";
+        case EXT_KEY_F6:     return "F6";
+        case EXT_KEY_F7:     return "F7";
+        case EXT_KEY_F8:     return "F8";
+        case EXT_KEY_F9:     return "F9";
+        case EXT_KEY_F10:    return "F10";
+        case EXT_KEY_F11:    return "F11";
+        case EXT_KEY_F12:    return "F12";
+        default:             return "?";
+    }
 }

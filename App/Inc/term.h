@@ -156,6 +156,14 @@ extern void v_term_set_lead_chars(const uint8_t *pu8_leads, uint8_t u8_count);
  */
 extern void v_term_register_keymap(const term_keymap_t *px_map, uint16_t u16_count);
 
+/**
+ * @brief Human-readable name for an EXT_KEY_* code (cursor/editing + F1-F12).
+ *        Returns "?" for bytes, modifier-flagged, or error codes (caller renders
+ *        those). A display helper (cf. ncurses keyname()) — fine for normal app
+ *        use, not just tests.
+ */
+extern const char *pc_term_key_name(int16_t i16_key);
+
 /** Minimum caller-buffer size (incl. NUL) to hold any visible token: the
  *  widest is "\\xHH" (4 chars) -> 5 bytes. Use for pc_term_char_to_str(). */
 #define TERM_VISIBLE_BUFSZ          5u
@@ -192,6 +200,30 @@ extern char *pc_term_char_to_str(char c_in, char *pc_out, size_t sz_max);
  * @return Number of characters written (token width + 1 for the space).
  */
 extern int i_term_putc_visible(uint8_t u8_ch);
+
+/******************************************************************************
+ * Testing / HIL hooks  —  NOT for normal application use
+ * ----------------------------------------------------------------------------
+ * Provided ONLY so the unit / hardware-in-the-loop test executive can feed raw
+ * escape bursts to the *real* decoder for deterministic checks. Application
+ * code must NOT depend on these.
+ ******************************************************************************/
+
+/** Max bytes a single v_term_inject() burst can hold (covers the longest test
+ *  vector incl. an overflow burst). */
+#define TERM_INJECT_MAX             16u
+
+/**
+ * @brief [TEST/HIL ONLY] Push a byte burst to be consumed by the *next*
+ *        i16_term_get_key() call(s) ahead of the live console, so a host can
+ *        feed a raw escape sequence to the real decoder. Replaces any previous
+ *        (undrained) inject burst. A 0x00 byte is indistinguishable from
+ *        "empty" (see I1) — do not inject it.
+ *
+ * @param pu8_bytes  Burst bytes (copied internally).
+ * @param u16_count  Count (clamped to @ref TERM_INJECT_MAX).
+ */
+extern void v_term_inject(const uint8_t *pu8_bytes, uint16_t u16_count);
 
 /******************************************************************************
  * Reference: Tera Term / xterm key sequences (decoded by the standard keymap)

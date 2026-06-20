@@ -13,6 +13,7 @@
 #include "menu-api.h"
 #include "utils.h"
 #include "term.h"           // terminal extended-key reader (decode-echo test)
+#include "test_harness.h"   // deterministic automation REPL (sentinel-entered)
 #include "led_strip_control.h"
 #include "i2s_test_tone.h"
 #include "audio_in_service.h"
@@ -60,91 +61,9 @@ static void v_debug_show_clocks(void)
            u32_pclk1_freq);
 }
 
-/******************************************************************************
- * Terminal extended-key decode test (term.c). HuIL bench tool; the same hook
- * is the target for automated playstr-style escape-sequence injection.
- ******************************************************************************/
-
-static const char *pc_term_key_name(int16_t i16_key)
-{
-    switch (i16_key)
-    {
-        case EXT_KEY_UP:     return "UP";
-        case EXT_KEY_DOWN:   return "DOWN";
-        case EXT_KEY_RIGHT:  return "RIGHT";
-        case EXT_KEY_LEFT:   return "LEFT";
-        case EXT_KEY_HOME:   return "HOME";
-        case EXT_KEY_END:    return "END";
-        case EXT_KEY_INSERT: return "INSERT";
-        case EXT_KEY_DELETE: return "DELETE";
-        case EXT_KEY_PGUP:   return "PGUP";
-        case EXT_KEY_PGDN:   return "PGDN";
-        case EXT_KEY_F1:     return "F1";
-        case EXT_KEY_F2:     return "F2";
-        case EXT_KEY_F3:     return "F3";
-        case EXT_KEY_F4:     return "F4";
-        case EXT_KEY_F5:     return "F5";
-        case EXT_KEY_F6:     return "F6";
-        case EXT_KEY_F7:     return "F7";
-        case EXT_KEY_F8:     return "F8";
-        case EXT_KEY_F9:     return "F9";
-        case EXT_KEY_F10:    return "F10";
-        case EXT_KEY_F11:    return "F11";
-        case EXT_KEY_F12:    return "F12";
-        default:             return "?";
-    }
-}
-
-static void v_debug_term_key_test(void)
-{
-    int16_t i16_key;
-
-    printf("\r\nTerminal extended-key decode test.\r\n"
-           "Press keys: arrows, Home/End, Ins/Del, PgUp/PgDn, or any byte.\r\n"
-           "Bare ESC exits.\r\n");
-
-    for (;;)
-    {
-        i16_key = i16_term_get_key(250u);
-
-        if (i16_key == TERM_KEY_NONE)
-        {
-            continue;
-        }
-        else if (i16_key == TERM_KEY_UNKNOWN)
-        {
-            printf("  [unrecognized escape burst]\r\n");
-        }
-        else if (i16_key == TERM_KEY_OVERFLOW)
-        {
-            printf("  [burst overflow]\r\n");
-        }
-        else if (i16_key >= EXT_KEY_EDIT_BASE)
-        {
-            printf("  EXT_KEY_%s (0x%04X)\r\n",
-                   pc_term_key_name(i16_key), (unsigned) i16_key);
-        }
-        else
-        {
-            uint8_t u8_byte = (uint8_t) i16_key;
-
-            if ((u8_byte >= 0x20u) && (u8_byte < 0x7Fu))
-            {
-                printf("  '%c' (0x%02X)\r\n", (char) u8_byte, (unsigned) u8_byte);
-            }
-            else
-            {
-                printf("  <0x%02X>\r\n", (unsigned) u8_byte);
-            }
-
-            if (u8_byte == ESC)
-            {
-                printf("(ESC) exit.\r\n");
-                break;
-            }
-        }
-    }
-}
+/* The terminal extended-key decode test (HuIL) and the automation REPL ops now
+ * live in test_harness.c; debug_menu only keeps the menu entry + sentinel hook
+ * (see v_test_harness_key_huil() / v_test_harness_run()). */
 
 /******************************************************************************
  *
@@ -707,7 +626,7 @@ static void v_debug_play_loop(void)
     (void)b_debug_play_start(psz_play_loop_test, "loop", "PLAY loop test started");
 }
 
-static void v_debug_play_playstr(void)
+void v_debug_play_playstr(void)
 {
     char *p_c_line;
 
@@ -1413,7 +1332,7 @@ static const menu_item_t x_debug_top_menu[] =
         .x_type = MENU_ITEM_FUNCTION,
         .c_key = 'k',
         .p_c_text = "Terminal extended-key decode test (term)",
-        .pfn_function = v_debug_term_key_test
+        .pfn_function = v_test_harness_key_huil
     },
     {
         .x_type = MENU_ITEM_FUNCTION,
@@ -1489,6 +1408,14 @@ void v_debug_menu_service(void)
         {
             break;
         }
+
+#if TEST_HARNESS_ENABLED
+        if ((uint8_t) i_key == HARNESS_ENTER)
+        {
+            v_test_harness_run();
+            continue;
+        }
+#endif
 
         pc_term_char_to_str((char) i_key, ac_key, sizeof ac_key);
         printf("Cmd [%s]\r\n", ac_key);
