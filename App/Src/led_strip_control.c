@@ -643,6 +643,7 @@ led_strip_err_t x_led_strip_get_pixel_buffer(led_strip_handle_t *p_x_handle,
 void v_led_strip_uart_tx_complete(UART_HandleTypeDef *p_x_huart)
 {
     uint32_t u32_i;
+    bool b_matched = false;
 
     if (p_x_huart == NULL)
     {
@@ -659,6 +660,24 @@ void v_led_strip_uart_tx_complete(UART_HandleTypeDef *p_x_huart)
             && (p_x_strip->p_x_uart == p_x_huart))
         {
             p_x_strip->b_transfer_in_progress = false;
+            b_matched = true;
+        }
+    }
+
+    /*
+     * Completion is taken from the DMA transfer-complete IRQ (forwarded by the
+     * application). The LED UARTs' own global interrupts are intentionally not
+     * enabled, so HAL's UART_EndTransmit_IT — which returns gState to READY after
+     * the final TC — never runs. Finish that step here for a matched strip, or the
+     * UART stays HAL_UART_STATE_BUSY_TX and every later HAL_UART_Transmit_DMA
+     * returns HAL_BUSY (one-shot use hides this; repeated updates do not).
+     */
+    if (b_matched)
+    {
+        __HAL_UART_DISABLE_IT(p_x_huart, UART_IT_TC);
+        if (p_x_huart->gState == HAL_UART_STATE_BUSY_TX)
+        {
+            p_x_huart->gState = HAL_UART_STATE_READY;
         }
     }
 }
@@ -666,6 +685,7 @@ void v_led_strip_uart_tx_complete(UART_HandleTypeDef *p_x_huart)
 void v_led_strip_uart_error(UART_HandleTypeDef *p_x_huart)
 {
     uint32_t u32_i;
+    bool b_matched = false;
 
     if (p_x_huart == NULL)
     {
@@ -682,6 +702,17 @@ void v_led_strip_uart_error(UART_HandleTypeDef *p_x_huart)
             && (p_x_strip->p_x_uart == p_x_huart))
         {
             p_x_strip->b_transfer_in_progress = false;
+            b_matched = true;
+        }
+    }
+
+    /* See v_led_strip_uart_tx_complete: return the UART to READY ourselves. */
+    if (b_matched)
+    {
+        __HAL_UART_DISABLE_IT(p_x_huart, UART_IT_TC);
+        if (p_x_huart->gState == HAL_UART_STATE_BUSY_TX)
+        {
+            p_x_huart->gState = HAL_UART_STATE_READY;
         }
     }
 }

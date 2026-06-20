@@ -784,12 +784,20 @@ static void v_debug_i2s_tone_stop(void)
 #define DEBUG_MIC_METER_BAR_WIDTH       (60u)
 #define DEBUG_MIC_METER_FULL_SCALE_F    (32768.0f)     /* 1 << 15, int16 PCM full scale (0 dBFS) */
 #define DEBUG_MIC_METER_FLOOR_DB        (60.0f)        /* bar bottom = -60 dBFS */
-#define DEBUG_MIC_METER_DISPLAY_MS      (100u)         /* ~10 Hz screen refresh */
-#define DEBUG_MIC_METER_ATTACK_ALPHA    (0.50f)        /* envelope rise — fast */
-#define DEBUG_MIC_METER_RELEASE_ALPHA   (0.10f)        /* envelope fall — slow */
+#define DEBUG_MIC_METER_DISPLAY_MS      (50u)          /* ~20 Hz screen + LED refresh */
+#define DEBUG_MIC_METER_ATTACK_ALPHA    (0.50f)        /* envelope rise — fast exponential */
+#define DEBUG_MIC_METER_RELEASE_DB_S    (70.0f)        /* fall: linear dB/sec (refresh-independent) */
+/* Per-tick fall derived from the refresh interval so decay feel is unchanged if refresh changes. */
+#define DEBUG_MIC_METER_RELEASE_DB_TICK (DEBUG_MIC_METER_RELEASE_DB_S * (float) DEBUG_MIC_METER_DISPLAY_MS / 1000.0f)
 #define DEBUG_MIC_METER_GAIN_STEP_DB    (3)            /* +/- key step */
 #define DEBUG_MIC_METER_GAIN_MAX_DB     (60)           /* display-only digital gain ceiling */
 #define DEBUG_MIC_DIAG_DISPLAY_MS       (1000u)        /* DMA stream bench print rate */
+
+/* LED bargraph VU (LED_CHANNEL_2: 10-LED SK6812 RGBW), old-school G/Y/R zones. */
+#define DEBUG_VU_LED_COUNT              (10u)
+#define DEBUG_VU_LED_GREEN_MAX          (5u)           /* LEDs 0..4 green */
+#define DEBUG_VU_LED_YELLOW_MAX         (8u)           /* LEDs 5..7 yellow; 8..9 red */
+#define DEBUG_VU_LED_BRIGHT             (48u)          /* per-channel level (eye-safe indoors) */
 
 /** AC RMS (int16 scale) → dBFS. Returns a deep floor for sub-LSB input. */
 static float f_debug_mic_rms_to_dbfs(float f_rms)
@@ -819,31 +827,36 @@ static uint16_t u16_debug_mic_dbfs_to_level(float f_dbfs)
     return (uint16_t) (f_norm * 65535.0f);
 }
 
-/** First-order attack/release envelope (operates in the dB domain here). */
-static float f_debug_mic_smooth_level(float f_new_level, float f_envelope)
+/**
+ * Meter envelope (dB domain): fast exponential attack on rise, but a constant
+ * linear dB/tick fall on release. A dB-exponential release lingers near the
+ * floor (the last stretch of a huge dB span decays ever more slowly), so the
+ * bar "hangs"; a linear-dB ramp gives a predictable, constant-speed fall.
+ */
+static float f_debug_mic_meter_envelope(float f_new_dbfs, float f_envelope)
 {
-    float f_alpha;
-
-    if (f_new_level > f_envelope)
+    if (f_new_dbfs >= f_envelope)
     {
-        f_alpha = DEBUG_MIC_METER_ATTACK_ALPHA;
-    }
-    else
-    {
-        f_alpha = DEBUG_MIC_METER_RELEASE_ALPHA;
+        return (DEBUG_MIC_METER_ATTACK_ALPHA * f_new_dbfs)
+             + ((1.0f - DEBUG_MIC_METER_ATTACK_ALPHA) * f_envelope);
     }
 
-    return (f_alpha * f_new_level) + ((1.0f - f_alpha) * f_envelope);
+    f_envelope -= DEBUG_MIC_METER_RELEASE_DB_TICK;
+    if (f_envelope < f_new_dbfs)
+    {
+        f_envelope = f_new_dbfs;
+    }
+
+    return f_envelope;
 }
 
 /**
- * Render the meter line. @p f_meas_dbfs is the true (pre-gain) smoothed level
- * shown as the numeric readout; @p i_gain_db is a display-only digital boost
- * applied to the bar so ambient-level sound shows meaningful deflection.
+ * Render the terminal meter line. @p f_meas_dbfs is the true (pre-gain) smoothed
+ * level shown as the numeric readout; @p u16_level is the post-gain 0..65535 bar
+ * value (shared with the LED bargraph); @p i_gain_db is shown for reference.
  */
-static void v_debug_mic_meter_print_line(float f_meas_dbfs, int i_gain_db)
+static void v_debug_mic_meter_print_line(float f_meas_dbfs, int i_gain_db, uint16_t u16_level)
 {
-    uint16_t u16_level = u16_debug_mic_dbfs_to_level(f_meas_dbfs + (float) i_gain_db);
     uint8_t u8_fill = (uint8_t) (((uint32_t) u16_level * DEBUG_MIC_METER_BAR_WIDTH + 32767u) / 65535u);
     char ac_bar[DEBUG_MIC_METER_BAR_WIDTH + 1u];
     uint8_t u8_i;
@@ -858,10 +871,42 @@ static void v_debug_mic_meter_print_line(float f_meas_dbfs, int i_gain_db)
            (int) lrintf(f_meas_dbfs), i_gain_db, ac_bar);
 }
 
+/** Fill a 10-pixel SK6812 buffer as a G/Y/R bargraph for @p u16_level (0..65535). */
+static void v_debug_vu_led_render(led_rgbw_pixel_t *p_x_px, uint16_t u16_level)
+{
+    uint8_t u8_lit = (uint8_t) (((uint32_t) u16_level * DEBUG_VU_LED_COUNT + 32767u) / 65535u);
+    uint8_t u8_i;
+
+    for (u8_i = 0u; u8_i < DEBUG_VU_LED_COUNT; u8_i++)
+    {
+        p_x_px[u8_i].u32_all = 0u;
+
+        if (u8_i < u8_lit)
+        {
+            if (u8_i < DEBUG_VU_LED_GREEN_MAX)
+            {
+                p_x_px[u8_i].u8_green = DEBUG_VU_LED_BRIGHT;
+            }
+            else if (u8_i < DEBUG_VU_LED_YELLOW_MAX)
+            {
+                p_x_px[u8_i].u8_green = DEBUG_VU_LED_BRIGHT;
+                p_x_px[u8_i].u8_red = DEBUG_VU_LED_BRIGHT;
+            }
+            else
+            {
+                p_x_px[u8_i].u8_red = DEBUG_VU_LED_BRIGHT;
+            }
+        }
+    }
+}
+
 static void v_debug_i2s_mic_level_meter(void)
 {
     audio_in_service_config_t x_cfg;
     i2s_audio_in_err_t x_err;
+    led_strip_handle_t x_led;
+    led_rgbw_pixel_t ax_led_px[DEBUG_VU_LED_COUNT] = { 0 };
+    bool b_led;
     float f_env_dbfs = -DEBUG_MIC_METER_FLOOR_DB;
     int i_gain_db = 0;
     uint32_t u32_last_display_ms = HAL_GetTick();
@@ -894,6 +939,19 @@ static void v_debug_i2s_mic_level_meter(void)
     {
         printf("audio_in_service start failed (%d)\r\n", (int) x_err);
         return;
+    }
+
+    // LED bargraph mirror on LED_CHANNEL_2 (optional; meter runs without it).
+    b_led = (x_led_strip_create(&x_led,
+                                &LED_CHANNEL_2_UART_HANDLE,
+                                LED_STRIP_TYPE_SK6812,
+                                DEBUG_VU_LED_COUNT,
+                                (uint16_t) DEBUG_LED_RESET_TAIL_BYTES,
+                                ax_led_px,
+                                NULL) == LED_STRIP_ERR_OK);
+    if (!b_led)
+    {
+        printf("(LED bargraph unavailable; terminal meter only)\r\n");
     }
 
     for (;;)
@@ -929,13 +987,43 @@ static void v_debug_i2s_mic_level_meter(void)
         if (ELAPSED_TIME(u32_last_display_ms) >= DEBUG_MIC_METER_DISPLAY_MS)
         {
             float f_dbfs = f_debug_mic_rms_to_dbfs((float) u32_audio_in_service_get_last_ac_rms());
+            uint16_t u16_level;
 
-            f_env_dbfs = f_debug_mic_smooth_level(f_dbfs, f_env_dbfs);
-            v_debug_mic_meter_print_line(f_env_dbfs, i_gain_db);
+            f_env_dbfs = f_debug_mic_meter_envelope(f_dbfs, f_env_dbfs);
+            u16_level = u16_debug_mic_dbfs_to_level(f_env_dbfs + (float) i_gain_db);
+
+            v_debug_mic_meter_print_line(f_env_dbfs, i_gain_db, u16_level);
+
+            // Fire-and-forget LED frame; skip if the previous one is still in flight.
+            if (b_led && !x_led.b_transfer_in_progress)
+            {
+                v_debug_vu_led_render(ax_led_px, u16_level);
+                (void) x_led_strip_update(&x_led);
+            }
+
             u32_last_display_ms = HAL_GetTick();
         }
 
         v_app_polling_task();
+    }
+
+    if (b_led)
+    {
+        uint32_t u32_wait_ms = HAL_GetTick();
+
+        while (x_led.b_transfer_in_progress && (ELAPSED_TIME(u32_wait_ms) < DEBUG_LED_TX_WAIT_MS))
+        {
+        }
+
+        v_debug_vu_led_render(ax_led_px, 0u);
+        (void) x_led_strip_update(&x_led);
+
+        u32_wait_ms = HAL_GetTick();
+        while (x_led.b_transfer_in_progress && (ELAPSED_TIME(u32_wait_ms) < DEBUG_LED_TX_WAIT_MS))
+        {
+        }
+
+        (void) x_led_strip_destroy(&x_led, DEBUG_LED_DESTROY_WAIT_MS);
     }
 
     v_audio_in_service_stop();
@@ -1070,7 +1158,7 @@ static const menu_item_t x_i2s_audio_tests_submenu[] =
     {
         .x_type = MENU_ITEM_FUNCTION,
         .c_key = 'm',
-        .p_c_text = "INMP441 mic level meter (dBFS bar, +/- gain, ESC to exit)",
+        .p_c_text = "INMP441 mic level meter (dBFS bar + LED2 bargraph, +/- gain, ESC)",
         .pfn_function = v_debug_i2s_mic_level_meter
     },
     {
