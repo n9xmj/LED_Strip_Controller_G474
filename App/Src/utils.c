@@ -60,10 +60,9 @@ void __attribute__((weak)) app_polling_task(void)
     // when blocking functions such as i_getchar_blocking() are called.
 }
 
-void __attribute__((weak)) v_app_polling_task(void)
-{
-    // Weak placeholder; application supplies strong definition (e.g. app_main.c).
-}
+// NOTE: the weak v_app_polling_task() stub now lives in term.c (the terminal
+// API module that owns the cooperative-polling dependency). utils.c still calls
+// it via the extern declaration in utils.h.
 
 /******************************************************************************
  * int i_getchar_blocking(void)
