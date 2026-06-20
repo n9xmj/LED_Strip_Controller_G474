@@ -161,7 +161,7 @@ def cmd_test(args: argparse.Namespace) -> int:
 
     def run(client: PlayBenchClient):
         if menu_key:
-            print(f"Menu preset key '{menu_key}' in m → player submenu")
+            print(f"Menu preset key '{menu_key}' in m -> player submenu")
             return client.run_menu_preset(str(menu_key), timeout_s=args.timeout,
                                           strict=strict,
                                           expect_start_fail=expect_start_fail)
