@@ -1,6 +1,8 @@
 # Project-local memory index — LED_Strip_Controller_G474
 
-One-line index. Read the linked body files for full context (do not rely on this index alone).
+One-line index. Each entry is a **topic deep-dive** — read its body **on demand** when that topic
+is the session focus (see AGENTS.md *Session start — no assumed focus* + Topic Map). Don't
+bulk-read all bodies at session start; the always-read exception is `user_conversational_tone.md`.
 
 - [Author Haskell gap](author_haskell_gap.md) — no FP literacy; agents must translate mokus0 Haskell / vTree into plain + embedded C when Mk 5 DSP starts
 - [Preferred conversational tone + workflow lightness](user_conversational_tone.md) — casual techno-geeky chat; pop-culture refs OK; personal hobby archival git; hedged planning language = brief pushback if bad call, else close out.

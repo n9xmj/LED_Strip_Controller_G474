@@ -19,9 +19,18 @@ This skill ensures the agent has the correct, current project documentation load
 
 4. **SCRIPTS.md** — General reference for the automation scripts (build, flash, smoke/probe, discovery). Note that bench-specific defaults live in the local skills, not here.
 
-5. Read **every** `*.md` in `.grok/memory/` (start with `MEMORY.md` index, then each body file). Project-local agent memory lives here — user prefs, tone, bench notes.
+5. Read the `.grok/memory/MEMORY.md` **index lines** and the always-relevant body file
+   [`user_conversational_tone.md`](../../memory/user_conversational_tone.md) (tone + workflow prefs).
+   **Do not** bulk-read the other memory body files — they are topic deep-dives (I2S notes,
+   handoffs, planning model). Load those **on demand** per the AGENTS.md **Topic Map** when the
+   user names a focus.
 
-6. Read `Docs/planning/decision-log-model.md` — how multi-session planning works (D/S/I/T/Q IDs, status table). If an active plan is in flight (see MEMORY.md index), read that plan doc. Then read the **newest** `Docs/planning/*-session-handoff-*.md` if present — **agent handoff from the prior session** (written by `/wrapup`).
+6. **No assumed focus.** Do **not** auto-read the PLAY plan, `decision-log-model.md`, or any
+   `*-session-handoff-*.md` at session start — that burns context on a topic the user may not be
+   working today. Read topic deep-dives only when the user names the area (e.g. *"PLAY v2"*,
+   *"I2S audio"*, *"&lt;wishlist item&gt;"*) — follow the **Topic Map** in AGENTS.md (*Session
+   start — no assumed focus*). If an argument/handoff explicitly names a topic, load that topic's
+   docs as part of bootstrap.
 
 7. Discover available project-local commands by invoking the `myskills` skill (or explicitly running `/myskills`).
 
@@ -29,10 +38,13 @@ This skill ensures the agent has the correct, current project documentation load
 
 ## After loading the context
 
-- Print a **Quick links** block first (see below) — clickable markdown paths so the user can open WIP docs in the editor or side pane without hunting paths.
-- Briefly summarize the current project state for the user (key completed work, active focus areas from the TODOs, preferred workflows via the skills).
-- If a session handoff exists, one line: what to do next (from handoff **Next suggested prompt**).
-- State clearly: "Project context loaded. AGENTS.md rules are in effect. I am ready for your task."
+- Print a **Quick links** block first (see below) — clickable markdown paths.
+- Briefly summarize the **general** project state (what it is, what shipped, where the roadmap/TODO
+  lives) — **without** assuming a focus for this session.
+- Echo the **Topic Map** (or a one-line pointer to it in AGENTS.md) so the user can name an area
+  and you'll pull the right docs.
+- State clearly: "Project context loaded, no focus assumed. AGENTS.md rules are in effect. Tell me
+  the area (PLAY, I2S audio, a wishlist item, …) and I'll pull its docs."
 - Then wait for the actual request.
 
 ### Quick links (required)
@@ -42,19 +54,19 @@ Use **markdown links** with **repo-relative paths** from the project root (Curso
 ```markdown
 ## Quick links
 
-- [play-v1-session-handoff-YYYY-MM-DD.md](Docs/planning/play-v1-session-handoff-YYYY-MM-DD.md) — prior session handoff (start here if in-flight)
-- [play-v1-implementation-plan.md](Docs/planning/play-v1-implementation-plan.md) — master decision log
-- [Player/cheat_sheet.md](Docs/Player/cheat_sheet.md)
-- [decision-log-model.md](Docs/planning/decision-log-model.md)
-- [AGENTS.md](AGENTS.md)
-- [Docs/PROJECT.md](Docs/PROJECT.md)
+- [AGENTS.md](AGENTS.md) — agent contract + **Topic Map** (name an area to load its docs)
+- [Docs/PROJECT.md](Docs/PROJECT.md) — status, roadmap, TODO / wishlist
+- [SCRIPTS.md](SCRIPTS.md) — build / flash / smoke automation
+- [.grok/memory/MEMORY.md](.grok/memory/MEMORY.md) — memory index
 ```
 
 **Rules:**
 
-- Resolve **newest** `Docs/planning/*-session-handoff-*.md` by filename date (or mtime if ambiguous).
-- Omit links that do not exist; add links for whatever active plan MEMORY.md points at (not only PLAY — adapt paths to the repo).
-- When `<instructions>` or handoff names a specific doc, put that link **first** and label it prominently.
+- Default to the **general** links above — do not assume a topic.
+- **Only when the user has named a focus** (or an argument/handoff did), add that topic's links
+  on top (e.g. the newest `Docs/planning/*-session-handoff-*.md` and the PLAY plan for PLAY work,
+  or `.grok/memory/inmp441_i2s_wiring.md` for I2S) per the AGENTS.md Topic Map.
+- Resolve **newest** handoff by filename date (or mtime if ambiguous); omit links that don't exist.
 - Do not use absolute Windows paths or bare backtick paths without link syntax — links are the UX goal.
 
 ## Best practices this skill enforces
