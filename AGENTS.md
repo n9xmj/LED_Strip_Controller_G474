@@ -137,6 +137,29 @@ Also indexed in [`.grok/memory/MEMORY.md`](.grok/memory/MEMORY.md). **Read on de
 - **Hardware datasheets and reference material**: `Docs/` directory.
 - **Audio-reactive DSP ideas (future, vTree Mk 5):** **“The cayuse project”** = [github.com/cayuse/color_organ](https://github.com/cayuse/color_organ) (**vTree Mk 4**). **vTree Mk 1–3** = author originals. Full lineage: [Docs/PROJECT.md](Docs/PROJECT.md) § *Product lineage*. Post-PLAY pivot; not PLAY-related.
 
+## Shell / environment (Windows PowerShell — read before running commands)
+
+The bench shell is **Windows PowerShell**, which has quirks that break common
+Unix-ism command lines. Work *with* it, not against it:
+
+- **No `&&` / `||` chaining.** PowerShell rejects `cmd1 && cmd2` ("`&&` is not a
+  valid statement separator"). Run commands as **separate calls**, or use `;` only
+  when you genuinely don't care whether the first one failed. For ordered git steps
+  (`add` → `commit`), use separate calls and check each result.
+- **No heredocs** (`<<'EOF'`). Don't try to pass multi-line bodies inline.
+- **Multi-line text bodies → temp file + use-file flag.** For any command that takes
+  a message/body — **git commits, `gh issue`/`gh pr` create/comment, release notes,
+  etc.** — the reliable pattern is:
+  1. Write the body to a temp file (e.g. `Write` a `*.txt` under the system temp dir).
+  2. Pass it with the tool's file option: `git commit -F <file>`,
+     `gh pr create --body-file <file>`, `gh issue create --body-file <file>`, etc.
+  3. Delete the temp file after the op succeeds.
+  This avoids PowerShell quoting/escaping mangling and newline loss. (Author's
+  standing preference — "PowerShell sucks"; compose-file-then-post for all GitHub ops.)
+- Quote any path containing spaces with double quotes.
+- Prefer the **project skills/scripts** (`/build`, `/flash`, `/roundtrip`, the
+  `scripts/*.ps1`) over hand-rolled command lines wherever one exists.
+
 ## How to Work in This Project (Agent Workflow)
 
 1. **Before coding**: Run `/myskills` (or read the individual `SKILL.md` files) to see available project commands. Prefer `/build`, `/cleanbuild`, `/roundtrip`, etc. over raw script invocation when possible.
