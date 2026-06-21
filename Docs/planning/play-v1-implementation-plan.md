@@ -3989,4 +3989,15 @@ C4Q /
 
 ---
 
+**Session handoff:** [play-v1-session-handoff-2026-06-21.md](play-v1-session-handoff-2026-06-21.md) (v1.2 shipped — 2026-06-21)
+
+**Next suggested chat prompt:**
+
+```text
+/read-the-docs
+PLAY v1.2 is done. Today: <v1.3+ ties/measures | another Topic Map track>.
+```
+
+---
+
 **End of play-v1-implementation-plan.md** — update this file as IDs resolve; then sync [PLAY_language_design.md](../PLAY_language_design.md).
