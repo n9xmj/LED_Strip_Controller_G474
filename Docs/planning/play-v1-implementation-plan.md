@@ -74,7 +74,7 @@ Cross-ref: [Docs/PROJECT.md](../PROJECT.md) long-term goals · deferred briefs u
 | **T5** | 🔴 | **Musician howto** — user guide + tiered repertoire (v1 stretch) | **GP5** |
 | **GP9** | 🟡 | **v1.2 docs + golden migration** — in-place vs `grammar_torture_v12` | — |
 
-*Recently locked (2026-06-21): **S12** signed repeat · **G13**/**GP11** shipped · **D25** `=`/`>` · **Q2**–**Q4** · **D26**/**G15**/**GP10**.*
+*Recently locked (2026-06-21): **G14**/**G20** shipped · **S12** signed repeat · **G13**/**GP11** · **D25** `=`/`>` · **Q2**–**Q4** · **D26**/**G15**/**GP10**.*
 
 ---
 
@@ -147,7 +147,7 @@ Cross-ref: [Docs/PROJECT.md](../PROJECT.md) long-term goals · deferred briefs u
 | S10 | 🟢 | **Session init defaults** — full note-memory struct + `**Cn4Q_`** template for first `**~**` |
 | S11 | 🟡 | **v2+ headwind** — multi-instance + NVM/FS load **requires** explicit sync/staging model (observations; design open) |
 | S12 | 🟢 | **v1.2 signed repeat close** — `]:N` / `]:+N` = **`[`** snapshot restore on re-entry; `]:-N` = **no restore**; sign = restore flag only — magnitude per **S14**; **G13** ✅ |
-| S13 | 🟢 | **v1.2 GOSUB caller restore flag** — on GOSUB call (wire char per **D25**): default **restore on `/`**; caller **`+`/`-` modifier outside quotes** (`>-"label"`) opts out; flag on **call stack frame**; goto ignores modifier (**S2**) |
+| S13 | 🟢 | **v1.2 GOSUB caller restore flag** — **`G14** ✅**; `b_restore_caller` on call frame; outside-quote `+`/`-` on `=` GOSUB; `/` honors flag; goto ignores modifier |
 | S14 | 🟢 | **v1.2 repeat iteration count** — `]:N` runs **max(1, N)** passes (`:0` and `:1` → once; `:2` → twice; …) (**Q4** user lock 2026-06-21) |
 
 ### Implementation (I)
@@ -205,15 +205,13 @@ Cross-ref: [Docs/PROJECT.md](../PROJECT.md) long-term goals · deferred briefs u
 | G | Ord | Ref | Feature | FW | Notes |
 | --- | --- | --- | ------- | -- | ----- |
 | **G12** | 1 | **D25** 🟢 | **Goto / GOSUB lead-char assignment** | ❌ | **`=`** goto · **`>`** GOSUB (swap from v1.1). Pre-parse + executives + goldens + [Player/](../Player/) |
-| **G14** | 2 | **S13** · **Q2** | **GOSUB caller restore flag** | ❌ | `b_restore_caller` on `play_call_frame_t`; outside-quote `+`/`-` before `"…"`; `/` honors flag |
-| **G20** | 1 | **D29** · **Q3** | **Quoted label refs only** | ❌ | Remove numeric `<n`/`>n`/`=n` path; migrate `labels_*` / torture goldens |
 | **G11** | — | **W27** | **`uart_stream`** (USART2) | ❌ | v1.1 stretch — non-blocking console; not PLAY grammar |
 | **G16** | — | **D27** | **Tied-note `{` `}` grouping** | ❌ | v1.3+ planning |
 | **G17** | — | **I12** | **Synth legato/tie continuity** | ❌ | v1.3+ planning |
 | **G18** | — | **D15** | **Tuplets / N-in-time-of-M** | ❌ | v1.3+ planning |
 | **G19** | — | **D28** | **Measure marker `\|`** | ❌ | v1.3+ planning |
 
-**Suggested v1.2 code order:** **G20** (text-only labels) → **G14** (call-frame flag) → **G12** (char swap) → **GP9** docs/goldens.
+**Suggested v1.2 code order:** **G12** (char swap) → **GP9** docs/goldens.
 
 ### MSG — open peripheral gaps
 
@@ -233,7 +231,7 @@ Cross-ref: [Docs/PROJECT.md](../PROJECT.md) long-term goals · deferred briefs u
 | ---- | ---- | ------ |
 | **v1** | **G1**–**G8** | ✅ closed 2026-06-14 |
 | **v1.1** | **G9** · **G10** | ✅ **X**/**Y** + raw-percent `;nn` |
-| **v1.2** | **G15** · **G13** | ✅ multi-dot **D26** + signed repeat **S12**/**S14** (2026-06-21) |
+| **v1.2** | **G15** · **G13** · **G14** · **G20** | ✅ multi-dot · signed repeat · GOSUB restore flag · quoted labels (2026-06-21) |
 
 ### MSG — shipped peripheral (collapsed)
 
@@ -242,7 +240,8 @@ Cross-ref: [Docs/PROJECT.md](../PROJECT.md) long-term goals · deferred briefs u
 | **GP7** | `grammar_torture.play` | ✅ |
 | **GP8** | `grammar_torture_v11.play` | ✅ |
 | **GP10** | `multi_dot` golden (**D26**) | ✅ bench PASS 2026-06-21 |
-| **GP11** | Repeat signed-close goldens (**G13**/**S12**/**S14**) | ✅ `repeat_carry` · `repeat_restore` · `repeat_restore_plus` · `repeat_count_edge` · `repeat_carry_one` · `repeat_nested` — bench PASS 2026-06-21 |
+| **GP11** | Repeat signed-close goldens (**G13**/**S12**/**S14**) | ✅ `repeat_*` suite — bench PASS 2026-06-21 |
+| **GP12** | Label goldens (**G14**/**G20**/**D29**) | ✅ `labels_*` quoted migration + `labels_gosub_norestore`; `grammar_torture` — bench PASS 2026-06-21 |
 
 *Promote a row off MSG when firmware lands; bump **Last audited** and sync **I10** detail + living docs.*
 
@@ -1992,28 +1991,22 @@ T140 D4Q >2               ; forward to >2 — T140 in effect
 
 ### S13 — GOSUB caller-controlled context restore (v1.2)
 
-**Status:** 🟢 semantics · **G14** ❌ firmware · **Q2** 🟢 (2026-06-21)
+**Status:** 🟢 · **G14** ✅ (2026-06-21)
 
 **Intent:** Caller chooses whether `/` restores the pre-call snapshot saved at GOSUB entry.
 
-| Call (wire char per **D25**; examples assume `>` = GOSUB) | `/` behavior |
-| ----------------------------------------------------------- | ------------ |
-| `>"label"` or `>"+label"` | **Restore** caller snapshot (legacy **D19** / **G5**) |
-| `>"-label"` (or `>-` + quoted name per **Q2**) | **No restore** — callee mutations visible to caller |
+| Call (v1.1 wire: `=` GOSUB) | `/` behavior |
+| --------------------------- | ------------ |
+| `="label"` or `="+label"` | **Restore** caller snapshot (default) |
+| `=-"label"` | **No restore** — callee ctx carries to caller |
 
-**Rules (leaning 🟡):**
+**Goto (`>`):** Optional `+`/`-` before `"…"` is stripped; modifier ignored (**S2**).
 
-- Restore flag lives on **`play_call_frame_t`**, set at call time (default **restore**).
-- Leading `+`/`-` is **not** part of the label identity — stripped before table lookup.
-- **Goto** accepts the same label-ref grammar but **ignores** restore modifier (**S2**).
-- **`\"cmd:args"`** expansion (**D18**) — out of scope; no `+`/`-` restore modifier.
-- **Bare numeric label** (if retained): `>-8` and `>8` → same target (**Q3** `abs()`); sign sets GOSUB restore flag only.
+**Firmware:** `b_restore_caller` on `play_call_frame_t`; `b_play_parse_label_ref(..., &b_restore)`.
 
-**RETURN `/`:** Wire unchanged; honors frame flag.
+**Golden:** `labels_gosub_norestore.play` — second post-return note at **C5** (523 Hz) vs **C4** (262 Hz) after `=-"sub"`.
 
-**MSG:** **G14** (blocked on **Q2**). Supersedes wish **W31**.
-
-**Cross-ref:** **D19** · **D25** · **Q2** · **Q3** · **Q4** · future **D23**/**W6**.
+**Cross-ref:** **Q2** · **D29** · **D25** (future char swap).
 
 ---
 

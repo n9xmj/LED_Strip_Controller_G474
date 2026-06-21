@@ -150,11 +150,11 @@
     "policy": "strict",
     "aliases": ["repeat-carry-one"]
   },
-  "repeat_nested": {
-    "description": "G13 - nested loop; inner ]:-2 carry; outer ]:+2 restore",
+  "labels_gosub_norestore": {
+    "description": "G14 S13 - GOSUB =- skips caller restore on /",
     "tier": "feature",
-    "file": "repeat_nested.play",
+    "file": "labels_gosub_norestore.play",
     "policy": "strict",
-    "aliases": ["repeat-nested"]
+    "aliases": ["G14", "gosub-norestore", "S13"]
   }
 }

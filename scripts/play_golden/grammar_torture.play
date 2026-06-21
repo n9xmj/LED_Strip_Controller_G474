@@ -35,19 +35,19 @@ C4Q ~ R4Q ~
 ? 
 [ C4 D4 E4 ]:2
 C4Q D4E4
->7 G4A4
+>"7" G4A4
 F4G4A4
-<7 G4A4B4C5Q >"fwd0"
+<"7" G4A4B4C5Q >"fwd0"
 <"fwd0" C4Q >"fwd2"
 <"fwd1" E4Q >"fwd3"
 <"fwd2" D4Q >"fwd1"
 <"fwd3" G4Q T120 O4 >"skipsubs"
-<2 E4F4/
+<"2" E4F4/
 <"sub" E4F4/
 <"inner" D4E4/
 <"outer" C4Q ="inner" /
 <"skipsubs"
-C4Q =2 G4Q
+C4Q ="2" G4Q
 ="sub" C4Q G4Q
 ="outer" F4G4
 [ [ C4Q ]:2 D4Q ]:2
