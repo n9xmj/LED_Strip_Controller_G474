@@ -17,7 +17,7 @@
 #define PROJECT_NAME    "LED_Strip_Controller_G476"
 #define TARGET_MCU      "STM32G474RE"
 #define FIRMWARE_VERSION "3.0.7"
-#define BUILD_NUMBER "8"
+#define BUILD_NUMBER "9"
 
  //------------------------------------------------------------------------------
  // Stringification
@@ -100,6 +100,11 @@ do { \
 #define MS_IN_1S    1000                // # milliseconds in 1 second
  
 #define ELAPSED_TIME(ts)    (HAL_GetTick() - (ts))
+
+// Upper bound (ms) on the cooperative debug-console flush triggered by
+// fflush(stdout). Anti-wedge insurance only: the drain normally completes in
+// microseconds. A too-tight value could truncate a large flush at low baud.
+#define DEBUG_CONSOLE_FLUSH_TIMEOUT_MS  100u
 
 //------------------------------------------------------------------------------
 // MCU peripheral / IP block assignments

@@ -69,6 +69,64 @@ int __io_getchar(void)
 }
 
 /******************************************************************************
+ * fflush(stdout) override (newlib --wrap, see -Wl,--wrap=fflush in linker).
+ *
+ * Standard fflush only pushes stdio's own FILE buffer down through _write into
+ * the uart_stream TX ring; it does NOT wait for that ring (or the UART FIFO +
+ * shift register) to drain. Consumers like the terminal cursor-position query
+ * (ANSI DSR/CPR) need the request bytes physically on the wire before they read
+ * the reply, so we extend fflush into a *complete* drain.
+ *
+ * The drain is cooperative: it pumps v_app_polling_task() each spin so the
+ * super-loop's co-op tasks (jobs, PLAY, synth) keep running during the wait at
+ * low baud. The ring itself empties via the USART2 TX ISR independently of the
+ * main loop; b_uart_stream_is_tx_busy() also waits on TC, covering the HW
+ * FIFO/SR. A wall-clock cap (DEBUG_CONSOLE_FLUSH_TIMEOUT_MS) is anti-wedge
+ * insurance only.
+ *
+ * INVARIANT: v_app_polling_task() must NOT consume the debug-UART RX ring.
+ * The cursor-query contract (flush -> emit query -> read reply) relies on the
+ * pump not swallowing the CPR response. See the note at v_app_polling_task().
+ ******************************************************************************/
+
+extern int __real_fflush(FILE *p_x_file);
+
+int __wrap_fflush(FILE *p_x_file)
+{
+    static volatile bool b_in_console_flush = false;
+
+    int i_rc = __real_fflush(p_x_file);   // stdio FILE buffer -> uart_stream ring
+
+    // Only the debug console streams get the extended drain. fflush(NULL) means
+    // "flush every stream", which includes stdout, so honor it too.
+    bool b_console = (p_x_file == stdout) || (p_x_file == stderr) || (p_x_file == NULL);
+
+    // Never run the scheduler from an ISR, and don't re-enter the pump if a
+    // pumped task itself calls fflush(stdout) (nested flush just gets its bytes
+    // into the ring via __real_fflush above and returns).
+    if (b_console && (__get_IPSR() == 0U) && (! b_in_console_flush))
+    {
+        uint32_t u32_t_start = HAL_GetTick();
+
+        b_in_console_flush = true;
+
+        while (b_uart_stream_is_tx_busy(h_debug_uart))
+        {
+            v_app_polling_task();
+
+            if (ELAPSED_TIME(u32_t_start) >= DEBUG_CONSOLE_FLUSH_TIMEOUT_MS)
+            {
+                break;
+            }
+        }
+
+        b_in_console_flush = false;
+    }
+
+    return i_rc;
+}
+
+/******************************************************************************
  * HAL UART callbacks (application-owned). Forward LED strip UART/DMA events;
  * add other UART users here when needed.
  ******************************************************************************/
@@ -255,6 +313,10 @@ void v_process_next_job(void)
 
 void v_app_polling_task(void)
 {
+    // INVARIANT: nothing pumped here may consume the debug-UART RX ring.
+    // __wrap_fflush() pumps this during a console flush; if a task drained RX it
+    // could swallow a terminal cursor-position (CPR) reply mid query. Console
+    // input is read in the main loop (v_debug_menu_service), deliberately not here.
     v_process_next_job();
     v_play_poll();
     v_synth_engine_service();   // cheap direct call for responsiveness (job also posts it)

@@ -42,6 +42,7 @@ keyword before asking. **Keep this table current** as new project aspects get do
 - The project **must** build cleanly and function after a full "Generate Code" from the `.ioc` with **no manual edits** outside USER CODE sections.
 - If a fix or feature requires changes to peripheral configuration, **tell the user what to change in the `.ioc` file** first. Only put code inside USER CODE markers if the user explicitly approves an exception.
 - Application logic belongs in `App/`. Do not put business logic, drivers, or wrappers in `Core/`.
+- **Linker flag dependency:** `__io_putchar`/`__io_getchar` route stdio through `uart_stream`, and `fflush(stdout)` is extended into a complete (cooperative, wire-level) console drain via the GCC linker option **`-Wl,--wrap=fflush`** (project setting: *C/C++ Build → Settings → MCU GCC Linker → Miscellaneous → Other flags*, Debug **and** Release). This lives in CubeIDE project settings, **not** generated source — **re-verify it survived after any `.ioc` "Generate Code"**, or `fflush(stdout)` silently degrades to a stdio-buffer-only flush (breaks `term` cursor-position/size queries). Wrapper lives in `App/Src/app_main.c` (`__wrap_fflush`); timeout in `App/Inc/platform.h` (`DEBUG_CONSOLE_FLUSH_TIMEOUT_MS`).
 
 ### 2. Coding Style
 - **Allman** brace style.
