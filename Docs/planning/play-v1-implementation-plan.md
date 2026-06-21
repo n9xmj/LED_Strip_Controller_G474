@@ -231,8 +231,9 @@ Cross-ref: [Docs/PROJECT.md](../PROJECT.md) long-term goals · deferred briefs u
 | W28 | v2 · low | **Wall-clock note duration (ms)** | Absolute time per note/rest — **ignores `T`/`%`**; **keeps duty ratio** (`_`/`!`/`;`); bench timing torture / scheduler drift / sync latency; inheritance optional · see **W28** stub |
 | W29 | v2 | **Musical dynamics & volume ramps** | Step markings via **`\"dyn:xxx"`** (D18) — pp…ff, sfz, fp, …; ramps via **`\"cresc:`** / **`\"dim:`** (beats + scale); **V-relative** scaling · see **W29** |
 | W30 | v2+ | **Deadline-driven PLAY service** (event not poll) | One-shot HW compare or job post only at **sound-off** + **rest-end**; drop per-loop `v_play_poll` spin while idle/in-note · see **W30** |
+| W31 | v2 | **No-context-restore loops / GOSUB** (opt-out snapshot) | Optional flag char on the loop close `]` and/or RETURN so note-context (octave/dur/key/…) is **not** restored on iterate/return — e.g. `C0 [CDEFGAB^]8` plays one continuous ascending scale run instead of 8 resets. Actionable form of the **W25** drift question · relates **G8**/**S4** (`[` snapshot restore), **D23** (RETURN), **W6** (`L"…"`) · see **W31** |
 
-*Last wish-list pass: 2026-06-14 (W30 deadline-driven scheduler idea; W29 **`\"dyn:xxx"`** step-syntax leaning; W28 wall-clock duration).*
+*Last wish-list pass: 2026-06-20 (W31 opt-out context-restore for loops/GOSUB; prior: W30 deadline-driven scheduler, W29 **`\"dyn:xxx"`** step-syntax, W28 wall-clock duration).*
 
 ---
 
@@ -353,6 +354,54 @@ Duty partition (S5 / **I4**): `active_ticks = (note_ticks * duty_num) / duty_den
 **Promote when:** main-loop PLAY poll cost matters (fast tempos + other subsystems contending) or RTOS lands.
 
 **Firmware refs:** `App/Src/play.c` (`v_play_service`, `v_play_start_note`, `su32_sched_tick`); `App/Src/app_main.c` (`v_periodic_timer_service`, `v_app_polling_task`); **I4** section above. **RTOS + NVIC:** see **RTOS migration — PLAY timer, NVIC, and FreeRTOS tick** (below).
+
+---
+
+### W31 — No-context-restore loops / GOSUB (v2 · opt-out snapshot)
+
+**Status:** 🔵 · **Needs user:** yes (syntax **open** — idea capture 2026-06-20)
+
+**Intent:** Let a loop iteration or a GOSUB return **optionally keep** the note-context the body mutated, instead of restoring the entry snapshot. The motivating example is a single, continuously climbing scale:
+
+```
+C0 [CDEFGAB^]8
+```
+
+…where each pass should **inherit** the octave the previous pass left (so the `^` octave-ups accumulate into a full multi-octave run), rather than resetting to the `[`-entry octave every iteration.
+
+> **Syntax caveat (author's own note):** the example above is illustrative, not verified grammar — in the current dialect octave-up is **`^`** (octave-down **`v`**), repeat count is **`]:N`**, and `[ ]` snapshots/restores on re-entry per **G8**/**S4**. The point is the *semantics* (opt-out of restore), not the exact glyphs.
+
+**v1 today (what this opts out of):**
+
+| Construct | Current restore behavior | Ref |
+| --------- | ------------------------ | --- |
+| **Repeat `[ … ]:N`** | On each re-entry the play-state **snapshot taken at `[`** (octave, duration, key, accidental state, …) is **restored** — body mutations do **not** persist across iterations | **G8** / **S4** |
+| **GOSUB / RETURN** | On return, callee context is unwound (e.g. octave restored on `/`) so the caller resumes as before the call | **G5** / **D23** |
+
+**Desired (opt-in non-restore):**
+
+| Aspect | Rule |
+| ------ | ---- |
+| **Trigger** | An **optional flag char** on the **return operator(s)** — the loop close `]` and/or the RETURN token — selects *no restore* for that construct |
+| **Effect** | The body's mutations to play-context (octave at minimum; ideally the full snapshot set) **carry forward** to the next iteration / to the caller |
+| **Default** | **Unchanged** — bare `]` / bare RETURN still restore (back-compat with all shipped scores + golden tests `loop`, `labels_gosub`) |
+| **Scope of carry** | TBD — *all* snapshotted fields vs. a defined subset (octave/duration only). Decide at design; full-snapshot is simplest to reason about |
+
+**Syntax candidates (do not implement without closing):**
+
+- Suffix flag on close: `]!N` / `]~:N` / `]+:N` — pick a char **not** colliding with staccato `!`, top-level replay `~`, or accidental/octave `+`/`^`; a fresh glyph may be cleaner.
+- Distinct RETURN variant token for the no-restore case (mirror whatever loop chooses).
+- Sticky mode executive (`\"loopmode:carry"`-style, D18 surface) toggling restore on/off — heavier, but avoids per-operator glyph pressure and reads self-documenting.
+
+**Open questions:** which fields carry (octave-only vs full snapshot)? · does no-restore on a *nested* loop/sub compose intuitively? · interaction with key (`K`) and transpose (`&`) sticky state · STRICT vs NORMAL handling of the flag on a construct that has no snapshot.
+
+**Relation to W25:** this is the **actionable feature** behind the open **W25** question ("loop body mutations persist; restore optional?"). Promote together.
+
+**Firmware refs (when promoted):** `App/Src/play.c` — `[` snapshot save/restore path (G8/S4), GOSUB/RETURN frame restore (G5/D23). Golden coverage to extend: `loop`, `labels_gosub`, `key_snapshot`.
+
+**Cross-ref:** **W25** (snapshot drift) · **G8** / **S4** (repeat snapshot) · **D23** / **G5** (RETURN) · **W6** (`L"…"` library GOSUB).
+
+**Promote when:** scores want accumulating runs/sequences (scale climbs, ostinato transposition by loop) without unrolling the body by hand.
 
 ---
 
