@@ -197,10 +197,67 @@ static void v_harness_op_play(const char *pc_arg)
     v_debug_play_playstr();
 }
 
+/* Shared back-end for the size/cursor query ops: parse the <hex> reply, inject
+ * it as the synthetic terminal response, run the selected query, and frame the
+ * parsed result. (The query also emits its request escape to TX — harmless; the
+ * host reads to the framed terminator.) */
+static void v_harness_op_query(const char *pc_arg, char c_tag, bool b_cursor, bool b_direct)
+{
+    uint8_t  au8[TERM_INJECT_MAX];
+    uint16_t u16_len = u16_harness_hex_to_bytes(pc_arg, au8, (uint16_t) sizeof(au8));
+
+    if (u16_len == 0u)
+    {
+        printf("<HRN %c ERR badhex>\r\n", c_tag);
+        return;
+    }
+
+    v_term_inject(au8, u16_len);
+
+    if (b_cursor)
+    {
+        term_pos_t x_pos = { 0u, 0u, TERM_OK };
+        bool b_ok = b_term_get_cursor(&x_pos, 250u);
+        printf("<HRN %c ok=%d row=%u col=%u err=%d>\r\n",
+               c_tag, b_ok ? 1 : 0,
+               (unsigned) x_pos.u16_row, (unsigned) x_pos.u16_col, (int) x_pos.err);
+    }
+    else
+    {
+        term_size_t x_sz = { 0u, 0u, TERM_OK };
+        bool b_ok = b_direct ? b_term_get_size_direct(&x_sz, 250u)
+                             : b_term_get_size_cpr(&x_sz, 250u);
+        printf("<HRN %c ok=%d rows=%u cols=%u err=%d>\r\n",
+               c_tag, b_ok ? 1 : 0,
+               (unsigned) x_sz.u16_rows, (unsigned) x_sz.u16_cols, (int) x_sz.err);
+    }
+}
+
+/* C <hex> : inject a synthetic CPR reply, run b_term_get_cursor. */
+static void v_harness_op_cursor(const char *pc_arg)
+{
+    v_harness_op_query(pc_arg, 'C', true, false);
+}
+
+/* X <hex> : inject a synthetic XTWINOPS reply, run b_term_get_size_direct. */
+static void v_harness_op_size_direct(const char *pc_arg)
+{
+    v_harness_op_query(pc_arg, 'X', false, true);
+}
+
+/* Z <hex> : inject a synthetic CPR reply, run b_term_get_size_cpr. */
+static void v_harness_op_size_cpr(const char *pc_arg)
+{
+    v_harness_op_query(pc_arg, 'Z', false, false);
+}
+
 static const harness_op_t s_ax_harness_ops[] =
 {
-    { 'K', "decode key burst <hex> (e.g. K 1B5B41)", v_harness_op_key  },
-    { 'P', "PLAY string entry (reads its own line)",  v_harness_op_play },
+    { 'K', "decode key burst <hex> (e.g. K 1B5B41)",        v_harness_op_key         },
+    { 'P', "PLAY string entry (reads its own line)",         v_harness_op_play        },
+    { 'C', "cursor: inject CPR reply <hex>, run get_cursor",  v_harness_op_cursor      },
+    { 'X', "size: inject 18t reply <hex>, run get_size_direct", v_harness_op_size_direct },
+    { 'Z', "size: inject CPR reply <hex>, run get_size_cpr",   v_harness_op_size_cpr    },
 };
 
 //------------------------------------------------------------------------------
@@ -355,6 +412,80 @@ void v_test_harness_key_huil(void)
             }
         }
     }
+}
+
+/* Inter-byte gap (ms) above which a freshly-arrived byte is treated as a new
+ * keypress and wrapped onto its own line. A single keypress's escape burst
+ * arrives back-to-back (sub-ms @ 921600); human keystrokes are >>100 ms apart. */
+#define RAWKEY_BURST_GAP_MS         40u
+
+void v_test_harness_rawkey_huil(void)
+{
+    uint32_t u32_last   = 0u;               /* last byte arrival (burst gap)  */
+    bool     b_any      = false;            /* printed anything yet?          */
+    int      i_prev     = -1;               /* previous byte (double-ESC exit) */
+
+    printf("\r\nRaw key echo (no decode) - shows EXACTLY what the terminal sends.\r\n"
+           "Each keypress is grouped on a line as token=hex (e.g. ESC=0x1B [=0x5B A=0x41).\r\n"
+           "Press ESC twice to exit.\r\n\r\n");
+
+    for (;;)
+    {
+        int i_ch;
+
+        v_app_polling_task();
+        i_ch = getchar();
+
+        if (i_ch <= 0)
+        {
+            continue;                       /* purely human-driven; ESC ESC exits */
+        }
+
+        /* New keypress? Start a fresh line so each burst reads as one key. */
+        if (b_any && (ELAPSED_TIME(u32_last) >= RAWKEY_BURST_GAP_MS))
+        {
+            printf("\r\n");
+        }
+        u32_last = HAL_GetTick();
+
+        {
+            char ac_tok[TERM_VISIBLE_BUFSZ];
+            (void) pc_term_char_to_str((char) i_ch, ac_tok, sizeof(ac_tok));
+            printf("%s=0x%02X ", ac_tok, (unsigned) (uint8_t) i_ch);
+        }
+        b_any = true;
+
+        if (((uint8_t) i_ch == ESC) && (i_prev == (int) ESC))
+        {
+            printf("\r\n(ESC ESC) exit.\r\n");
+            break;
+        }
+        i_prev = i_ch;
+    }
+}
+
+void v_test_harness_size_huil(void)
+{
+    /* Pre-seed size with defaults to demonstrate the D10 pattern: on a failed
+     * query the dimension members are left untouched, so these survive. */
+    term_size_t x_size = { TERM_DEFAULT_ROWS, TERM_DEFAULT_COLS, TERM_OK };
+    term_pos_t  x_pos  = { 0u, 0u, TERM_OK };
+    bool        b_ok;
+
+    printf("\r\nTerminal size / cursor query (live).\r\n"
+           "Resize the terminal window and re-run [w] to watch it track.\r\n");
+
+    b_ok = b_term_get_size(&x_size, 200u);
+    printf("  size  : %-4s rows=%u cols=%u (status=%s)\r\n",
+           b_ok ? "OK" : "FAIL",
+           (unsigned) x_size.u16_rows, (unsigned) x_size.u16_cols,
+           pc_term_status_name(x_size.err));
+
+    b_ok = b_term_get_cursor(&x_pos, 200u);
+    printf("  cursor: %-4s row=%u col=%u (status=%s)\r\n",
+           b_ok ? "OK" : "FAIL",
+           (unsigned) x_pos.u16_row, (unsigned) x_pos.u16_col,
+           pc_term_status_name(x_pos.err));
 }
 
 #endif /* TEST_HARNESS_ENABLED */

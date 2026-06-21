@@ -52,3 +52,22 @@ extern void v_test_harness_run(void);
  *        Bare ESC exits. Wired to the debug-menu '[k]' entry.
  */
 extern void v_test_harness_key_huil(void);
+
+/**
+ * @brief Interactive (HuIL) terminal size + cursor query against the live
+ *        terminal: runs b_term_get_size() / b_term_get_cursor() and prints the
+ *        results. Resize the Tera Term window and re-run to watch it track.
+ *        Wired to the debug-menu '[w]' entry.
+ */
+extern void v_test_harness_size_huil(void);
+
+/**
+ * @brief Interactive (HuIL) RAW key echo — shows EXACTLY what the terminal
+ *        sends for each keypress, WITHOUT going through the term extended-key
+ *        decoder. Reads bytes with plain getchar() + cooperative spin, renders
+ *        each via pc_term_char_to_str(), and groups a multi-byte burst (one
+ *        keypress) onto a line by inter-byte gap. Press ESC twice to exit.
+ *        Used to discover the byte patterns of API-unsupported keys.
+ *        Wired to the debug-menu term-submenu '[e]' entry.
+ */
+extern void v_test_harness_rawkey_huil(void);

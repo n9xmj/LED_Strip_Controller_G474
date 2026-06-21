@@ -1262,6 +1262,55 @@ static const menu_item_t x_led_controller_tests_submenu[] =
 };
 
 //------------------------------------------------------------------------------
+// term API operations / tests (extended-key input plan). Growing collection;
+// keep all <term> exercisers here rather than cluttering the top menu.
+
+static const menu_item_t x_term_tests_submenu[] =
+{
+    {
+        .x_type = MENU_ITEM_HELP_TEXT_FIXED,
+        .c_key = 0,
+        .p_c_text = "\r\n--- term API operations / tests ---\r\n"
+    },
+    {
+        .x_type = MENU_ITEM_HELP,
+        .c_key = '?',
+        .p_c_text = NULL
+    },
+    {
+        .x_type = MENU_ITEM_HELP_HIDDEN,
+        .c_key = '\r',
+        .p_c_text = NULL
+    },
+    {
+        .x_type = MENU_ITEM_FUNCTION,
+        .c_key = 'k',
+        .p_c_text = "Extended-key decode test (live keypresses)",
+        .pfn_function = v_test_harness_key_huil
+    },
+    {
+        .x_type = MENU_ITEM_FUNCTION,
+        .c_key = 'e',
+        .p_c_text = "Raw key echo - show exact bytes sent (no decode)",
+        .pfn_function = v_test_harness_rawkey_huil
+    },
+    {
+        .x_type = MENU_ITEM_FUNCTION,
+        .c_key = 'w',
+        .p_c_text = "Window size / cursor query (live)",
+        .pfn_function = v_test_harness_size_huil
+    },
+    {
+        .x_type = MENU_ITEM_RETURN_TO_PREVIOUS_MENU,
+        .c_key = 0x1B,
+        .p_c_text = NULL
+    },
+    {
+        .x_type = MENU_ITEM_END_OF_LIST,
+    }
+};
+
+//------------------------------------------------------------------------------
 
 static const menu_item_t x_debug_top_menu[] =
 {
@@ -1329,10 +1378,10 @@ static const menu_item_t x_debug_top_menu[] =
         .pfn_function = v_note_player_run
     },
     {
-        .x_type = MENU_ITEM_FUNCTION,
-        .c_key = 'k',
-        .p_c_text = "Terminal extended-key decode test (term)",
-        .pfn_function = v_test_harness_key_huil
+        .x_type = MENU_ITEM_CALL_MENU,
+        .c_key = 'T',
+        .p_c_text = "term API operations / tests",
+        .p_x_menu = x_term_tests_submenu
     },
     {
         .x_type = MENU_ITEM_FUNCTION,

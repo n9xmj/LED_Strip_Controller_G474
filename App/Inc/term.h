@@ -202,6 +202,111 @@ extern char *pc_term_char_to_str(char c_in, char *pc_out, size_t sz_max);
 extern int i_term_putc_visible(uint8_t u8_ch);
 
 /******************************************************************************
+ * Terminal size / cursor-position queries (building block #2)
+ * ----------------------------------------------------------------------------
+ * Cooperative queries that ask the terminal where the cursor is / how big it is
+ * and parse the ESC-led CSI reply via the same timeout-driven core as the key
+ * reader. See Docs/planning/extended-key-input-plan.md (Q3 board: D8-D11/S6/I4).
+ *
+ * Return idiom (D9): functions return a bool (true = success) for a quick check
+ * the caller may freely ignore; the detailed status lands in the struct's `err`
+ * member. On FAILURE the dimension members are left UNTOUCHED (D10), so a caller
+ * may pre-seed them with TERM_DEFAULT_* and use the struct unconditionally:
+ *
+ *     term_size_t sz = { .u16_rows = TERM_DEFAULT_ROWS, .u16_cols = TERM_DEFAULT_COLS };
+ *     (void) b_term_get_size(&sz, 200u);   // ignore result
+ *     // sz.u16_rows/cols = real size on success, my defaults on failure
+ *
+ * Input-stream contract (S6): it is the CALLER's responsibility to ensure the
+ * input stream is quiet before a query (drain any wanted RX first). The reader
+ * stays driver-agnostic — it scans past stray non-ESC bytes to the report,
+ * bounded by the timeout, but does not reach into any UART driver buffer.
+ ******************************************************************************/
+
+/** Status for the size/cursor queries (struct `err`). On success it also reports
+ *  WHICH method answered (D12) — a positive signal, not just "no error":
+ *    - cursor query (single method)      -> TERM_OK
+ *    - size via direct XTWINOPS (CSI 18t) -> TERM_OK_DIRECT
+ *    - size via CPR cursor-move trick     -> TERM_OK_CPR
+ *  The combined b_term_get_size() reports the method that actually succeeded.
+ *  Success codes are grouped low; use TERM_STATUS_IS_OK() to test. */
+typedef enum
+{
+    TERM_OK = 0,                /**< Success (method unspecified, e.g. cursor). */
+    TERM_OK_DIRECT,             /**< Size obtained via direct XTWINOPS (CSI 18t). */
+    TERM_OK_CPR,                /**< Size obtained via the CPR cursor-move trick. */
+
+    TERM_ERR_TIMEOUT,           /**< Failure: no reply within the timeout.       */
+    TERM_ERR_BAD_REPLY          /**< Failure: reply malformed / unexpected shape. */
+}
+term_err_t;
+
+/** True if a term_err_t status is a success code (any method). */
+#define TERM_STATUS_IS_OK(s)        ((int)(s) <= (int)TERM_OK_CPR)
+
+/** Cursor position report (1-based row/col, like the terminal's own numbering). */
+typedef struct
+{
+    uint16_t   u16_row;
+    uint16_t   u16_col;
+    term_err_t err;
+}
+term_pos_t;
+
+/** Terminal text-area size in character cells. */
+typedef struct
+{
+    uint16_t   u16_rows;
+    uint16_t   u16_cols;
+    term_err_t err;
+}
+term_size_t;
+
+/** Caller-applied fallback dimensions (D10) — the query never guesses these. */
+#define TERM_DEFAULT_ROWS           24u
+#define TERM_DEFAULT_COLS           80u
+
+/** Build option (D8): which b_term_get_size() method is tried first. Default =
+ *  direct XTWINOPS (cleaner, no cursor move); set to 0 to prefer the CPR
+ *  corner-trick first (for terminals lacking '18t', skips a dead round-trip). */
+#ifndef TERM_SIZE_PREFER_DIRECT
+#define TERM_SIZE_PREFER_DIRECT     1
+#endif
+
+/**
+ * @brief Query the current cursor position (DSR 6 -> "CSI r;c R").
+ * @param px_pos          Out: row/col + err. On failure row/col are untouched.
+ * @param u32_timeout_ms  Max wait for the reply.
+ * @return true on success (px_pos->err == TERM_OK), false otherwise.
+ */
+extern bool b_term_get_cursor(term_pos_t *px_pos, uint32_t u32_timeout_ms);
+
+/**
+ * @brief Query the terminal text-area size. Tries the direct/CPR methods per the
+ *        TERM_SIZE_PREFER_DIRECT build option, falling back to the other.
+ * @param px_size         Out: rows/cols + err. On failure rows/cols untouched.
+ * @param u32_timeout_ms  Max wait per method (worst case ~2x on full fallback).
+ * @return true on success, false otherwise.
+ */
+extern bool b_term_get_size(term_size_t *px_size, uint32_t u32_timeout_ms);
+
+/**
+ * @brief Size via direct XTWINOPS (CSI 18t -> "CSI 8;rows;cols t"). Cleaner (no
+ *        cursor move) but a non-ECMA-48 xterm extension some terminals gate off.
+ */
+extern bool b_term_get_size_direct(term_size_t *px_size, uint32_t u32_timeout_ms);
+
+/**
+ * @brief Size via the portable CPR corner-trick (save cursor, jump to the far
+ *        corner, DSR 6, restore). Works on any VT100+; briefly moves the cursor.
+ */
+extern bool b_term_get_size_cpr(term_size_t *px_size, uint32_t u32_timeout_ms);
+
+/** @brief Human-readable name for a term_err_t status ("OK", "OK_DIRECT",
+ *         "OK_CPR", "TIMEOUT", "BAD_REPLY"). */
+extern const char *pc_term_status_name(term_err_t x_status);
+
+/******************************************************************************
  * Testing / HIL hooks  —  NOT for normal application use
  * ----------------------------------------------------------------------------
  * Provided ONLY so the unit / hardware-in-the-loop test executive can feed raw

@@ -66,7 +66,7 @@ Status: 🔴 open · 🟡 leaning · 🟢 resolved · 🔵 deferred.
 
 | ID | Subject |
 |----|---------|
-| **W1** | Enhanced `i_getline()` — in-line editing + input history (readline-lite) on top of this reader |
+| **W1** | Enhanced `i_getline()` — in-line editing + input history (readline-lite) on top of this reader. **Promoted to its own board:** [`line-editor-plan.md`](line-editor-plan.md) |
 | **W2** | Terminal piano UI consumer (PLAY **I8**; depends on `uart_stream`) |
 | **W3** | Terminal-size / cursor-position query helper (`ESC[6n` report / `ESC[18t`) — if not pulled in via **Q3** |
 | **W4** | Mouse reporting / bracketed-paste / focus events (likely never on a bench console) |
@@ -675,6 +675,13 @@ it; only the *parse target* differs (a numeric report, not a keymap entry).
 **Working mode:** resolve D8–D11 / S6 / I4 / T3 by ID in chat; no firmware until the
 method rows (D8/D9) lock.
 
+**Status: SHIPPED 2026-06-20** — all rows 🟢. Implemented in `App/Src/term.c` +
+`App/Inc/term.h` (API per D9) using `ANSI.h`'s `ANSI_GET_CURSOR` / new
+`ANSI_REPORT_TEXT_AREA` (`CSI 18t`) / save-restore macros. Build clean (0/0),
+automated parser vectors **9/9** (`scripts/term_report_bench.py` +
+`scripts/term_golden/reports.json`), key decoder unregressed (**30/30**). Live `[w]`
+HuIL query against Tera Term is the remaining human check (resize window → re-run).
+
 ### Findings (verified 2026-06-20 — Tera Term 5 manual, *Supported control functions*)
 
 Tera Term v5 supports **both** candidate mechanisms:
@@ -693,9 +700,10 @@ Tera Term v5 supports **both** candidate mechanisms:
 | **D9** | 🟢 | API = **(B) struct out-param + `bool` return** (`b_term_get_*` → fill `term_*_t{rows,cols,err}`, return success); bool ignorable |
 | **D10** | 🟢 | No-reply → return error, **out-params untouched**; defaults via header `#define`s |
 | **D11** | 🟢 | Cursor save/restore for corner-trick = **DECSC/DECRC** (`ESC 7`/`ESC 8`, already in `ANSI.h`) |
+| **D12** | 🟢 | `err` doubles as a **success channel** — on success it reports WHICH method answered (`TERM_OK` / `TERM_OK_DIRECT` / `TERM_OK_CPR`) — **shipped** 2026-06-20 |
 | **S6** | 🟢 | stdin interleaving — **caller's job** to drain unwanted RX first; reader keeps scan-to-lead + garbage rejection |
-| **I4** | 🟡 | Dedicated `i16_term_read_csi_report()` on inject-aware `i_term_getbyte()`; harness-testable |
-| **T3** | 🟡 | Harness inject op + golden vectors for the report parser; HuIL menu entry for a **live** TT query |
+| **I4** | 🟢 | `x_term_read_csi_report()` on inject-aware `i_term_getbyte()` — **shipped** 2026-06-20 |
+| **T3** | 🟢 | Harness ops `C`/`X`/`Z` + `reports.json` (9 vectors, 9/9) + `[w]` live HuIL — **shipped** 2026-06-20 |
 
 ### D8 — get_size method
 **Resolution (2026-06-20 🟢, author):** Implement **both** methods and have
@@ -749,7 +757,11 @@ pre-seeding defaults). The struct travels by **pointer out-param** (not by value
 so D10's "don't touch the out-params on error" applies cleanly — see below.
 
 ```c
-typedef enum { TERM_ERR_OK = 0, TERM_ERR_TIMEOUT, TERM_ERR_BAD_REPLY } term_err_t;
+/* D12: success codes carry the method that answered; see TERM_STATUS_IS_OK(). */
+typedef enum {
+    TERM_OK = 0, TERM_OK_DIRECT, TERM_OK_CPR,      /* success (method) */
+    TERM_ERR_TIMEOUT, TERM_ERR_BAD_REPLY           /* failure          */
+} term_err_t;
 
 typedef struct { uint16_t u16_row;  uint16_t u16_col;  term_err_t err; } term_pos_t;   /* cursor */
 typedef struct { uint16_t u16_rows; uint16_t u16_cols; term_err_t err; } term_size_t;  /* window */
@@ -759,7 +771,9 @@ bool b_term_get_size  (term_size_t *px_size, uint32_t u32_timeout_ms);
 ```
 
 **Fill contract (reconciles with D10):**
-- **Success:** write `rows/cols` **and** `err = TERM_ERR_OK`; return `true`.
+- **Success:** write `rows/cols` **and** `err = ` the success code for the method
+  used (see **D12**: `TERM_OK_DIRECT` / `TERM_OK_CPR`, or `TERM_OK` for cursor);
+  return `true`.
 - **Failure:** set `px->err` to the specific code (the status channel), **leave
   `rows/cols` untouched** (D10), return `false`. So a caller that pre-seeds
   `px->u16_rows = TERM_DEFAULT_ROWS` keeps its default on failure.
@@ -788,9 +802,9 @@ wants. Policy stays with the consumer; the primitive never guesses dimensions.
 
 **Scope of "don't touch" (author clarification 2026-06-20):** the **`err` member is
 absolutely subject to modification** — it's the status channel and is *always*
-written (the specific code on failure, `TERM_ERR_OK` on success). Only the **x/y
-dimension members are preserved on failure.** This exists to support the author's
-intended call pattern:
+written (the specific code on failure, a **success/method code** on success — see
+**D12**). Only the **x/y dimension members are preserved on failure.** This exists to
+support the author's intended call pattern:
 
 1. **Instantiate** the result struct and **initialize the x/y members** with
    defaults of the caller's choosing — typically `TERM_DEFAULT_ROWS/COLS`, but the
@@ -812,6 +826,31 @@ term_size_t sz = { .u16_rows = TERM_DEFAULT_ROWS, .u16_cols = TERM_DEFAULT_COLS 
 **Resolution (2026-06-20 🟢):** **DECSC/DECRC** (`ESC 7` / `ESC 8`) via the existing
 `ANSI_SAVE_CURSOR` / `ANSI_RESTORE_CURSOR` macros — robust on TT, one byte cheaper
 than SCO `CSI s`/`CSI u`. Used by the corner-trick fallback path (**D8**).
+
+### D12 — status as a success channel (method reporting)
+**Resolution (2026-06-20 🟢, author):** make `err` report **success as well as
+failure** — specifically *which* acquisition method answered. The success range now
+splits into method codes so a caller can tell how the size came back:
+
+```c
+TERM_OK = 0,        /* success, method n/a (cursor query — single method)        */
+TERM_OK_DIRECT,     /* size answered by the direct XTWINOPS query  (CSI 18t)      */
+TERM_OK_CPR,        /* size answered by the CPR cursor-move trick                 */
+TERM_ERR_TIMEOUT, TERM_ERR_BAD_REPLY        /* failures                          */
+#define TERM_STATUS_IS_OK(s)  ((int)(s) <= (int)TERM_OK_CPR)
+```
+
+- **Single-method APIs just seed the code they used:** `b_term_get_cursor` → `TERM_OK`,
+  `b_term_get_size_direct` → `TERM_OK_DIRECT`, `b_term_get_size_cpr` → `TERM_OK_CPR`.
+- **The combined `b_term_get_size`** fills `err` with the **first method that
+  succeeded** (its sub-call already wrote the right code; the wrapper just returns it).
+  So `err == TERM_OK_CPR` after `b_term_get_size` means the direct `18t` was ignored
+  and the corner-trick carried the day — useful telemetry for spotting terminals
+  that don't support XTWINOPS.
+- Success codes are grouped low (0..2) so the `bool` return and `TERM_STATUS_IS_OK()`
+  stay trivial; errors follow (3..4). `pc_term_status_name()` renders all five for
+  the `[w]` HuIL readout. Golden vectors (`reports.json`) assert the exact method
+  code per op (cursor=0, direct=1, cpr=2).
 
 ### S6 — input-stream interleaving
 **Resolution (2026-06-20 🟢, author):** **It is the caller's responsibility to ensure
@@ -930,9 +969,8 @@ flicker-free full-screen UIs. Tracked as future **W** work, not now.
 
 ## Global notes / footer
 
-- **Plan status:** 🔴 ×0 · 🟡 ×2 (Q3 size-query: I4 parser-reuse · T3 tests — both
-  implementation-phase) · 🟢 ×24. D8/D9/D10/D11/S6 resolved 2026-06-20; D7 + T2
-  shipped 2026-06-20; Q3 activated 2026-06-20.
+- **Plan status:** 🔴 ×0 · 🟡 ×0 · 🟢 ×26. Q3 size/cursor query **shipped**
+  2026-06-20 (D8–D11/S6/D9/I4/T3 all 🟢); D7 + T2 shipped 2026-06-20.
 - **Roadmap captured:** output-primitive library (building block #3) — see
   **§ Output primitive library**; awaiting author/agent pass on the full set.
 - **Deferred (not v1 blockers):** W5 migration sweep · W6 user-macro decode · L3

@@ -423,6 +423,229 @@ void v_term_inject(const uint8_t *pu8_bytes, uint16_t u16_count)
     s_u16_inject_pos = 0u;
 }
 
+//------------------------------------------------------------------------------
+// Terminal size / cursor-position queries (building block #2)
+//------------------------------------------------------------------------------
+
+/** Max numeric params captured from a CSI report (XTWINOPS 18t has 3). */
+#define TERM_REPORT_MAX_PARAMS          4u
+/** Runaway guard: max param/intermediate bytes before declaring a bad reply. */
+#define TERM_REPORT_MAX_BYTES           16u
+
+/* Read a CSI numeric report: <ESC> '[' p0 ';' p1 ... <final 0x40..0x7E>.
+ *
+ * Per S6, scans past any non-ESC bytes (bounded by u32_timeout_ms) waiting for
+ * the report's leading ESC, then gathers ';'-separated decimal params (inter-
+ * byte bounded) until the final byte. Fills pu16_params[0..u8_max-1], the param
+ * count, and the final byte. Reuses the inject-aware i_term_getbyte() so the
+ * test harness can feed synthetic replies (I4). Returns a term_err_t. */
+static term_err_t x_term_read_csi_report(uint16_t *pu16_params, uint8_t u8_max,
+                                         uint8_t *pu8_nparams, char *pc_final,
+                                         uint32_t u32_timeout_ms)
+{
+    uint32_t u32_t0  = HAL_GetTick();
+    int      i_ch;
+    uint16_t u16_val = 0u;
+    uint8_t  u8_idx  = 0u;       /* current param index */
+    uint8_t  u8_bytes = 0u;      /* runaway guard counter */
+
+    *pu8_nparams = 0u;
+    *pc_final    = '\0';
+
+    /* (S6) Scan for the report's leading ESC, discarding stray bytes, up to the
+     * overall timeout. Caller is responsible for an otherwise-quiet stream. */
+    for (;;)
+    {
+        v_app_polling_task();
+        i_ch = i_term_getbyte();
+        if (i_ch == (int) ESC)
+        {
+            break;
+        }
+        if (ELAPSED_TIME(u32_t0) >= u32_timeout_ms)
+        {
+            return TERM_ERR_TIMEOUT;
+        }
+    }
+
+    /* Expect the CSI '[' next (inter-byte bounded). */
+    if (i_get_inter_byte() != (int) '[')
+    {
+        return TERM_ERR_BAD_REPLY;
+    }
+
+    for (;;)
+    {
+        i_ch = i_get_inter_byte();
+        if (i_ch <= 0)
+        {
+            return TERM_ERR_BAD_REPLY;       /* truncated */
+        }
+        if (++u8_bytes > TERM_REPORT_MAX_BYTES)
+        {
+            return TERM_ERR_BAD_REPLY;       /* runaway */
+        }
+
+        if ((i_ch >= '0') && (i_ch <= '9'))
+        {
+            u16_val = (uint16_t) ((u16_val * 10u) + (uint16_t) (i_ch - '0'));
+            continue;
+        }
+
+        if (i_ch == ';')
+        {
+            if (u8_idx < u8_max)
+            {
+                pu16_params[u8_idx] = u16_val;
+            }
+            u8_idx++;
+            u16_val = 0u;
+            continue;
+        }
+
+        if ((i_ch >= 0x40) && (i_ch <= 0x7E))   /* final byte -> done */
+        {
+            if (u8_idx < u8_max)
+            {
+                pu16_params[u8_idx] = u16_val;
+            }
+            u8_idx++;
+            *pc_final    = (char) i_ch;
+            *pu8_nparams = (u8_idx > u8_max) ? u8_max : u8_idx;
+            return TERM_OK;
+        }
+
+        /* Intermediate / private bytes (e.g. '?', ' '): ignore, keep scanning. */
+    }
+}
+
+bool b_term_get_cursor(term_pos_t *px_pos, uint32_t u32_timeout_ms)
+{
+    uint16_t   au16_p[TERM_REPORT_MAX_PARAMS];
+    uint8_t    u8_n = 0u;
+    char       c_final = '\0';
+    term_err_t x_err;
+
+    if (px_pos == NULL)
+    {
+        return false;
+    }
+
+    printf("%s", ANSI_GET_CURSOR);              /* CSI 6n */
+    x_err = x_term_read_csi_report(au16_p, (uint8_t) TERM_REPORT_MAX_PARAMS,
+                                   &u8_n, &c_final, u32_timeout_ms);
+
+    if ((x_err == TERM_OK) && (c_final == 'R') && (u8_n >= 2u))
+    {
+        px_pos->u16_row = au16_p[0];
+        px_pos->u16_col = au16_p[1];
+        px_pos->err     = TERM_OK;              /* cursor: single method */
+        return true;
+    }
+
+    px_pos->err = (x_err == TERM_OK) ? TERM_ERR_BAD_REPLY : x_err;
+    return false;                               /* D10: row/col untouched */
+}
+
+bool b_term_get_size_direct(term_size_t *px_size, uint32_t u32_timeout_ms)
+{
+    uint16_t   au16_p[TERM_REPORT_MAX_PARAMS];
+    uint8_t    u8_n = 0u;
+    char       c_final = '\0';
+    term_err_t x_err;
+
+    if (px_size == NULL)
+    {
+        return false;
+    }
+
+    printf("%s", ANSI_REPORT_TEXT_AREA);        /* CSI 18t */
+    x_err = x_term_read_csi_report(au16_p, (uint8_t) TERM_REPORT_MAX_PARAMS,
+                                   &u8_n, &c_final, u32_timeout_ms);
+
+    /* Reply: CSI 8 ; rows ; cols t */
+    if ((x_err == TERM_OK) && (c_final == 't') && (u8_n >= 3u) && (au16_p[0] == 8u))
+    {
+        px_size->u16_rows = au16_p[1];
+        px_size->u16_cols = au16_p[2];
+        px_size->err      = TERM_OK_DIRECT;     /* method: direct XTWINOPS 18t */
+        return true;
+    }
+
+    px_size->err = (x_err == TERM_OK) ? TERM_ERR_BAD_REPLY : x_err;
+    return false;                               /* D10: rows/cols untouched */
+}
+
+bool b_term_get_size_cpr(term_size_t *px_size, uint32_t u32_timeout_ms)
+{
+    uint16_t   au16_p[TERM_REPORT_MAX_PARAMS];
+    uint8_t    u8_n = 0u;
+    char       c_final = '\0';
+    term_err_t x_err;
+
+    if (px_size == NULL)
+    {
+        return false;
+    }
+
+    /* Save cursor, jump to the far corner (clamped to the real extent), ask for
+     * the cursor position (= the size), then restore the cursor (D11). */
+    printf("%s", ANSI_SAVE_CURSOR);             /* DECSC */
+    printf(ANSI_MOVE_CURSOR_FMT, 999u, 999u);   /* CSI 999;999H */
+    printf("%s", ANSI_GET_CURSOR);              /* CSI 6n */
+
+    x_err = x_term_read_csi_report(au16_p, (uint8_t) TERM_REPORT_MAX_PARAMS,
+                                   &u8_n, &c_final, u32_timeout_ms);
+
+    printf("%s", ANSI_RESTORE_CURSOR);          /* DECRC (always restore) */
+
+    if ((x_err == TERM_OK) && (c_final == 'R') && (u8_n >= 2u))
+    {
+        px_size->u16_rows = au16_p[0];
+        px_size->u16_cols = au16_p[1];
+        px_size->err      = TERM_OK_CPR;        /* method: CPR cursor-move trick */
+        return true;
+    }
+
+    px_size->err = (x_err == TERM_OK) ? TERM_ERR_BAD_REPLY : x_err;
+    return false;                               /* D10: rows/cols untouched */
+}
+
+bool b_term_get_size(term_size_t *px_size, uint32_t u32_timeout_ms)
+{
+    if (px_size == NULL)
+    {
+        return false;
+    }
+
+#if TERM_SIZE_PREFER_DIRECT
+    if (b_term_get_size_direct(px_size, u32_timeout_ms))
+    {
+        return true;
+    }
+    return b_term_get_size_cpr(px_size, u32_timeout_ms);
+#else
+    if (b_term_get_size_cpr(px_size, u32_timeout_ms))
+    {
+        return true;
+    }
+    return b_term_get_size_direct(px_size, u32_timeout_ms);
+#endif
+}
+
+const char *pc_term_status_name(term_err_t x_status)
+{
+    switch (x_status)
+    {
+        case TERM_OK:             return "OK";
+        case TERM_OK_DIRECT:      return "OK_DIRECT";
+        case TERM_OK_CPR:         return "OK_CPR";
+        case TERM_ERR_TIMEOUT:    return "TIMEOUT";
+        case TERM_ERR_BAD_REPLY:  return "BAD_REPLY";
+        default:                  return "?";
+    }
+}
+
 const char *pc_term_key_name(int16_t i16_key)
 {
     switch (i16_key)

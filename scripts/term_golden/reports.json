@@ -1,0 +1,15 @@
+{
+  "_comment": "Golden vectors for the term CSI-report parser (Q3 size/cursor query). 'op' picks the harness op: C=cursor (b_term_get_cursor), X=size via 18t (b_term_get_size_direct), Z=size via CPR (b_term_get_size_cpr). 'send' is the synthetic terminal reply injected ahead of the real reader; 'expect' is the parsed frame fields. status/err codes (D12): 0=OK 1=OK_DIRECT 2=OK_CPR 3=TIMEOUT 4=BAD_REPLY. On success 'err' reports WHICH method answered.",
+
+  "cursor_home":        { "op": "C", "send": "1B5B313B3152",          "expect": { "ok": 1, "row": 1,   "col": 1,   "err": 0 }, "desc": "CPR ESC[1;1R -> OK" },
+  "cursor_24_80":       { "op": "C", "send": "1B5B32343B383052",      "expect": { "ok": 1, "row": 24,  "col": 80,  "err": 0 }, "desc": "CPR ESC[24;80R -> OK" },
+  "cursor_skip_junk":   { "op": "C", "send": "41421B5B32343B383052",  "expect": { "ok": 1, "row": 24,  "col": 80,  "err": 0 }, "desc": "S6: skip 'AB' then ESC[24;80R" },
+  "cursor_bad_final":   { "op": "C", "send": "1B5B32343B383074",      "expect": { "ok": 0, "row": 0,   "col": 0,   "err": 4 }, "desc": "wrong final 't' (not 'R') -> BAD_REPLY" },
+
+  "size_direct_24_80":  { "op": "X", "send": "1B5B383B32343B383074",  "expect": { "ok": 1, "rows": 24,  "cols": 80,  "err": 1 }, "desc": "XTWINOPS ESC[8;24;80t -> OK_DIRECT" },
+  "size_direct_40_132": { "op": "X", "send": "1B5B383B34303B31333274","expect": { "ok": 1, "rows": 40,  "cols": 132, "err": 1 }, "desc": "XTWINOPS ESC[8;40;132t -> OK_DIRECT" },
+  "size_direct_badlead":{ "op": "X", "send": "1B5B393B32343B383074",  "expect": { "ok": 0, "rows": 0,   "cols": 0,   "err": 4 }, "desc": "leader 9 (not 8) -> BAD_REPLY" },
+
+  "size_cpr_40_132":    { "op": "Z", "send": "1B5B34303B31333252",    "expect": { "ok": 1, "rows": 40,  "cols": 132, "err": 2 }, "desc": "CPR-as-size ESC[40;132R -> OK_CPR" },
+  "size_cpr_200_500":   { "op": "Z", "send": "1B5B3230303B35303052",  "expect": { "ok": 1, "rows": 200, "cols": 500, "err": 2 }, "desc": "CPR-as-size ESC[200;500R (multi-digit) -> OK_CPR" }
+}

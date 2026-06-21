@@ -41,6 +41,7 @@
 #define ANSI_SAVE_CURSOR            ESC_S "7"       // Alternate VT320: CSI_S "s"
 #define ANSI_RESTORE_CURSOR         ESC_S "8"       // Alternate VT320: CSI_S "u"
 #define ANSI_GET_CURSOR             CSI_S "6n"      // Terminal response: ESC [ Py ; Px R
+#define ANSI_REPORT_TEXT_AREA       CSI_S "18t"     // XTWINOPS: report text area size; response: ESC [ 8 ; rows ; cols t
 
 #define ANSI_HIDE_CURSOR            CSI_S "?25l"
 #define ANSI_SHOW_CURSOR            CSI_S "?25h"
