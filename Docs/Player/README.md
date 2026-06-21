@@ -13,7 +13,7 @@
 | **Musician / author** | [howto.md](howto.md) *(Phase 2 — musician manual)* |
 | **LLM or chat assistant** | [chatbot_brief.md](chatbot_brief.md) — copy-paste bounded YES/NO/PARTIAL |
 | **Human needing one screen of syntax** | [cheat_sheet.md](cheat_sheet.md) — lead-char map |
-| **Implementer / host parser author** | [v1_grammar.md](v1_grammar.md) *(Phase 2 — normative EBNF)* + [implementation plan](../planning/play-v1-implementation-plan.md) |
+| **Implementer / host parser author** | `v1_grammar.md` *(Phase 2 — normative EBNF, planned)* + [implementation plan](../planning/play-v1-implementation-plan.md) |
 | **Planner / decision resolver** | [play-v1-implementation-plan.md](../planning/play-v1-implementation-plan.md) — Big Board, MSG, D/S/I IDs |
 
 ---
@@ -35,8 +35,8 @@ When `play.c` behavior changes, update **cheat sheet + chatbot brief + plan I10*
 | ---- | ------ | ---- |
 | [cheat_sheet.md](cheat_sheet.md) | **Current** | One-screen lead-char reference |
 | [chatbot_brief.md](chatbot_brief.md) | **Current** | LLM / author bounded brief |
-| [v1_grammar.md](v1_grammar.md) | **Planned (T4)** | Normative EBNF — programmer's reference |
-| [howto.md](howto.md) | **Planned (T5)** | Musician howto + tiered examples |
+| `v1_grammar.md` | **Planned (T4)** | Normative EBNF — programmer's reference |
+| `howto.md` | **Planned (T5)** | Musician howto + tiered examples |
 
 Plan detail: [play-v1-implementation-plan.md](../planning/play-v1-implementation-plan.md) § Tooling/docs (**T1**, **T4**, **T5**, **GP6**).
 

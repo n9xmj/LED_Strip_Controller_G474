@@ -5,9 +5,9 @@
 **MSG:** **G5** · **Plan refs:** D16, D17, D19, **S2** (revised), S7a, S7d, S7e, I2 (🟢 — do not re-litigate)
 **Bench:** COM9 @ 921600 · ST-Link SN from `scripts/bench.defaults.json` (`003C00193137510C39383538`)
 
-**Authoritative plan:** [play-v1-implementation-plan.md](play-v1-implementation-plan.md) — MSG **G5** row, **S2** detail (revised 2026-06-14), D19 detail
-**Predecessor (what G4 left for you):** [archive/labels-preparse-handoff.md](archive/labels-preparse-handoff.md) **§10**
-**Template:** [focused-implementation-handoff-template.md](focused-implementation-handoff-template.md)
+**Authoritative plan:** [play-v1-implementation-plan.md](../play-v1-implementation-plan.md) — MSG **G5** row, **S2** detail (revised 2026-06-14), D19 detail
+**Predecessor (what G4 left for you):** [labels-preparse-handoff.md](labels-preparse-handoff.md) **§10**
+**Template:** [focused-implementation-handoff-template.md](../focused-implementation-handoff-template.md)
 
 ---
 
@@ -76,7 +76,7 @@ Make the label control-flow tokens **execute** at runtime. G4 already built the 
 - [x] Add `/` RETURN dispatch case: empty stack → FATAL (S7a); else pop, restore caller snapshot, set PC to return offset.
 - [x] Reset call-stack depth in session reset (alongside `u8_repeat_depth`).
 - [x] Goldens green (see §5): `labels_goto`, `labels_gosub`, full `grammar_torture`; fatal vectors stay green.
-- [x] MSG **G5** → ✅ in plan (§ MSG + **I10** audit); update [play-v1-chatbot-brief.md](play-v1-chatbot-brief.md) (runtime goto/GOSUB now YES; note goto = pure jump).
+- [x] MSG **G5** → ✅ in plan (§ MSG + **I10** audit); update [chatbot_brief.md](../../Player/chatbot_brief.md) (runtime goto/GOSUB now YES; note goto = pure jump).
 - [x] `/wrapup` → new session handoff; this file → archive candidate.
 
 ---

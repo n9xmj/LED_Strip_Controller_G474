@@ -1,7 +1,7 @@
 # PLAY v1 — Implementation readiness plan
 
 **Parent spec:** [Docs/PLAY_language_design.md](../PLAY_language_design.md)  
-**Related:** [co5ths_key_signature_handoff.md](../co5ths_key_signature_handoff.md) · [focused-implementation-handoff-template.md](focused-implementation-handoff-template.md) (focused MSG sessions) · [tools/play_melody.py](../../tools/play_melody.py) · **[Player/](../Player/)** user docs — [README.md](../Player/README.md) · [cheat_sheet.md](../Player/cheat_sheet.md) · [chatbot_brief.md](../Player/chatbot_brief.md) · [decision-log-model.md](decision-log-model.md) (**Big Board** + **§ MSG** + **wish list** mechanics)  
+**Related:** [focused-implementation-handoff-template.md](focused-implementation-handoff-template.md) (focused MSG sessions) · [tools/play_melody.py](../../tools/play_melody.py) · **[Player/](../Player/)** user docs — [README.md](../Player/README.md) · [cheat_sheet.md](../Player/cheat_sheet.md) · [chatbot_brief.md](../Player/chatbot_brief.md) · [decision-log-model.md](decision-log-model.md) (**Big Board** + **§ MSG** + **wish list** mechanics)  
 **Branch:** `main` · **Status:** IN PROGRESS (G474 bench — v1 / v1.1 ship target)
 
 > **Goal:** Move PLAY from "early preview" to an **implementation-ready v1 contract**
@@ -180,8 +180,8 @@ Cross-ref: [Docs/PROJECT.md](../PROJECT.md) long-term goals · deferred briefs u
 | **GP1** | **T1** | Implementer trim of `PLAY_language_design.md` | 🟡 | Header + EBNF withdrawal done; link **Player/** + **T4**/**T5** |
 | **GP2** | **T3** | **`m` → `g`** on-device golden runner | 🟡 | Menu + STRICT banner; shares `scripts/play_golden/` |
 | **GP3** | **T2** | **`play_scenarios.py`** host matrix | 🟡 | Dual-track with **T3**; smoke/feature scenarios |
-| **GP4** | **T4** | Normative EBNF | 🔴 | [`Docs/Player/v1_grammar.md`](../Player/v1_grammar.md) — v1 **stretch** doc |
-| **GP5** | **T5** | Musician howto + repertoire | 🔴 | [`Docs/Player/howto.md`](../Player/howto.md) — v1 **stretch** doc |
+| **GP4** | **T4** | Normative EBNF | 🔴 | `Docs/Player/v1_grammar.md` (not yet authored) — v1 **stretch** doc |
+| **GP5** | **T5** | Musician howto + repertoire | 🔴 | `Docs/Player/howto.md` (not yet authored) — v1 **stretch** doc |
 | **GP6** | — | Living docs sync | 🟡 | [Player/chatbot_brief.md](../Player/chatbot_brief.md) · [Player/cheat_sheet.md](../Player/cheat_sheet.md) — Phase 1 **2026-06-14** |
 | **GP7** | — | **`grammar_torture.play`** | ✅ | v1 fence; re-run after each v1 **G** close |
 | **GP8** | — | **`grammar_torture_v11.play`** | ✅ | **G9** — N0..N95 chromatic X/Y torture (loops + GOSUB; `--timeout 120`) |
@@ -2845,7 +2845,7 @@ Smoke+ presets land incrementally (**Star Wars** → **Raiders** → other Willi
 | **G7** | D9 | **`\@`** in comments | ✅ | 2 |
 | **G8** | D8/S4 | Key LUT in snapshots | ✅ | 2 — `ai8_key_lut` in save/restore; repeat re-entry; golden `key_snapshot` |
 
-**Theory/LUT reference:** [co5ths_key_signature_handoff.md](../co5ths_key_signature_handoff.md) · locked wire = **D8** / **D8b** in this plan · **Pitch resolve pipeline** section.
+**Theory/LUT reference:** Circle-of-Fifths key-signature LUT shipped in `App/Src/play.c` (`ai8_key_lut`); locked wire = **D8** / **D8b** in this plan · **Pitch resolve pipeline** section.
 
 **Bench probe:** `grammar_torture.play` includes `K"F" Ab4Q` — **D8** shipped 2026-06-13.
 
@@ -3266,7 +3266,7 @@ Skill files: **`.grok/skills/playstr|playfile|playtest/SKILL.md`**. Registry: **
 
 **Status:** 🔴 · **Needs user:** no (agent task; formal review welcome)
 
-**Deliverable:** [`Docs/Player/v1_grammar.md`](../Player/v1_grammar.md) — **complete, v1+v1.1** syntax in standard EBNF (or BNF + EBNF where clarity needs both). Replaces the withdrawn draft in `PLAY_language_design.md`.
+**Deliverable:** `Docs/Player/v1_grammar.md` (not yet authored) — **complete, v1+v1.1** syntax in standard EBNF (or BNF + EBNF where clarity needs both). Replaces the withdrawn draft in `PLAY_language_design.md`.
 
 **Must include:**
 
@@ -3293,7 +3293,7 @@ Skill files: **`.grok/skills/playstr|playfile|playtest/SKILL.md`**. Registry: **
 
 **Status:** 🔴 · **Needs user:** review examples (especially Star Wars / Q1)
 
-**Deliverable:** [`Docs/Player/howto.md`](../Player/howto.md) — **non-programmer**, musician-friendly. This is the **authoring manual**, not the implementer spec.
+**Deliverable:** `Docs/Player/howto.md` (not yet authored) — **non-programmer**, musician-friendly. This is the **authoring manual**, not the implementer spec.
 
 **Pedagogy (locked 2026-06-11 — user direction):**
 
@@ -3491,9 +3491,7 @@ Minimum 🟢 before formal grammar + howto + coding:
 | 🟡 Observations / open design | **S11** |
 
 
-**Next suggested chat prompt:** *"**G11** `uart_stream` port (child session) **or** doc Phase 2 — **T4** [`v1_grammar.md`](../Player/v1_grammar.md) in [`Docs/Player/`](../Player/). See [play-v1-session-handoff-2026-06-14-player-docs.md](play-v1-session-handoff-2026-06-14-player-docs.md)."*
-
-**Session handoff:** [play-v1-session-handoff-2026-06-14-player-docs.md](play-v1-session-handoff-2026-06-14-player-docs.md) — **Player/** Phase 1 + **W29** `dyn:` syntax leaning.
+**Status update (2026-06):** v1 + v1.1 required PLAY firmware shipped (G1–G10); **G11** `uart_stream` on USART2 shipped. Remaining PLAY doc work is future: doc Phase 2 — **T4** normative grammar (`v1_grammar.md`, not yet authored) + **T5** musician howto, both targeted at [`Docs/Player/`](../Player/).
 
 ### Cross-reference: punctuator roles (D2, S3, D16, D17, D18)
 

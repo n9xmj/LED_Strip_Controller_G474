@@ -294,8 +294,8 @@ See `scripts/play_bench.py` and `/playstr` skill. This is **transport**, not par
 | [cheat_sheet.md](cheat_sheet.md) | One-screen lead-char reference |
 | [play-v1-implementation-plan.md](../planning/play-v1-implementation-plan.md) | Full decision log + **The Big Board** + **§ MSG** |
 | [PLAY_language_design.md](../PLAY_language_design.md) | Legacy design notebook (implementer history) |
-| [v1_grammar.md](v1_grammar.md) | Normative EBNF *(planned T4)* |
-| [howto.md](howto.md) | Musician howto *(planned T5)* |
+| `v1_grammar.md` | Normative EBNF *(planned T4)* |
+| `howto.md` | Musician howto *(planned T5)* |
 
 ---
 

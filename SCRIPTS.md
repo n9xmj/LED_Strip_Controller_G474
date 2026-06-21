@@ -55,9 +55,22 @@ Current G474 bench values:
 | `com_port` | `COM9` |
 | `baud` | `921600` |
 
+> **These values are project- / bench-specific, not a global rule.** Other projects
+> and other benches use different COM ports and baud rates. **`scripts/bench.defaults.json`
+> is the single source of truth** — if the bench migrates (new PC, re-enumerated COM
+> port, different probe), the **user** updates that file (or drops a gitignored
+> `bench.defaults.local.json`) and the scripts/skills follow automatically. Any
+> COM9 / 921600 values quoted inline in skill docs are just mirroring this file for
+> convenience; **the JSON wins** if they ever disagree.
+
 `discover.py --default-stlink` and `--default-port` read these files. Flash/smoke scripts call discover when `--stlink-sn` / `--port` are omitted.
 
-Agent skills: `.claude/skills/` (Cursor) and `.grok/skills/` (Grok) both reference the same file.
+**Port won't open?** It's almost always because **you have the port grabbed in a
+terminal** (Tera Term / Windows Terminal / PuTTY) for a hands-on session. Close that
+terminal and retry. The scripts detect and report this (see *Discovery* and
+*Implementation Notes* below).
+
+Agent skills: `.claude/skills/` (Cursor / Claude) and `.grok/skills/` (Grok) both reference the same file.
 
 ## Discovery (the key for multi-probe benches)
 
@@ -126,14 +139,14 @@ scripts\smoke-test.ps1 --list
 What it does:
 1. Resets the target using the programmer CLI (reliable even with V3SET multi-VCP setups).
 2. Waits ~2 seconds (configurable via `--capture-seconds`).
-3. Opens the debug COM port (the one connected to the target's USART2 console) at the specified baud rate (default 115200; override with `--baud`, e.g. 921600).
+3. Opens the debug COM port (the one connected to the target's USART2 console). The `smoke-test.ps1` / `.sh` wrapper defaults to **921600** for this project (the bench rate — see `scripts/bench.defaults.json`); override with `--baud`. (The inner `smoke_capture.py` helper defaults to 115200 if you call it directly.)
 4. Captures output for the requested number of seconds.
 5. Prints everything to the console **and** writes a timestamped log file (e.g. `smoke-2026-06-15-142301.log`).
 6. Prints the full path to the log at the end so an agent can read it.
 
 The log contains exactly what a human would see in TeraTerm right after reset — perfect for verifying the banner (project name, TARGET_MCU, FIRMWARE_VERSION, BUILD_NUMBER, reset cause, etc.).
 
-Baud rate is CLI-settable because different projects (or high-speed debug logging) may use rates other than the common 115200 default. The underlying `smoke_capture.py` helper already supported `--baud`; it is now properly exposed on the main `smoke-test.ps1` / `.sh` wrappers.
+Baud rate is CLI-settable because different projects (or high-speed debug logging) use different rates. **This project's bench runs 921600** (`scripts/bench.defaults.json` → `baud`), and the `smoke-test.ps1` / `.sh` wrappers default to it. The underlying `smoke_capture.py` helper defaults to 115200 if invoked directly, so prefer the wrappers (or pass `--baud`).
 
 ## Common Agent Patterns
 

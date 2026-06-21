@@ -142,7 +142,7 @@ static uint16_t u16_led_strip_encoded_bytes_per_pixel(led_strip_type_t x_strip_t
  *
  * @details Used with TXINV and ~2.4 Mbaud so one UART character spans three
  * LED timing slots. Index is the 3-bit pattern (MSB = oldest bit on wire).
- * See @c Docs/AI-Readme.md .
+ * See @c AGENTS.md (LED Driver section) and @c Docs/PROJECT.md .
  */
 static const uint8_t s_au8_ws281x_uart_lut[8] =
 {

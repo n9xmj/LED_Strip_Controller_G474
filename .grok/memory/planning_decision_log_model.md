@@ -17,9 +17,7 @@ For multi-session design (PLAY v1, etc.):
 
 User resolves in chat by ID (*"green D3"*, *"S2 option A"*). Agent updates the plan doc same session; sync the main spec when decisions lock.
 
-**Active plan (PLAY):** [Docs/planning/play-v1-implementation-plan.md](../../Docs/planning/play-v1-implementation-plan.md)  
-**Latest handoff:** [Docs/planning/play-v1-session-handoff-2026-06-14-player-docs.md](../../Docs/planning/play-v1-session-handoff-2026-06-14-player-docs.md)
-**Account switch (2026-06-13):** [Docs/planning/play-v1-account-switch-handoff-2026-06-13.md](../../Docs/planning/play-v1-account-switch-handoff-2026-06-13.md)
+**Active plan (PLAY), authoritative continuity:** [Docs/planning/play-v1-implementation-plan.md](../../Docs/planning/play-v1-implementation-plan.md) — roadmap + MSG + LOCKED CONTEXT. Session handoffs (`play-v1-session-handoff-*.md`) are written by `/wrapup` only when a session needs one; read the newest if present.
 
 **The cayuse project** (informal) = **vTree Mk 4** — [github.com/cayuse/color_organ](https://github.com/cayuse/color_organ). **vTree Mk 1–3** = author originals; **this G474 repo = Mk 5 (vTree+)**. See [Docs/PROJECT.md](../../Docs/PROJECT.md) § *Product lineage*. Future mic→DSP→LED; not PLAY.
 

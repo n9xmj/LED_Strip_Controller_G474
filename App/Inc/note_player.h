@@ -8,7 +8,7 @@
  * with i_getchar_blocking() (which cooperatively yields via polling task).
  *
  * Frequency computation uses equal-tempered 2^(n/12) from C1 base (no LUT).
- * Follows the spec in Docs/Interactive noteplayer spec.txt .
+ * Related PLAY sequencer design: Docs/PLAY_language_design.md .
  */
 
 #pragma once

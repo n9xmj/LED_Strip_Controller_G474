@@ -9,6 +9,4 @@ STM32G474RE (Nucleo-G474RE) LED strip controller.
 
 **Remote:** https://github.com/n9xmj/LED_Strip_Controller_G474 (personal account, public)
 
-See [Docs/AI-Readme.md](Docs/AI-Readme.md) for full project guide, hardware layout, coding style, and TODOs. This document (and the AI-Readme) are living documents.
-
-Current focus: debug/bring-up of the G474 port (debug menu works; LED strip driving and audio paths need validation/fixes).
+See [Docs/PROJECT.md](Docs/PROJECT.md) for the full project guide, hardware layout, status, and roadmap, and [AGENTS.md](AGENTS.md) for coding rules, architecture invariants, and AI-assistant instructions. Both are living documents.

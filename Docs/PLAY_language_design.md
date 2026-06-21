@@ -40,7 +40,7 @@ This document captured early design iterations. Decisions that **shipped** are a
 **Related artifacts:**
 - [`Docs/Player/README.md`](Player/README.md) — user doc suite (primary for authors)
 - [`Docs/planning/play-v1-implementation-plan.md`](planning/play-v1-implementation-plan.md) — decision log + MSG
-- [`Docs/co5ths_key_signature_handoff.md`](co5ths_key_signature_handoff.md) — theory/LUT for **K**
+- Circle-of-Fifths key-signature theory/LUT for **K** — shipped in `App/Src/play.c` (`ai8_key_lut`); wire locked as **D8** / **D8b** in the implementation plan
 - [`Docs/PROJECT.md`](PROJECT.md) — project status + lineage
 
 ---
@@ -226,7 +226,7 @@ This model supports very compact writing while still allowing explicit overrides
 
 The exact set of inheritable attributes, the scope (per-voice vs. global), the precise behavior of the repeat-last-note token, and the details of context saving/restoration for jumps are expected to be refined during implementation. The goal is to match "how musicians think" without making the streaming parser overly complex.
 
-**For hand-off / next agent:** Start here. The "Handoff / Current State Summary" block at the very top + the Character Allocation Summary table + the Inheritance Model section give the fastest on-ramp. All prior design sessions (character rules, note memory + snapshots, flexible note-descriptor ordering, K/S/U commands, octave shorthands, staccato duty tuning, multi-voice timing concerns, etc.) are consolidated in this document. Related theory (e.g. Circle-of-Fifths LUT for K) lives in co5ths_key_signature_handoff.md and has already been folded in.
+**For hand-off / next agent:** Start here. The "Handoff / Current State Summary" block at the very top + the Character Allocation Summary table + the Inheritance Model section give the fastest on-ramp. All prior design sessions (character rules, note memory + snapshots, flexible note-descriptor ordering, K/S/U commands, octave shorthands, staccato duty tuning, multi-voice timing concerns, etc.) are consolidated in this document. Related theory (e.g. Circle-of-Fifths LUT for K) was folded into the implementation plan (**D8** / **D8b**) and shipped in `App/Src/play.c`.
 
 Example (from user):
 ```
@@ -253,7 +253,7 @@ This is a tied-triplet / dotted-quarter feel on the FQ EQ DQ group (not pure qua
 
 The informal EBNF block that lived here is **obsolete** (wrong transpose **`S`→`&`**, label **`*`→`<`**, beat **`U`→`%`**, duty **`D4/8`→`;n`/”;nn`**, unquoted **`K`**, etc.).
 
-**Normative v1+v1.1 grammar (planned):** [`Docs/Player/v1_grammar.md`](Player/v1_grammar.md) — plan **T4**. Until that file lands, use:
+**Normative v1+v1.1 grammar (planned):** `Docs/Player/v1_grammar.md` — plan **T4** (not yet authored). Until that file lands, use:
 
 - [`Docs/Player/cheat_sheet.md`](Player/cheat_sheet.md) — quick lead-char map
 - [`Docs/planning/play-v1-implementation-plan.md`](planning/play-v1-implementation-plan.md) — locked D/S/I semantics

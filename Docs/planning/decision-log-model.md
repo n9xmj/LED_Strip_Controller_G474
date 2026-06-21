@@ -156,7 +156,7 @@ Resolved items keep their history (options + rationale) so handoffs stay auditab
 1. This file (`Docs/planning/decision-log-model.md`) — the mechanics.
 2. Any **active** plan linked from `Docs/PROJECT.md` or `.grok/memory/MEMORY.md`.
 3. For PLAY work: `Docs/planning/play-v1-implementation-plan.md`.
-4. **Newest** `Docs/planning/*-session-handoff-*.md` if present — written by **`/wrapup`** at end of prior session; read **before** diving into the full plan. **Cursor account switch:** `play-v1-account-switch-handoff-*.md` when resuming on a different login.
+4. **Newest** `Docs/planning/*-session-handoff-*.md` if present — written by **`/wrapup`** at end of prior session; read **before** diving into the full plan.
 
 **Session end** — run **`/wrapup`** (`.grok/skills/wrapup/SKILL.md`): sanity-check docs, refresh handoff, commit WIP (no push by default).
 

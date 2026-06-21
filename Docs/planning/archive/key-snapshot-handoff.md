@@ -5,9 +5,9 @@
 **MSG:** **G8** ✅ · **Plan refs:** **D8**, **S4**, **D19** (🟢 — do not re-litigate)  
 **Bench:** COM9 @ 921600 · ST-Link SN from `scripts/bench.defaults.json` (`003C00193137510C39383538`)
 
-**Authoritative plan:** [play-v1-implementation-plan.md](play-v1-implementation-plan.md) — MSG **G8** row, **D8** detail, **S4** repeat snapshot rules  
+**Authoritative plan:** [play-v1-implementation-plan.md](../play-v1-implementation-plan.md) — MSG **G8** row, **D8** detail, **S4** repeat snapshot rules  
 **Predecessor context:** G5 shipped `v_play_snapshot_save` / `v_play_snapshot_restore` for GOSUB/RETURN — snapshots omit `ai8_key_lut` today (G5 brief §8 deferred here).  
-**Template:** [focused-implementation-handoff-template.md](focused-implementation-handoff-template.md)
+**Template:** [focused-implementation-handoff-template.md](../focused-implementation-handoff-template.md)
 
 ---
 
@@ -73,7 +73,7 @@ Ship:
 - [ ] `b_play_close_repeat` — on re-entry branch (`u16_remaining > 1`): **`v_play_snapshot_restore(px_rt, &px_f->x_snap)`** then set PC to body start.
 - [ ] Create `scripts/play_golden/key_snapshot.play` + register in `tests.json` (STRICT).
 - [ ] Bench green (§5); **`grammar_torture`** still PASS.
-- [ ] MSG **G8** → ✅ in plan (§ MSG + **I10**); update [play-v1-chatbot-brief.md](play-v1-chatbot-brief.md) if key/snapshot row exists.
+- [ ] MSG **G8** → ✅ in plan (§ MSG + **I10**); update [chatbot_brief.md](../../Player/chatbot_brief.md) if key/snapshot row exists.
 - [ ] `/wrapup` → new session handoff noting **v1 firmware MSG complete**; this file → archive candidate.
 
 ---

@@ -2,7 +2,7 @@
  * @file note_player.c
  * @brief Interactive terminal-driven note player ("piano") implementation.
  *
- * See note_player.h and Docs/Interactive noteplayer spec.txt for requirements.
+ * See note_player.h; related PLAY sequencer design in Docs/PLAY_language_design.md.
  * Uses v_synth_engine_set_tone / set_level / stop for efficient sustained tones.
  * Frequency: equal temperament via 2^(n/12) from C1 base (no table).
  */

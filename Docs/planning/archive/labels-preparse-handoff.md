@@ -4,9 +4,9 @@
 **From:** PLAY v1 planning (locked D16/D17/D19/S7d/I2) → implementation session  
 **MSG row:** **G4** — unblocks **G5** (runtime `<` / `>` / `=` / `/` must **not** ship in this session)
 
-**Authoritative plan (do not re-litigate 🟢 items):** [play-v1-implementation-plan.md](play-v1-implementation-plan.md) — **D16**, **D17**, **D19** (refs only), **S7d**, **S7a**, **S7b**, **I2**, **D8b**, **D9**, **S7j**.
+**Authoritative plan (do not re-litigate 🟢 items):** [play-v1-implementation-plan.md](../play-v1-implementation-plan.md) — **D16**, **D17**, **D19** (refs only), **S7d**, **S7a**, **S7b**, **I2**, **D8b**, **D9**, **S7j**.
 
-**Sibling reference (style):** [co5ths_key_signature_handoff.md](../co5ths_key_signature_handoff.md) (K session — same focused-session pattern).
+**Sibling reference (style):** the `co5ths_key_signature_handoff.md` K session *(since removed — same focused-session pattern; theory shipped in `App/Src/play.c`)*.
 
 **Bench:** COM9 @ 921600 · ST-Link SN `003C00193137510C39383538` · skills: `/build`, `/flash`, `/playtest`.
 
@@ -204,7 +204,7 @@ Register all three in `scripts/play_golden/tests.json`. For fatal vectors, exten
 - [x] Unreferenced define → WARNING at end (log `PLAY warn:` under NORMAL/STRICT)
 - [x] Reuse **S7j** digit scanner for `<n` / `>n` / `=n`
 - [x] Golden: `labels_scan` + fatal vectors
-- [x] Update **MSG G4 → ✅**, **I10**, [play-v1-chatbot-brief.md](play-v1-chatbot-brief.md) (pre-parse row only — leave `<`/`>` **NO** until G5)
+- [x] Update **MSG G4 → ✅**, **I10**, [chatbot_brief.md](../../Player/chatbot_brief.md) (pre-parse row only — leave `<`/`>` **NO** until G5)
 - [x] `/wrapup` → new `play-v1-session-handoff-2026-06-13.md`
 
 ---

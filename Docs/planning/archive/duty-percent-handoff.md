@@ -5,9 +5,9 @@
 **MSG:** **G10** ✅ · **Plan refs:** **D5b** 🟢, **D5c**, **S9**  
 **Bench:** COM9 @ 921600 · ST-Link SN from `scripts/bench.defaults.json` (`003C00193137510C39383538`)
 
-**Authoritative plan:** [play-v1-implementation-plan.md](play-v1-implementation-plan.md) — MSG **G10** row, **D5b** / **D5c** detail  
+**Authoritative plan:** [play-v1-implementation-plan.md](../play-v1-implementation-plan.md) — MSG **G10** row, **D5b** / **D5c** detail  
 **Predecessor:** v1 **`;n`** single-digit → **n/8** via `v_play_apply_duty_shorthand` (**D5c** ✅)  
-**Template:** [focused-implementation-handoff-template.md](focused-implementation-handoff-template.md)
+**Template:** [focused-implementation-handoff-template.md](../focused-implementation-handoff-template.md)
 
 ---
 
@@ -75,7 +75,7 @@ Today `;` uses `b_play_consume_digit_run_u16` (up to **5** digits) and always ro
 - [x] Wire helper into **all three** `case ';':` sites (pitch, rest/N, ctx).
 - [x] Create **`scripts/play_golden/duty_percent.play`** + **`tests.json`** entry (STRICT).
 - [x] Bench green (§5); **`grammar_torture`** **`;6`** / **`ctx:…;4`** unchanged behavior.
-- [x] MSG **G10** → ✅; **D5b** → 🟢; **I10** + [play-v1-chatbot-brief.md](play-v1-chatbot-brief.md).
+- [x] MSG **G10** → ✅; **D5b** → 🟢; **I10** + [chatbot_brief.md](../../Player/chatbot_brief.md).
 - [x] `/wrapup` → session handoff noting **v1.1 required MSG complete**.
 
 ---
@@ -123,7 +123,7 @@ Register in `tests.json` (tier `feature`, policy `strict`, aliases `G10`, `duty-
 
 ## 8. Next session pointer
 
-After **G10** ✅: **v1.1 required PLAY firmware is done** (**G9** + **G10**). Optional stretch: **G11** [`uart_stream` port notes](uart_stream-port-notes.md) — infra, not PLAY grammar. Post-v1.1 pivot per [PROJECT.md](../PROJECT.md) (mic/DSP/vTree Mk 5) when author chooses.
+After **G10** ✅: **v1.1 required PLAY firmware is done** (**G9** + **G10**). Optional stretch: **G11** [`uart_stream` port notes](../uart_stream-port-notes.md) — infra, not PLAY grammar. Post-v1.1 pivot per [PROJECT.md](../../PROJECT.md) (mic/DSP/vTree Mk 5) when author chooses.
 
 ---
 

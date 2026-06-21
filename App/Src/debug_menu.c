@@ -97,7 +97,7 @@ static void v_debug_print_banner(void)
 /******************************************************************************
  * LED strip — demo patterns (ROM). Wire order is GRB + W; WS2812 ignores W.
  *
- * Test HW (Docs/AI-Readme.txt): [1] WS2812B ring 21 LEDs (idx 0 center, 1–8 middle,
+ * Test HW (Docs/PROJECT.md § Test Board LED Physical Layout): [1] WS2812B ring 21 LEDs (idx 0 center, 1–8 middle,
  * 9–20 outer); [2]–[4] SK6812 RGBW 10-LED lines left-to-right (idx 0 … 9).
  *
  * Brightness: RGB V=25 % (S=1) on spectral pixels; strip-1 center white 25 % RGB.

@@ -5,8 +5,8 @@ reader that returns single bytes as-is and decodes multi-byte ESC-led ANSI/xterm
 function-key bursts into stable 2-byte key codes. Eventual home: the kitchen-sink
 **`utils.c` / `utils.h`**.
 
-**Parent sketch:** [`Docs/extended_keyget_function.c`](../extended_keyget_function.c)
-(first-pass concept + comment notes; *not* syntax-checked — superseded by this plan).
+**Parent sketch:** the original `Docs/extended_keyget_function.c` first-pass concept
+(superseded by this plan and removed; shipped implementation lives in `App/Src/term.c`).
 
 **Status:** PLANNING · **Working mode:** resolve OPEN rows in chat by ID
 (*"green D3"*, *"D2 option B"*, *"S4 your call"*); agent updates this doc + detail
