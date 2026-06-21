@@ -13,11 +13,17 @@
 #include <ctype.h>          /* toupper */
 #include <stdbool.h>        /* bool */
 #include <stddef.h>         /* NULL */
+#include <stdlib.h>         /* strtoul */
 
 #include "platform.h"       /* HAL_GetTick, ELAPSED_TIME, PROJECT_NAME, ... */
 #include "utils.h"          /* v_app_polling_task */
 #include "term.h"           /* i16_term_get_key, v_term_inject, pc_term_key_name */
 #include "debug_menu.h"     /* v_debug_play_playstr (reused by the 'P' op) */
+#include "uart_stream.h"    /* tx-ring status (used by the 'F' flush op) */
+
+/* Defined in app_main.c — the debug-console uart_stream handle, so the flush op
+ * can observe TX-ring drain state directly. */
+extern uart_stream_h_t x_app_debug_console_handle(void);
 
 /* This is the application-specific test executive: it intentionally depends on
  * the modules it exercises (term, debug_menu/PLAY, ...). Other modules export
@@ -251,6 +257,43 @@ static void v_harness_op_size_cpr(const char *pc_arg)
     v_harness_op_query(pc_arg, 'Z', false, false);
 }
 
+/* F [n] : regression test for the cooperative fflush(stdout) console drain
+ * (the -Wl,--wrap=fflush wiring). Fill the debug-console TX ring with n benign
+ * filler bytes (default 256), then fflush(stdout) and report the drain. The
+ * post-condition that proves the wrapper worked is used_after == 0 and
+ * busy_after == 0; used_before > 0 proves the test was not vacuous.
+ *
+ * The after-state is captured into locals BEFORE the framing printf, because
+ * that printf re-enqueues into the same ring. */
+static void v_harness_op_flush(const char *pc_arg)
+{
+    uart_stream_h_t h = x_app_debug_console_handle();
+    uint16_t        u16_n = (uint16_t) strtoul(pc_arg, NULL, 10);   /* "" -> 0 */
+    uint16_t        u16_fill = 0u;
+
+    if (u16_n == 0u)   { u16_n = 256u; }
+    if (u16_n > 512u)  { u16_n = 512u; }                            /* keep within TX buf */
+
+    while ((u16_fill < u16_n) && b_uart_stream_tx_byte(h, (uint8_t) '.'))
+    {
+        u16_fill++;
+    }
+
+    uint16_t u16_used_before = u16_uart_stream_tx_queue_used(h);
+    int      i_busy_before   = b_uart_stream_is_tx_busy(h) ? 1 : 0;
+
+    uint32_t u32_t0 = HAL_GetTick();
+    fflush(stdout);
+    uint32_t u32_ms = ELAPSED_TIME(u32_t0);
+
+    uint16_t u16_used_after = u16_uart_stream_tx_queue_used(h);     /* capture BEFORE printf */
+    int      i_busy_after   = b_uart_stream_is_tx_busy(h) ? 1 : 0;
+
+    printf("<HRN F n=%u used_before=%u busy_before=%d used_after=%u busy_after=%d ms=%lu>\r\n",
+           (unsigned) u16_fill, (unsigned) u16_used_before, i_busy_before,
+           (unsigned) u16_used_after, i_busy_after, (unsigned long) u32_ms);
+}
+
 static const harness_op_t s_ax_harness_ops[] =
 {
     { 'K', "decode key burst <hex> (e.g. K 1B5B41)",        v_harness_op_key         },
@@ -258,6 +301,7 @@ static const harness_op_t s_ax_harness_ops[] =
     { 'C', "cursor: inject CPR reply <hex>, run get_cursor",  v_harness_op_cursor      },
     { 'X', "size: inject 18t reply <hex>, run get_size_direct", v_harness_op_size_direct },
     { 'Z', "size: inject CPR reply <hex>, run get_size_cpr",   v_harness_op_size_cpr    },
+    { 'F', "flush: fill TX ring <n=256>, fflush(stdout), report drain", v_harness_op_flush },
 };
 
 //------------------------------------------------------------------------------

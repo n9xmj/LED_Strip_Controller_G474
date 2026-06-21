@@ -126,6 +126,13 @@ int __wrap_fflush(FILE *p_x_file)
     return i_rc;
 }
 
+/* Expose the debug-console uart_stream handle (test harness uses it to observe
+ * TX-ring drain state; see the 'F' flush op in test_harness.c). */
+uart_stream_h_t x_app_debug_console_handle(void)
+{
+    return h_debug_uart;
+}
+
 /******************************************************************************
  * HAL UART callbacks (application-owned). Forward LED strip UART/DMA events;
  * add other UART users here when needed.

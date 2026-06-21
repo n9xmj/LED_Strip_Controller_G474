@@ -1,0 +1,10 @@
+{
+  "_desc": "fflush(stdout) complete-drain post-condition (regression guard for -Wl,--wrap=fflush)",
+  "drain256": {
+    "send": "F 256",
+    "expect_used_after": 0,
+    "expect_busy_after": 0,
+    "min_used_before": 1,
+    "desc": "after fflush the TX ring is empty and the UART is idle"
+  }
+}
