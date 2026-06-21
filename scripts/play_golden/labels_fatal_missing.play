@@ -1,4 +1,3 @@
-# G4 pre-parse fatal - undefined quoted goto ref.
-T120
->"missing"
-C4Q *
+# G4 pre-parse - undefined goto ref is FATAL at start.
+@ G4 pre-parse - undefined goto ref is FATAL @
+="missing"

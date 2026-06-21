@@ -1,7 +1,7 @@
 # G5 gosub exerciser - fwd + backward + nested; octave bounce proves restore.
 @ G5 gosub exerciser - fwd + backward + nested; octave restore @
 T120 O4 %Q
-C4Q ="up" E4Q ="down" G4Q
+C4Q >"up" E4Q >"down" G4Q
 *
 <"up"   O5 C5Q /
-<"down" O3 C3Q ="up" /
+<"down" O3 C3Q >"up" /

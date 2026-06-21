@@ -151,7 +151,7 @@
     "aliases": ["repeat-carry-one"]
   },
   "labels_gosub_norestore": {
-    "description": "G14 S13 - GOSUB =- skips caller restore on /",
+    "description": "G14 S13 - GOSUB >- skips caller restore on /",
     "tier": "feature",
     "file": "labels_gosub_norestore.play",
     "policy": "strict",

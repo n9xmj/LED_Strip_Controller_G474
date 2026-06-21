@@ -2,7 +2,7 @@
 
 **PLAY** is a compact, monophonic music macro language for the G474 bench interpreter (`App/Src/play.c`). Lineage: TRS-80 Model I commercial music player → this firmware path. See [PROJECT.md](../PROJECT.md) § *Product lineage*.
 
-**Firmware status (2026-06-14):** v1 + v1.1 **required** MSG rows **G1–G10** shipped on STM32G474.
+**Firmware status (2026-06-21):** v1 + v1.1 **G1–G10** and **v1.2** grammar **G12**–**G15**/**G20** shipped on STM32G474. **`grammar_torture_v11.play`** keeps v1.1 `>`/`=` wire as an archive; all other label goldens use v1.2.
 
 ---
 

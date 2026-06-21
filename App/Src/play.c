@@ -3169,7 +3169,7 @@ static bool b_play_exec_next(play_runtime_t *px_rt)
             }
             continue;
         }
-        if (c_ch == '>')
+        if (c_ch == '=')
         {
             px_rt->x_public.u32_src_offset++;
             if (!b_play_exec_goto(px_rt))
@@ -3178,7 +3178,7 @@ static bool b_play_exec_next(play_runtime_t *px_rt)
             }
             continue;
         }
-        if (c_ch == '=')
+        if (c_ch == '>')
         {
             px_rt->x_public.u32_src_offset++;
             if (!b_play_exec_gosub(px_rt))

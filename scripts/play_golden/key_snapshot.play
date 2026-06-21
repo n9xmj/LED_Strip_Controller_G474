@@ -5,6 +5,6 @@ K"F"
 [ K"G" B4Q ]:2
 @ GOSUB: main F; callee G; return restores F @
 K"F"
-B4Q ="sub" B4Q
+B4Q >"sub" B4Q
 *
 <"sub" K"G" B4Q /

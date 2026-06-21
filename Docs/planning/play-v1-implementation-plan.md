@@ -2,7 +2,7 @@
 
 **Parent spec:** [Docs/PLAY_language_design.md](../PLAY_language_design.md)  
 **Related:** [focused-implementation-handoff-template.md](focused-implementation-handoff-template.md) (focused MSG sessions) · [tools/play_melody.py](../../tools/play_melody.py) · **[Player/](../Player/)** user docs — [README.md](../Player/README.md) · [cheat_sheet.md](../Player/cheat_sheet.md) · [chatbot_brief.md](../Player/chatbot_brief.md) · [decision-log-model.md](decision-log-model.md) (**Big Board** + **§ MSG** + **wish list** mechanics)  
-**Branch:** `main` · **Status:** IN PROGRESS (G474 bench — v1 / v1.1 ✅ · **v1.2** planning in flight)
+**Branch:** `main` · **Status:** IN PROGRESS (G474 bench — v1 / v1.1 / **v1.2** ✅ · v1.3+ planning)
 
 > **Goal:** Move PLAY from "early preview" to an **implementation-ready v1 contract**
 > — charset locked, semantics unambiguous, v1 scope fenced, host + on-device paths
@@ -34,8 +34,8 @@
 | ---- | ------ | ------------ |
 | **v1** | Feature-complete on bench | **I1** must-ship interpreter in `App/Src/play.c` — **§ MSG** v1 rows **G1**–**G8** ✅ (2026-06-14) |
 | **v1.1** | Same tree, additive code | **D4** `X`/`Y` durations (**G9** ✅). **D5b** raw-percent `;nn` (**G10** / **W2**) ✅ — **v1.1 required PLAY firmware complete** (2026-06-14) |
-| **v1.1 stretch** | Infra (not PLAY grammar) | **`uart_stream` on USART2** (**G11** / **W27**) — non-blocking debug console |
-| **v1.2** | Same tree, additive grammar | **D25** goto/gosub · **S12**/**S13**/**S14** loop/GOSUB restore · **D26** multi-dot · **D29** quoted labels — **§ MSG** **G12**–**G15**/**G20** · see **PLAY v1.2** |
+| **v1.1 stretch** | Infra (not PLAY grammar) | **`uart_stream` on USART2** (**G11** / **W27**) — non-blocking debug console — **✅ shipped** |
+| **v1.2** | Same tree, additive grammar | **D25** · **S12**/**S13**/**S14** · **D26** · **D29** — **§ MSG** **G12**–**G15**/**G20** ✅ (2026-06-21) · see **PLAY v1.2** |
 | **v1.3+** | Same tree (leaning) | **D27** tied notes `{` `}` · **I12** synth continuity · **D15** tuplets · **D28** measure `\|` — see **PLAY v1.3+** |
 | **Docs (in progress)** | Ship with v1 | [Player/](../Player/) — [cheat_sheet.md](../Player/cheat_sheet.md) · [chatbot_brief.md](../Player/chatbot_brief.md) · **T1** legacy trim · **T4/T5** → same folder |
 | **Stretch (v1)** | Nice-to-have, not gate | **T4** normative EBNF · **T5** musician howto + tiered repertoire |
@@ -72,9 +72,8 @@ Cross-ref: [Docs/PROJECT.md](../PROJECT.md) long-term goals · deferred briefs u
 | **T2** | 🟡 | Host + serial test harness (`play_melody.py` / `play_scenarios.py`) | **GP2** · **GP3** |
 | **T4** | 🔴 | **Normative EBNF** — standalone formal grammar (v1 stretch) | **GP4** |
 | **T5** | 🔴 | **Musician howto** — user guide + tiered repertoire (v1 stretch) | **GP5** |
-| **GP9** | 🟡 | **v1.2 docs + golden migration** — in-place vs `grammar_torture_v12` | — |
 
-*Recently locked (2026-06-21): **G14**/**G20** shipped · **S12** signed repeat · **G13**/**GP11** · **D25** `=`/`>` · **Q2**–**Q4** · **D26**/**G15**/**GP10**.*
+*Recently locked (2026-06-21): **G12**/**GP9** shipped · **G14**/**G20** · **S12** signed repeat · **G13**/**GP11** · **D25** `=`/`>` · **Q2**–**Q4** · **D26**/**G15**/**GP10** · **G11** `uart_stream`.*
 
 ---
 
@@ -147,7 +146,7 @@ Cross-ref: [Docs/PROJECT.md](../PROJECT.md) long-term goals · deferred briefs u
 | S10 | 🟢 | **Session init defaults** — full note-memory struct + `**Cn4Q_`** template for first `**~**` |
 | S11 | 🟡 | **v2+ headwind** — multi-instance + NVM/FS load **requires** explicit sync/staging model (observations; design open) |
 | S12 | 🟢 | **v1.2 signed repeat close** — `]:N` / `]:+N` = **`[`** snapshot restore on re-entry; `]:-N` = **no restore**; sign = restore flag only — magnitude per **S14**; **G13** ✅ |
-| S13 | 🟢 | **v1.2 GOSUB caller restore flag** — **`G14** ✅**; `b_restore_caller` on call frame; outside-quote `+`/`-` on `=` GOSUB; `/` honors flag; goto ignores modifier |
+| S13 | 🟢 | **v1.2 GOSUB caller restore flag** — **`G14** ✅**; `b_restore_caller` on call frame; outside-quote `+`/`-` on **`>`** GOSUB; `/` honors flag; goto ignores modifier |
 | S14 | 🟢 | **v1.2 repeat iteration count** — `]:N` runs **max(1, N)** passes (`:0` and `:1` → once; `:2` → twice; …) (**Q4** user lock 2026-06-21) |
 
 ### Implementation (I)
@@ -204,14 +203,12 @@ Cross-ref: [Docs/PROJECT.md](../PROJECT.md) long-term goals · deferred briefs u
 
 | G | Ord | Ref | Feature | FW | Notes |
 | --- | --- | --- | ------- | -- | ----- |
-| **G12** | 1 | **D25** 🟢 | **Goto / GOSUB lead-char assignment** | ❌ | **`=`** goto · **`>`** GOSUB (swap from v1.1). Pre-parse + executives + goldens + [Player/](../Player/) |
-| **G11** | — | **W27** | **`uart_stream`** (USART2) | ❌ | v1.1 stretch — non-blocking console; not PLAY grammar |
-| **G16** | — | **D27** | **Tied-note `{` `}` grouping** | ❌ | v1.3+ planning |
+| **G16** | — | **D27** | **Tied-note `{` `}` grouping** | ❌ | v1.3+ planning — **see bracket reconsideration** (loops `{}` · measures `[]` or `\|` only) |
 | **G17** | — | **I12** | **Synth legato/tie continuity** | ❌ | v1.3+ planning |
 | **G18** | — | **D15** | **Tuplets / N-in-time-of-M** | ❌ | v1.3+ planning |
 | **G19** | — | **D28** | **Measure marker `\|`** | ❌ | v1.3+ planning |
 
-**Suggested v1.2 code order:** **G12** (char swap) → **GP9** docs/goldens.
+**Suggested next code order:** v1.3+ planning (**G16**–**G19**) when scheduled.
 
 ### MSG — open peripheral gaps
 
@@ -222,8 +219,7 @@ Cross-ref: [Docs/PROJECT.md](../PROJECT.md) long-term goals · deferred briefs u
 | **GP3** | **T2** | **`play_scenarios.py`** host matrix | 🟡 | Dual-track with **T3** |
 | **GP4** | **T4** | Normative EBNF | 🔴 | `Docs/Player/v1_grammar.md` (not yet authored) |
 | **GP5** | **T5** | Musician howto + repertoire | 🔴 | `Docs/Player/howto.md` (not yet authored) |
-| **GP6** | — | Living docs sync | 🟡 | [Player/chatbot_brief.md](../Player/chatbot_brief.md) · [cheat_sheet.md](../Player/cheat_sheet.md) |
-| **GP9** | — | **v1.2 living docs + golden migration** | ❌ | v1.1→v1.2 one-liner (**D25** `=`/`>` swap); **D29** label syntax; **S12**/**S14** repeat docs; golden strategy |
+| **GP6** | — | Living docs sync | 🟢 | [Player/chatbot_brief.md](../Player/chatbot_brief.md) · [cheat_sheet.md](../Player/cheat_sheet.md) — **GP9** ✅ 2026-06-21 |
 
 ### MSG — shipped firmware (collapsed)
 
@@ -231,7 +227,7 @@ Cross-ref: [Docs/PROJECT.md](../PROJECT.md) long-term goals · deferred briefs u
 | ---- | ---- | ------ |
 | **v1** | **G1**–**G8** | ✅ closed 2026-06-14 |
 | **v1.1** | **G9** · **G10** | ✅ **X**/**Y** + raw-percent `;nn` |
-| **v1.2** | **G15** · **G13** · **G14** · **G20** | ✅ multi-dot · signed repeat · GOSUB restore flag · quoted labels (2026-06-21) |
+| **v1.2** | **G15** · **G13** · **G14** · **G20** · **G12** | ✅ multi-dot · signed repeat · GOSUB restore · quoted labels · D25 char swap (2026-06-21) |
 
 ### MSG — shipped peripheral (collapsed)
 
@@ -242,6 +238,8 @@ Cross-ref: [Docs/PROJECT.md](../PROJECT.md) long-term goals · deferred briefs u
 | **GP10** | `multi_dot` golden (**D26**) | ✅ bench PASS 2026-06-21 |
 | **GP11** | Repeat signed-close goldens (**G13**/**S12**/**S14**) | ✅ `repeat_*` suite — bench PASS 2026-06-21 |
 | **GP12** | Label goldens (**G14**/**G20**/**D29**) | ✅ `labels_*` quoted migration + `labels_gosub_norestore`; `grammar_torture` — bench PASS 2026-06-21 |
+| **GP9** | v1.2 living docs + golden migration | ✅ in-place golden update; [Player/](../Player/) migration table — 2026-06-21 |
+| **G11** | **`uart_stream`** (USART2, **W27**) | ✅ shipped — non-blocking debug console (**G11**) |
 
 *Promote a row off MSG when firmware lands; bump **Last audited** and sync **I10** detail + living docs.*
 
@@ -290,11 +288,34 @@ Cross-ref: [Docs/PROJECT.md](../PROJECT.md) long-term goals · deferred briefs u
 | W29 | v2 | **Musical dynamics & volume ramps** | Step markings via **`\"dyn:xxx"`** (D18) — pp…ff, sfz, fp, …; ramps via **`\"cresc:`** / **`\"dim:`** (beats + scale); **V-relative** scaling · see **W29** |
 | W30 | v2+ | **Deadline-driven PLAY service** (event not poll) | One-shot HW compare or job post only at **sound-off** + **rest-end**; drop per-loop `v_play_poll` spin while idle/in-note · see **W30** |
 | W31 | v1.2 | **No-context-restore loops / GOSUB** (opt-out snapshot) | → **S12** (`]:-N`) + **S13** (GOSUB caller `+`/`-`); superseded stub **W31** below · **G13**/**G14** |
-| W32 | v1.3+ | **Tied notes `{` `}`** (D27) | Group same-pitch sustain; parser + scheduler; needs **I12**/**G17** |
+| W32 | v1.3+ | **Tied notes `{` `}`** (D27) | Group same-pitch sustain; delimiter may change if `{}` → loops (**G16** bracket pass) |
 | W33 | v1.3+ | **Synth note-to-note continuity** (I12) | Fix legato/tie gaps in `synth_engine.c` (attack/decay per note today) |
-| W34 | v1.3+ | **Measure marker `\|`** (D28) | Bar grouping; Atari AMS inspiration; not polyphony sync until **S11** closes |
+| W34 | v1.3+ | **Measure marker `\|`** (D28) | Bar grouping; AMS inspiration; leaning bare `\|` barlines — see **Bracket syntax reconsideration** |
+| W35 | v2+ | **JSON alternate score ingest** | Parallel interpreter / compiler — **not** PLAY replacement; see **W35** stub |
 
-*Last wish-list pass: 2026-06-21 (v1.2 **D26**/**G15** multi-dot; v1.3+ **D27**/**D28**/**I12**/**G16–G19**; **W32–W34**).*
+*Last wish-list pass: 2026-06-21 (v1.2 **D26**/**G15** multi-dot; v1.3+ **D27**/**D28**/**I12**/**G16–G19**; **W32–W35**).*
+
+---
+
+### W35 — JSON alternate score format (author musing — not a PLAY replacement)
+
+**Status:** 🔵 · **Needs user:** no (idea capture 2026-06-21)
+
+**Author thought:** Could JSON serve as a **base representation** for a music player? **Not a project goal today** — PLAY ASCII remains the shipped bench language. Interesting as a **second ingest path**: an alternate interpreter (or offline compiler) that accepts JSON and drives the same scheduler/synth.
+
+**Agent assessment (same session):**
+
+| Aspect | Verdict |
+| ------ | ------- |
+| **Host authoring / LLM output** | Strong fit — schema validation, nested sections, metadata, multi-voice arrays map naturally |
+| **G474 UART `playstr` transport** | Poor fit — verbose vs lead-char PLAY; 4096-char cap bites quickly unless compressed or pre-compiled |
+| **On-device RAM** | Needs thin decode → **internal event stream** (overlap **W11** binary compile); full DOM-style JSON parser is heavy for this tree |
+| **Relationship to PLAY** | **Parallel ingest**, not fork — keep `play.c` streaming parser; add `play_json_*` or host-only `play_json_bench.py` emitting the same note events / hook surface (**I8**) |
+| **Pragmatic staging** | (1) Host JSON → event list → existing synth path; (2) optional flash-stored compiled blob; (3) on-MCU JSON only if H7+ RAM budget and a shared event ABI exist |
+
+**Leaning:** Worth a **wish-list track** for v2+/H7 tooling; **not** recommended as the primary embedded wire format for G474. If pursued, treat JSON as **authoring interchange** with PLAY and/or binary events as runtime targets.
+
+**Cross-ref:** **W11** binary scores · **I7** loaders · **W9** NVM/FS · **I8** resolve hook · **S11** multi-instance.
 
 ---
 
@@ -420,7 +441,7 @@ Duty partition (S5 / **I4**): `active_ticks = (note_ticks * duty_num) / duty_den
 
 ---
 
-## PLAY v1.2 (planned — author lock 2026-06-21)
+## PLAY v1.2 (shipped — author lock 2026-06-21)
 
 *Additive grammar on the G474 v1.1 ship tree. **Solo-author hobby project** — breaking changes (especially **D25** char swap) are acceptable when convenient; no multi-user migration obligation.*
 
@@ -506,10 +527,25 @@ Each pass inherits octave from the prior pass (`^` accumulates) instead of reset
 
 | # | Topic | IDs | Notes |
 | - | ----- | --- | ----- |
-| 1 | **Tied notes** | **D27** · **G16** · **W32** | `{` `}` grouping around pitch tokens; same pitch sustained **without reattack** — **not** the same as legato duty `_` (timing/gate only) |
+| 1 | **Tied notes** | **D27** · **G16** · **W32** | `{` `}` grouping around pitch tokens (leaning — **may change** if `{}` repurposed for loops; see **Bracket syntax reconsideration** below) |
 | 2 | **Synth continuity** | **I12** · **G17** · **W33** | `synth_engine.c` applies ~7 ms attack + decay per note start — causes audible gap even when PLAY schedules legato `_` back-to-back; ties (**D27**) need this too |
 | 3 | **Tuplets** | **D15** · **G18** · **W4** | Triplets, quadruplets, quintuplets, … — syntax open; closes **Q1** exact Star Wars path |
-| 4 | **Measure `\|`** | **D28** · **G19** · **W34** | Bar/measure grouping; inspired by Atari Advanced Music System; **replaces** prior `\|"name"` sync-barrier sketch (**S3**/**W8**). Reliable multi-voice sync still **S11** — measure marker may be notation-only until polyphony lands |
+| 4 | **Measure `\|`** | **D28** · **G19** · **W34** | Bar/measure grouping; AMS-inspired; **leaning:** bare `\|` barlines (no paired open/close) vs paired `[]` if spans needed — see **Bracket syntax reconsideration** |
+
+**Bracket syntax reconsideration (author 2026-06-21 — 🟡, not locked):**
+
+When **G16** / v1.3+ grouping lands, evaluate **swapping** delimiter roles for loops vs measures:
+
+| Construct | v1.2 wire | Candidate v1.3+ | Rationale |
+| --------- | --------- | ----------------- | --------- |
+| **Repeat / loop** | `[ … ]:N` (**S4**/**S12**) | `{ … }:N` (close tail TBD) | `{` `}` reads as a **C-like block/loop** — familiar for imperative control flow |
+| **Measure** | *(none — `%` is beat unit only, **D24**)* | `[ … ]` paired spans **or** bare `\|` only | `[` `]` fits score “measure box” metaphor if paired delimiters are needed |
+
+**Measure simplification (author leaning):** Dropping open/close for measures and using **`|`** alone as a **barline marker** may be **easier** than paired `[]` — no nesting/stack, no close glyph to pair; each `|` = “start next measure” (Atari AMS-style). Reserve paired `[]` for measures only if tooling needs explicit measure **spans** (e.g. repeat-a-measure, multi-bar `%` context).
+
+**Conflict with D27:** Today **D27** leans `{` `}` for **tie** grouping. If `{}` becomes **loops**, tie syntax needs a new wire (slur token, chained `_`, tie arc marker, …) — resolve in the same v1.3+ bracket pass before **G16** locks.
+
+**Migration note:** Any bracket swap is a **breaking** change vs v1.2 goldens (`[ ]:N`, `]:±N`); budget a golden migration pass like **GP9** / **D25**.
 
 **Tie vs legato (distinction to preserve in spec):**
 
@@ -1533,7 +1569,7 @@ where `beat_unit_beats` comes from the current `%` executive. Same internal `×2
 
 **Unchanged:** `/` RETURN · `<` define · `*` END · goto = pure PC jump (**S2**).
 
-**MSG:** **G12** (char assignment in firmware).
+**MSG:** **G12** ✅ (2026-06-21) · **GP9** living docs.
 
 **Cross-ref:** **D19** · **D17** · **S2** · **S13** · **Q2** · **Q3** · **D29**.
 
@@ -1574,11 +1610,13 @@ Closed form: **`dot_factor = 2 - 2^(-n)`** for `n = u8_dot_count` (`n ≥ 1`; `n
 
 ### D27 — Tied-note grouping `{` `}` (v1.3+)
 
-**Status:** 🔵 · **Needs user:** yes (syntax sketch only 2026-06-21)
+**Status:** 🔵 · **Needs user:** yes (syntax sketch only 2026-06-21; bracket roles **may change** — see **PLAY v1.3+** *Bracket syntax reconsideration*)
 
 **Intent:** Notation for **same pitch sustained across multiple note heads** without a **reattack** — distinct from legato duty `_` (gate ratio within one token) and from scheduler abut alone (**I12**).
 
 **Leaning syntax:** `{` opens tie group · `}` closes — wraps a run of pitch tokens sharing one sounding (exact nesting/scope TBD).
+
+**G16 planning note (author 2026-06-21):** If v1.3+ adopts **`{ … }` for repeat/loop blocks** (C-like), **do not** also use the same delimiters for ties without a clear nested grammar — prefer resolving loop vs tie vs measure delimiters in one pass (**Bracket syntax reconsideration** under **PLAY v1.3+**).
 
 **Requires:** Parser/scheduler (**G16**) + synth continuity (**I12**/**G17**). Overlaps wish **W18** / **W32**.
 
@@ -1592,9 +1630,11 @@ Closed form: **`dot_factor = 2 - 2^(-n)`** for `n = u8_dot_count` (`n ≥ 1`; `n
 
 **Intent:** Use **`|`** as a **measure/bar marker** for grouping notation — inspired by **Atari Advanced Music System** (legacy heritage for this player). **Replaces** the earlier `\|"name"` multi-voice sync-barrier candidate (**S3**/**W8**).
 
+**Leaning (author 2026-06-21):** **Bare `|` barlines** — no paired open/close — may be simpler than measure `[]` spans: each `|` advances “next measure” for trace, editor grids, or future polyphony anchors. Paired `[ … ]` for measures remains an option if multi-bar constructs need explicit span boundaries (see **Bracket syntax reconsideration**).
+
 **Not locked:** Whether `|` is cosmetic/trace-only in monophonic v1.3, or becomes a sync anchor when polyphony lands. No reliable multi-voice synchronization design yet.
 
-**MSG:** **G19** (blocked). **Cross-ref:** **D24** `%` (beat unit ≠ measure length) · **S11**.
+**MSG:** **G19** (blocked). **Cross-ref:** **D24** `%` (beat unit ≠ measure length) · **S11** · **G16** bracket pass.
 
 ---
 
@@ -1995,16 +2035,16 @@ T140 D4Q >2               ; forward to >2 — T140 in effect
 
 **Intent:** Caller chooses whether `/` restores the pre-call snapshot saved at GOSUB entry.
 
-| Call (v1.1 wire: `=` GOSUB) | `/` behavior |
+| Call (v1.2 wire: `>` GOSUB) | `/` behavior |
 | --------------------------- | ------------ |
-| `="label"` or `="+label"` | **Restore** caller snapshot (default) |
-| `=-"label"` | **No restore** — callee ctx carries to caller |
+| `>"label"` or `>"+label"` | **Restore** caller snapshot (default) |
+| `>-"label"` | **No restore** — callee ctx carries to caller |
 
-**Goto (`>`):** Optional `+`/`-` before `"…"` is stripped; modifier ignored (**S2**).
+**Goto (`=`):** Optional `+`/`-` before `"…"` is stripped; modifier ignored (**S2**).
 
 **Firmware:** `b_restore_caller` on `play_call_frame_t`; `b_play_parse_label_ref(..., &b_restore)`.
 
-**Golden:** `labels_gosub_norestore.play` — second post-return note at **C5** (523 Hz) vs **C4** (262 Hz) after `=-"sub"`.
+**Golden:** `labels_gosub_norestore.play` — second post-return note at **C5** (523 Hz) vs **C4** (262 Hz) after `>-"sub"`.
 
 **Cross-ref:** **Q2** · **D29** · **D25** (future char swap).
 
@@ -3741,9 +3781,9 @@ Teach features first with **small** excerpts; grow into the **repertoire roadmap
 
 **Reconciliation with S12:** Negative sign on the repeat close means **no restore**, not negative iteration count. Magnitude always uses **S14** rules.
 
-**Still open (GP9):** Golden migration strategy (in-place update vs `grammar_torture_v12.play`).
+**Resolution (GP9 ✅ 2026-06-21):** **In-place** golden migration — no `grammar_torture_v12.play`. `grammar_torture.play` and `labels_*` use v1.2 wire; `grammar_torture_v11.play` retained as v1.1 `>`/`=` archive for **X**/**Y** chromatic torture. Living docs: [cheat_sheet.md](../Player/cheat_sheet.md) · [chatbot_brief.md](../Player/chatbot_brief.md) migration table.
 
-**Cross-ref:** **S12** · **S14** · **G13** · **GP9**.
+**Cross-ref:** **S12** · **S14** · **G13** · **GP9** · **G12**.
 
 ---
 

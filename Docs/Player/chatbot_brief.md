@@ -2,13 +2,29 @@
 
 **Purpose:** Copy-paste this file into ChatGPT, Grok, Google Gemini, Claude, etc. when you want a **correct, bounded** mental model of the PLAY music language — more detail than the [cheat sheet](cheat_sheet.md), far less than the [implementation plan](../planning/play-v1-implementation-plan.md) or [legacy design notebook](../PLAY_language_design.md).
 
-**Scope (G474):** Documents **what works today** on the bench MCU. **v1 + v1.1 required firmware (G1–G10) is complete** (2026-06-14). **v2+** (polyphony, loaders, richer synth) is planned for a likely **STM32H7** fork — out of scope here.
+**Scope (G474):** Documents **what works today** on the bench MCU. **v1 + v1.1** required firmware (**G1–G10**) and **v1.2** grammar (**G12**–**G15**/**G20**) are complete (2026-06-21). **v2+** (polyphony, loaders, richer synth) is planned for a likely **STM32H7** fork — out of scope here.
 
 **Living document:** Update whenever `App/Src/play.c` gains or loses behavior. **Firmware truth:** `App/Src/play.c` + bench presets in `App/Src/play_presets.c`.
 
-**Last updated:** 2026-06-14 (audited against firmware — **G10** `;nn` percent duty; **G9** X/Y; **G8** key LUT in snapshots; **G5** labels/GOSUB; **G4** pre-parse)
+**Last updated:** 2026-06-21 (v1.2 **D25** `=`/`>` · **D29** quoted labels · **S12**/**S14** signed repeat · **S13** GOSUB restore · **D26** multi-dot)
 
 **Suite hub:** [README.md](README.md)
+
+---
+
+## v1.1 → v1.2 breaking changes (read first)
+
+If an older brief or score uses v1.1 wire, apply these swaps:
+
+| Topic | v1.1 | v1.2 (today) |
+|-------|------|----------------|
+| Goto / GOSUB leads | `>` goto · `=` GOSUB | **`=`** goto · **`>`** GOSUB |
+| Label refs | `<n` / `>n` / `=n` or quoted | **Quoted text only** — `<"lbl"` `="lbl"` `>"lbl"` |
+| Repeat close | `]:N` always restores `[` snapshot | `]:N` / `]:+N` restore; `]:-N` no restore; **max(1, N)** passes |
+| GOSUB return | `/` always restores caller | `>-"lbl"` no restore; `>"lbl"` default restore |
+| Dots | single `.` = ×1.5 | `..` `...` chained — factor **2 − 2⁻ⁿ** |
+
+**Golden archive:** `grammar_torture_v11.play` intentionally keeps v1.1 `>`/`=` wire for **X**/**Y** chromatic torture.
 
 ---
 
@@ -65,7 +81,7 @@ Template name in spec: **`Cn4Q_`** — first note may omit duration/octave and i
 
 After each note or rest **commits**, these fields live in **note memory** and carry forward until overridden:
 
-- Duration (`W` `H` `Q` `I` `X` `Y` + optional dot)
+- Duration (`W` `H` `Q` `I` `X` `Y` + dot run)
 - Octave digit (`0`–`8`)
 - Duty (`_` `!` `;` `;n` `;nn`)
 
@@ -109,7 +125,7 @@ Within one note/rest token, suffix pieces may appear in **any order** after the 
 | `H` | Half | **YES** |
 | `Q` | Quarter | **YES** |
 | `I` | Eighth | **YES** |
-| `.` | Dotted (×1.5) | **YES** |
+| `.` | Dotted — one `.` → ×1.5; `..` `...` → **D26** multi-dot | **YES** |
 | `X` | Sixteenth | **YES** (v1.1 **G9**) |
 | `Y` | Thirty-second | **YES** (v1.1 **G9**) |
 
@@ -151,17 +167,28 @@ These start a new statement at the top level (after whitespace), not inside a no
 | **`V`** | `V80` | Volume 0…100 | **YES** |
 | **`P`** | `P0` / `P1` | Voice/timbre: **0** sine · **1** triangle | **YES** |
 | **`\`** | `\"ctx:4Q"` | Extension / context load | **YES** (`ctx:` memory · `noop:`/unknown echo) |
-| **`<` / `>`** | `<"lbl"` `>"lbl"` / `<n` `>n` | Label define (no-op skip) / goto (pure PC jump, carries ctx) | **YES** |
-| **`=` / `/`** | `="name"` `/` | GOSUB / RETURN (caller snapshot restore) | **YES** — empty `/` stack → **fatal** |
+| **`<` / `=`** | `<"lbl"` `="lbl"` | Label define (skip) / **goto** (pure PC jump, carries ctx) | **YES** — quoted names only (**D29**) |
+| **`>` / `/`** | `>"name"` `/` | **GOSUB** / RETURN (caller snapshot per **S13**) | **YES** — empty `/` stack → **fatal** |
 | **`:`** | `T120:C4Q` | Optional statement terminator (**D12**) | **PARTIAL** — stray `:` warns; full EOS not wired |
 
-### Repeat blocks (**YES** — S4 snapshot restore)
+### Repeat blocks (**YES** — S4 + v1.2 **S12**/**S14**)
 
-Syntax: `[ body ]:N` (e.g. `[CQDQEQ]:4`).
+Syntax: `[ body ]:N` or `[ body ]:+N` or `[ body ]:-N` (e.g. `[CQDQEQ]:4`, `[CDEFGAB^]:-8`).
 
-- **YES:** open `[` saves ctx snapshot (incl. key LUT); close `]:N`, loop body, nested depth limit.
-- **S4:** on `]` re-entry when iterations remain, **`[` snapshot is restored** then PC jumps to body start — mutations from the prior pass are undone (**G8**).
-- **Goto (`>`):** pure PC jump — **no** snapshot save/restore (S2 revised 2026-06-14). Backward goto loops accumulate context; use `[ ]:N` for per-iteration reset.
+- **YES:** open `[` saves ctx snapshot (incl. key LUT); close tail sets iteration count and restore policy; nested depth limit.
+- **S4 / default:** `]:N` or `]:+N` — on `]` re-entry when iterations remain, **`[` snapshot is restored** then PC jumps to body start (**G8**).
+- **S12:** `]:-N` — **no** `[` snapshot restore on re-entry; body mutations **carry** (e.g. octave `^` climbs each pass).
+- **S14:** pass count = **max(1, N)** — `:0` and `:1` each play the body once; `:2` plays twice.
+- **Goto (`=`):** pure PC jump — **no** snapshot save/restore (**S2**). Use `[ ]:N` for per-iteration reset; `]:-N` for carry loops.
+
+### Labels & GOSUB (**YES** — v1.2 wire)
+
+- **Define:** `<"name"` — skipped at runtime; recorded at pre-parse.
+- **Goto:** `="name"` — jump to matching define; carries ctx; optional `+`/`-` before `"` is stripped (ignored).
+- **GOSUB:** `>"name"` — push return PC + caller snapshot; `>-"name"` sets **no restore** on `/` (**S13**).
+- **RETURN:** `/` — pop GOSUB frame; restore caller snapshot only when frame flag requests it.
+- **Quoted only:** bare `>99` / `<8` → **fatal** at pre-parse (**D29**). `"01234"` ≠ `"1234"`.
+- **Missing label ref** → **fatal** at pre-parse; unreferenced define → **warning**.
 
 ---
 
@@ -184,7 +211,7 @@ CQ4DEFGABC5 *
 
 - At **root**: **`*`** = hard stop (ends sequence).
 - **NUL** at end of string = implicit **`*`** (**YES**).
-- Inside **`=`** subroutines: **`*`** = hard stop at root; callee **`/`** returns to caller (**YES**, **G5**). **`b_stop_is_return`** (NUL/`*` = return in library tunes) — **NO** (D23 deferred).
+- Inside **`>`** subroutines: **`*`** = hard stop at root; callee **`/`** returns to caller (**YES**, **G5**). **`b_stop_is_return`** (NUL/`*` = return in library tunes) — **NO** (D23 deferred).
 
 ---
 
@@ -234,6 +261,30 @@ CQ4DEFGABC5 *
 @ rhythm @ T132 O4 %Q RI. C4I E G C4Q G4I E G A4Q ~
 ```
 
+**Multi-dot (D26):**
+
+```text
+@ multi-dot @ T120 O4 %Q C4Q C4Q. C4Q.. C4Q... *
+```
+
+**Repeat carry (`]:-N`):**
+
+```text
+@ climb @ T120 O4 %Q [CDEFGAB^]:-3 *
+```
+
+**GOSUB with restore opt-out:**
+
+```text
+@ gosub @ T120 O4 %Q C4Q O4 >"sub" C4Q C4Q O4 >-"sub" C5Q * <"sub" O5 C5Q /
+```
+
+**Goto chain:**
+
+```text
+@ goto @ T120 O4 %Q ="0" <"0" C4Q ="2" <"2" D4Q ="1" <"1" E4Q ="end" <"end" *
+```
+
 **Tilde smoke:**
 
 ```text
@@ -251,6 +302,9 @@ CQ4DEFGABC5 *
 | `C#4` / `Fb3` without key context | Use **`K"…"`** or explicit accidentals in each note cluster |
 | lowercase `c4q` | Invalid — **uppercase letters only** |
 | MML / ABC / JSON / MIDI | Wrong language — PLAY only |
+| `>` goto / `=` GOSUB (v1.1 wire) | **v1.2:** **`=`** goto · **`>`** GOSUB |
+| bare `>8` / `<8` numeric labels | Use **`="8"`** / **`<"8"`** quoted text only |
+| `]:-N` means negative iterations | **`-`** = no-restore only; magnitude uses **max(1, N)** passes |
 | Spaces required between notes | Optional — `CDEFGAB` is valid |
 
 ---
@@ -261,7 +315,7 @@ CQ4DEFGABC5 *
 |---------|--------|-------|
 | **`:` as D12 EOS** | **PARTIAL** | Stray `:` → warn; `T120:C4Q` full EOS not implemented |
 | **`L"…"` library** | **PARTIAL** | Warn + skip payload (**D23** deferred) |
-| **`b_stop_is_return`** | **NO** | `*` always hard END at root in **`=`** callees (**D23**) |
+| **`b_stop_is_return`** | **NO** | `*` always hard END at root in **`>`** callees (**D23**) |
 
 ---
 
