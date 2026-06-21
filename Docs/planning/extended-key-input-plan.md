@@ -56,7 +56,7 @@ general, higher-functionality** replacements. So:
 | **T2** | 🟢 | Golden-vector harness (`term_key_bench.py` + `term_golden/keys.json`) — **shipped** |
 | **Q1** | 🟢 | Target terminal = **Tera Term v5.3+** (its VT100/VT220/xterm support) |
 | **Q2** | 🟢 | Control chars pass bare; Alt-meta deferred (→ D7) — **locked** |
-| **Q3** | 🔵 | Terminal-size / cursor-pos query — **deferred** (do key reader first) |
+| **Q3** | 🟡 | Terminal-size / cursor-pos query — **activated 2026-06-20**; design board in **§ Terminal size / cursor query** (D8–D11, S6, I4, T3) |
 
 Status: 🔴 open · 🟡 leaning · 🟢 resolved · 🔵 deferred.
 
@@ -664,12 +664,279 @@ menu); keep thin `utils` aliases where call sites are many, retire later.
 
 ---
 
+## Terminal size / cursor query (Q3 → active 2026-06-20)
+
+**Building block #2** of the terminal library — a cooperative query that asks the
+terminal "where is the cursor / how big are you?" and parses the ESC-led reply.
+**Reuses the key-reader core:** the reply is just an inbound CSI burst, so the same
+non-blocking inject-aware getbyte + inter-byte-timeout discipline (S1/S2/I2) reads
+it; only the *parse target* differs (a numeric report, not a keymap entry).
+
+**Working mode:** resolve D8–D11 / S6 / I4 / T3 by ID in chat; no firmware until the
+method rows (D8/D9) lock.
+
+### Findings (verified 2026-06-20 — Tera Term 5 manual, *Supported control functions*)
+
+Tera Term v5 supports **both** candidate mechanisms:
+
+| Query | Send | TT reply | Notes |
+|-------|------|----------|-------|
+| **Cursor position (CPR / DSR 6)** | `CSI 6 n` | `CSI r ; c R` | ECMA-48 standard; universal. `ANSI_GET_CURSOR` already in `ANSI.h` |
+| **Text-area size (XTWINOPS 18)** | `CSI 18 t` | `CSI 8 ; rows ; cols t` | xterm ext (not ECMA-48); TT supports it, but `allowWindowOps`-class gating disables it on some emulators |
+| **Size via CPR corner-trick** | `ESC 7` · `CSI 999;999H` · `CSI 6 n` · `ESC 8` | `CSI r ; c R` (= size) | Most portable; reuses the **one** CPR parser; briefly moves+restores cursor |
+
+### Mini-board
+
+| ID | Status | Subject (one line) |
+|----|--------|-------------------|
+| **D8** | 🟢 | `get_size` method — **try direct `18t` first, fall back to CPR corner-trick**; first-choice = build option |
+| **D9** | 🟢 | API = **(B) struct out-param + `bool` return** (`b_term_get_*` → fill `term_*_t{rows,cols,err}`, return success); bool ignorable |
+| **D10** | 🟢 | No-reply → return error, **out-params untouched**; defaults via header `#define`s |
+| **D11** | 🟢 | Cursor save/restore for corner-trick = **DECSC/DECRC** (`ESC 7`/`ESC 8`, already in `ANSI.h`) |
+| **S6** | 🟢 | stdin interleaving — **caller's job** to drain unwanted RX first; reader keeps scan-to-lead + garbage rejection |
+| **I4** | 🟡 | Dedicated `i16_term_read_csi_report()` on inject-aware `i_term_getbyte()`; harness-testable |
+| **T3** | 🟡 | Harness inject op + golden vectors for the report parser; HuIL menu entry for a **live** TT query |
+
+### D8 — get_size method
+**Resolution (2026-06-20 🟢, author):** Implement **both** methods and have
+`x_term_get_size()` **try the direct XTWINOPS `CSI 18t` first, then fall back to the
+CPR corner-trick** if the direct query doesn't answer (timeout / bad reply). Author
+rationale: the direct get is cleaner and avoids cursor "flicker" (no jumping the
+cursor to the far corner and back) when the cursor is visible — only pay the
+corner-trick's cursor disturbance if `18t` is unsupported/disabled.
+
+- **Which method runs first is a module build option** (e.g.
+  `TERM_SIZE_PREFER_DIRECT` default on) so a deployment on a terminal lacking `18t`
+  can flip to corner-trick-first and skip the dead `18t` round-trip + its timeout.
+- Both underlying methods are also exposed as **separate API functions** (per the
+  author's "provide both as separate API functions" note) for callers that want a
+  specific one without the auto-fallback wrapper — `b_term_get_size_direct()`
+  (XTWINOPS `18t`) / `b_term_get_size_cpr()` (corner-trick), with `b_term_get_size()`
+  as the try-direct-then-fallback convenience. All three share the **D9** shape
+  (`bool` return + `term_size_t *` out-param).
+- The CPR corner-trick still reuses the **one** `CSI r;c R` parser that
+  `x_term_get_cursor()` needs; the `18t` path adds a sibling parse of
+  `CSI 8;rows;cols t` (three params, final `t`) — both via the **I4** report reader.
+
+**Note (timeout budget):** the fallback means a terminal that silently ignores the
+*first* method costs one timeout before the second is tried — size the per-method
+`u32_timeout_ms` modestly so the worst case stays snappy.
+
+### D9 — API shape + return type
+**Question (elaborated 2026-06-20):** a size/cursor query must hand back **two
+numbers** (row+col / rows+cols) **and** a success indicator, but C returns one value.
+Pick the return idiom:
+
+- **(A) status-return + pointer out-params** *(leaning)* — `return` carries
+  OK/TIMEOUT/BAD_REPLY; dimensions come back through caller-supplied pointers:
+  ```c
+  typedef enum { TERM_ERR_OK = 0, TERM_ERR_TIMEOUT, TERM_ERR_BAD_REPLY } term_err_t;
+  term_err_t x_term_get_cursor(uint16_t *pu16_row,  uint16_t *pu16_col,  uint32_t u32_timeout_ms);
+  term_err_t x_term_get_size  (uint16_t *pu16_rows, uint16_t *pu16_cols, uint32_t u32_timeout_ms);
+  ```
+  Composes cleanly with **D10** (on error, leave the pointers untouched).
+- **(B) return a small struct by value** — `term_size_t { u16_rows; u16_cols; err; }`;
+  no out-params, reads nicely, copies a few bytes.
+- **(C) packed int** (`(rows<<16)|cols`, negative = error) — compact, cryptic; not
+  recommended.
+
+**Resolution (2026-06-20 🟢, author):** **(C) is out.** Chose **(B) the result struct**
+— with a variation: the struct **carries the `err` member**, *and* the function
+**also returns a plain `bool`** (`true` = success). The bool is the convenience
+"did it work?" channel; on `false` the caller may "look at `err` if interested."
+Per common C idiom the **caller is free to ignore the bool** (or both, after
+pre-seeding defaults). The struct travels by **pointer out-param** (not by value),
+so D10's "don't touch the out-params on error" applies cleanly — see below.
+
+```c
+typedef enum { TERM_ERR_OK = 0, TERM_ERR_TIMEOUT, TERM_ERR_BAD_REPLY } term_err_t;
+
+typedef struct { uint16_t u16_row;  uint16_t u16_col;  term_err_t err; } term_pos_t;   /* cursor */
+typedef struct { uint16_t u16_rows; uint16_t u16_cols; term_err_t err; } term_size_t;  /* window */
+
+bool b_term_get_cursor(term_pos_t  *px_pos,  uint32_t u32_timeout_ms);
+bool b_term_get_size  (term_size_t *px_size, uint32_t u32_timeout_ms);
+```
+
+**Fill contract (reconciles with D10):**
+- **Success:** write `rows/cols` **and** `err = TERM_ERR_OK`; return `true`.
+- **Failure:** set `px->err` to the specific code (the status channel), **leave
+  `rows/cols` untouched** (D10), return `false`. So a caller that pre-seeds
+  `px->u16_rows = TERM_DEFAULT_ROWS` keeps its default on failure.
+
+**Caller patterns (all valid):**
+```c
+term_size_t sz;
+if (b_term_get_size(&sz, 50)) { use sz.u16_rows, sz.u16_cols; }   /* quick bool */
+
+term_size_t sz2 = { .u16_rows = TERM_DEFAULT_ROWS, .u16_cols = TERM_DEFAULT_COLS };
+(void) b_term_get_size(&sz2, 50);                                 /* ignore bool; defaults survive failure */
+switch (sz2.err) { ... }                                          /* or inspect detailed err */
+```
+
+**Naming:** `b_` prefix (bool return) per project Hungarian; distinct `term_pos_t` /
+`term_size_t` for read clarity (same shape, different intent). Enum tag `term_err_t`
+matches the project's `*_err_t` convention. Separate D8 method functions follow the
+same shape (`b_term_get_size_direct` / `b_term_get_size_cpr`).
+
+### D10 — no-reply fallback
+**Resolution (2026-06-20 🟢, author):** on timeout/garbage, **return failure and do NOT
+modify the caller's dimension members** (`u16_row/col` / `u16_rows/cols` keep
+whatever the caller put there). Expose sane defaults as **header `#define`s** —
+`TERM_DEFAULT_ROWS` (24) / `TERM_DEFAULT_COLS` (80) — for the caller to apply if it
+wants. Policy stays with the consumer; the primitive never guesses dimensions.
+
+**Scope of "don't touch" (author clarification 2026-06-20):** the **`err` member is
+absolutely subject to modification** — it's the status channel and is *always*
+written (the specific code on failure, `TERM_ERR_OK` on success). Only the **x/y
+dimension members are preserved on failure.** This exists to support the author's
+intended call pattern:
+
+1. **Instantiate** the result struct and **initialize the x/y members** with
+   defaults of the caller's choosing — typically `TERM_DEFAULT_ROWS/COLS`, but the
+   caller's free to pick others.
+2. **Invoke** the function — and **probably ignore the `bool`/`err` return** (D9).
+3. **Use whatever is in the struct's x/y** going forward.
+
+Because failure leaves x/y untouched, step 3 transparently yields the caller's
+pre-seeded defaults when the terminal didn't answer — no branch needed. (A caller
+that *does* care still has the `bool` return and `err` member to inspect.)
+
+```c
+term_size_t sz = { .u16_rows = TERM_DEFAULT_ROWS, .u16_cols = TERM_DEFAULT_COLS };
+(void) b_term_get_size(&sz, 50);   /* ignore result */
+/* sz.u16_rows/cols = real size on success, my defaults on failure — either way usable */
+```
+
+### D11 — cursor save/restore
+**Resolution (2026-06-20 🟢):** **DECSC/DECRC** (`ESC 7` / `ESC 8`) via the existing
+`ANSI_SAVE_CURSOR` / `ANSI_RESTORE_CURSOR` macros — robust on TT, one byte cheaper
+than SCO `CSI s`/`CSI u`. Used by the corner-trick fallback path (**D8**).
+
+### S6 — input-stream interleaving
+**Resolution (2026-06-20 🟢, author):** **It is the caller's responsibility to ensure
+the input stream is quiet before invoking a query** — anything queued that the
+consumer doesn't want lost must be drained first. The query cannot do this
+deterministically without poking the device driver's RX buffer (e.g. `uart_stream`),
+and a **hard no-go** is breaking the API's **platform/driver-agnostic** contract.
+This does **not** drop the reader's own robustness: it still **scans past non-`ESC`
+bytes** to the `CSI`-led report and rejects garbage, bounded by the timeout — a
+stray byte arriving mid-window is simply discarded by that scan. A driver-aware
+response-router stays out of scope (would couple `term` to a specific UART driver).
+
+### I4 — reply parser reuse
+**Leaning:** a focused `i16_term_read_csi_report(uint16_t *pu16_params, uint8_t
+u8_max, char *pc_final, uint32_t u32_timeout_ms)` that waits (bounded) for `ESC [`,
+collects `;`-separated decimal params, and stops at the final letter — built on the
+**inject-aware** `i_term_getbyte()` + inter-byte timeout, so the **same
+`v_term_inject()` harness path** can feed synthetic replies for deterministic
+tests. `get_cursor`/`get_size` are thin wrappers that send the request then call it.
+*Confirm shared-core approach.*
+
+### T3 — test plan
+**Leaning:** mirror the key-reader test stack — (a) a **harness op** that injects a
+synthetic report burst (e.g. `\x1B[24;80R`) and prints parsed `rows/cols`, with
+golden vectors in `scripts/term_golden/`; (b) a **HuIL menu entry** that performs a
+*live* `x_term_get_size()` against the real Tera Term and prints the result (resize
+the TT window, re-query, watch it track). *Confirm; pick the harness op letter at
+implement.*
+
+---
+
+## Output primitive library (building block #3 — API roadmap)
+
+**Author intent (2026-06-20):** beyond input (key reader, #1) and queries
+(size/cursor, #2), build a **broad set of output primitives** wrapping the most
+useful ANSI/VT operations under the `term_` API — cursor show/hide, cursor motion
+(relative / absolute / home / save-restore), display attributes
+(bold/dim/underline/reverse/blink/…), foreground & background colors (16 / 256 /
+RGB), and erase / scroll / line-edit ops. **`ANSI.h`'s existing macro set is the
+template** for what counts as "useful"; this section catalogs the candidate
+primitive set and flags ANSI ops *not yet* in `ANSI.h` that a general-purpose,
+ncurses-like API may want. **Author is seeking agent input on the complete set** —
+this is a living catalog, not locked.
+
+**Layering (preserves the `ANSI.h`-standalone rule, D6):**
+- **L0 — raw escape macros:** `ANSI.h` (host→terminal byte strings; usable on its
+  own with **no `term` dependency**). *Exists.*
+- **L1 — output primitives:** thin `term_` functions emitting L0 strings to the
+  app's stdout (e.g. `v_term_set_fg(color)`, `v_term_clear_eol()`,
+  `v_term_move(row,col)`) — add runtime params, arg validation, uniform naming.
+- **L2 — input + queries:** key reader (#1, done) + size/cursor (#2, this plan).
+- **L3 — buffered "window" layer (aspirational):** the big ncurses idea — an
+  off-screen cell buffer diffed against the screen on a `refresh()`. **Not** a
+  near-term primitive; the eventual direction for flicker-free full-screen UIs (W).
+
+### Candidate primitive catalog
+
+Legend: **M** = `ANSI.h` macro already exists (just wrap it) · **+** = useful op
+**not** in `ANSI.h` yet (consider adding macro + primitive) · **W** = higher-level /
+later.
+
+| Group | Primitives (proposed `term_` verbs) | ANSI.h | Notes |
+|-------|-------------------------------------|:------:|-------|
+| **Cursor visibility** | `show_cursor` / `hide_cursor` | M | `ANSI_SHOW/HIDE_CURSOR` |
+| **Cursor motion (rel)** | `up/down/left/right(n)` · `next_line/prev_line(n)` | M | `ANSI_CURSOR_*`, `ANSI_NEXT/PREVIOUS_LINE` |
+| **Cursor motion (abs)** | `move(row,col)` · `home` · `col(c)` HPA · `row(r)` VPA | M / + | have move/home/HPA; **VPA `CSI Ps d` = +gap** |
+| **Cursor save/restore** | `save_pos` / `restore_pos` | M | DECSC/DECRC (`ESC 7/8`) |
+| **Attributes (SGR)** | `attr_reset` · `bold/dim/underline/blink/reverse/hidden/strikeout` (+ each `_off`) | M | full set present; maybe a combined `set_attrs(mask)` |
+| **Colors** | `fg/bg` (16) · `fg/bg_256(idx)` · `fg/bg_rgb(r,g,b)` · `color_default` | M | `ANSI_FG_*` + `_FMT` + RGB; maybe `color_pair(fg,bg)` (ncurses-ish) |
+| **Erase** | `clear_eol/bol/line` · `clear_eos/bos/screen` · `clear_scrollback` · `clear_home` | M | full set present |
+| **Scroll** | `scroll_up/down(n)` · `set_scroll_region(top,bot)` | M / + | have scroll; **DECSTBM `CSI t;b r` = +gap** (status-bar/pane layouts) |
+| **Line/char edit** | `insert_line/delete_line(n)` · `delete_char(n)` · `insert_char(n)` ICH · `erase_char(n)` ECH | M / + | have IL/DL/DCH; **ICH `CSI @` / ECH `CSI X` = +gaps** (pairs with W1 line editor) |
+| **Modes** | `insert/replace_mode` · `alt_screen_enter/leave` · `autowrap_on/off` · `app_cursor_keys_on/off` | M / + | have INS/OVR; **alt-screen (DECSET 1049) = big +gap**; **DECCKM ties to the key reader's CSI↔SS3 flip** |
+| **Queries** | `get_cursor` · `get_size` (#2) · `device_attributes` (DA `CSI c`) | + | DA identifies the terminal; optional |
+| **Misc** | `bell` (BEL 0x07) · `soft_reset` (DECSTR `CSI ! p`) · `full_reset` (RIS) · `set_title` (OSC 0/2) | M / + | `ANSI_RESET` = RIS; BEL / DECSTR / OSC = +gaps |
+
+### Notable gaps worth adding to `ANSI.h` (ranked)
+
+1. **Alternate screen buffer** — DECSET `?1049h` / DECRST `?1049l`. The single most
+   valuable add for an ncurses-like full-screen mode: enter → draw → leave restores
+   the user's prior screen + scrollback intact. **High value.**
+2. **Scroll region** — DECSTBM `CSI <top>;<bot> r`. Enables status bars / split panes.
+3. **VPA** row-absolute (`CSI Ps d`) — symmetry with the existing HPA column-absolute.
+4. **ICH / ECH** (`CSI Ps @` / `CSI Ps X`) — char insert / erase for in-line editing
+   (natural partner to the future `i_getline` editor, **W1**).
+5. **App-cursor-keys mode (DECCKM)** — lets the app *choose* CSI vs SS3 arrows, both
+   of which the key reader already decodes; closes the input/output loop.
+6. **OSC window title**, **BEL**, **DECSTR soft reset** — small but occasionally handy.
+
+### ncurses concept map (inspiration only — rolling our own)
+
+*Author note: hasn't touched ncurses in decades — this is a quick orientation, not a
+spec to copy. Worth a look at ncurses for ideas; our API and naming stay bespoke.*
+
+| ncurses | Rough `term_` analogue | Status |
+|---------|------------------------|--------|
+| `initscr` / `endwin` | alt-screen enter/leave + setup/teardown | gap #1 |
+| `move(y,x)` | `v_term_move(row,col)` | have (M) |
+| `addch` / `addstr` / `printw` | `printf` to the retargeted stdout | have |
+| `attron` / `attroff` / `attrset` | the SGR attribute primitives | have (M) |
+| `init_pair` / `COLOR_PAIR` | `color_pair(fg,bg)` convenience | consider |
+| `curs_set` | show / hide cursor | have (M) |
+| `getyx` | `x_term_get_cursor` | this plan (#2) |
+| `COLS` / `LINES` | `x_term_get_size` | this plan (#2) |
+| `clear` / `erase` / `clrtoeol` / `clrtobot` | the erase primitives | have (M) |
+| `getch` / `keypad` | `i16_term_get_key` | **done (#1)** |
+| `refresh` + `WINDOW` double-buffer | L3 buffered layer | **far future (W)** |
+| `box` / borders, `panel`s | higher-level draw helpers | later |
+
+**The one big idea to borrow later:** ncurses' *off-screen buffer + diffed refresh*
+(L3). Everything in the catalog above is stateless "fire a sequence" output; a
+buffered layer that emits only the **changed** cells is the eventual leap for
+flicker-free full-screen UIs. Tracked as future **W** work, not now.
+
+---
+
 ## Global notes / footer
 
-- **Plan status:** 🔴 ×0 · 🟡 ×0 · 🟢 ×19 · 🔵 ×1 (Q3). D7 (Alt-meta) and T2
-  (golden-vector harness) shipped 2026-06-20.
-- **Deferred (not v1 blockers):** Q3/W3 terminal-size query (next focus) ·
-  W5 migration sweep · W6 user-macro decode. Architecture leaves room for all.
+- **Plan status:** 🔴 ×0 · 🟡 ×2 (Q3 size-query: I4 parser-reuse · T3 tests — both
+  implementation-phase) · 🟢 ×24. D8/D9/D10/D11/S6 resolved 2026-06-20; D7 + T2
+  shipped 2026-06-20; Q3 activated 2026-06-20.
+- **Roadmap captured:** output-primitive library (building block #3) — see
+  **§ Output primitive library**; awaiting author/agent pass on the full set.
+- **Deferred (not v1 blockers):** W5 migration sweep · W6 user-macro decode · L3
+  buffered window layer. Architecture leaves room for all.
 
 ---
 
