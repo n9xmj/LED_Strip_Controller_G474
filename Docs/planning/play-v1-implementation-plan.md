@@ -2,7 +2,7 @@
 
 **Parent spec:** [Docs/PLAY_language_design.md](../PLAY_language_design.md)  
 **Related:** [focused-implementation-handoff-template.md](focused-implementation-handoff-template.md) (focused MSG sessions) · [tools/play_melody.py](../../tools/play_melody.py) · **[Player/](../Player/)** user docs — [README.md](../Player/README.md) · [cheat_sheet.md](../Player/cheat_sheet.md) · [chatbot_brief.md](../Player/chatbot_brief.md) · [decision-log-model.md](decision-log-model.md) (**Big Board** + **§ MSG** + **wish list** mechanics)  
-**Branch:** `main` · **Status:** IN PROGRESS (G474 bench — v1 / v1.1 ship target)
+**Branch:** `main` · **Status:** IN PROGRESS (G474 bench — v1 / v1.1 ✅ · **v1.2** planning in flight)
 
 > **Goal:** Move PLAY from "early preview" to an **implementation-ready v1 contract**
 > — charset locked, semantics unambiguous, v1 scope fenced, host + on-device paths
@@ -12,6 +12,12 @@
 > Mark 🟢 and record outcome in detail sections + LOCKED CONTEXT. Sync
 > `PLAY_language_design.md` when a batch of decisions lands. Agent proposes 🟡
 > leanings; user locks 🟢 (or says *"your call on D4"*).
+>
+> **How to read this doc:** (1) **Open decisions** — 🔴/🟡 only. (2) **The Big Board** —
+> every **D** / **S** / **I** / **T** / **Q** row, grouped and in numeric order.
+> (3) **§ MSG** — firmware/peripheral **implementation checklist** (open gaps first).
+> (4) **Below MSG** — wish list, PLAY v1.2/v1.3+ notes, detail stubs, LOCKED CONTEXT.
+
 
 > **Ship posture:** Hobby / bench project — **"v1 ship"** means **feature-complete for
 > the author's goals**, not a commercial release. After PLAY v1 (+ v1.1) lands on this
@@ -29,6 +35,8 @@
 | **v1** | Feature-complete on bench | **I1** must-ship interpreter in `App/Src/play.c` — **§ MSG** v1 rows **G1**–**G8** ✅ (2026-06-14) |
 | **v1.1** | Same tree, additive code | **D4** `X`/`Y` durations (**G9** ✅). **D5b** raw-percent `;nn` (**G10** / **W2**) ✅ — **v1.1 required PLAY firmware complete** (2026-06-14) |
 | **v1.1 stretch** | Infra (not PLAY grammar) | **`uart_stream` on USART2** (**G11** / **W27**) — non-blocking debug console |
+| **v1.2** | Same tree, additive grammar | **D25** goto/gosub · **S12**/**S13**/**S14** loop/GOSUB restore · **D26** multi-dot · **D29** quoted labels — **§ MSG** **G12**–**G15**/**G20** · see **PLAY v1.2** |
+| **v1.3+** | Same tree (leaning) | **D27** tied notes `{` `}` · **I12** synth continuity · **D15** tuplets · **D28** measure `\|` — see **PLAY v1.3+** |
 | **Docs (in progress)** | Ship with v1 | [Player/](../Player/) — [cheat_sheet.md](../Player/cheat_sheet.md) · [chatbot_brief.md](../Player/chatbot_brief.md) · **T1** legacy trim · **T4/T5** → same folder |
 | **Stretch (v1)** | Nice-to-have, not gate | **T4** normative EBNF · **T5** musician howto + tiered repertoire |
 
@@ -50,82 +58,133 @@ Cross-ref: [Docs/PROJECT.md](../PROJECT.md) long-term goals · deferred briefs u
 
 ---
 
+## Open decisions
+
+*Resolve in chat by ID. When you lock 🟢, the row moves off this table into **The Big Board** only.*
+
+| ID | Status | Subject | Blocks |
+| --- | ------ | ------- | ------ |
+| **S11** | 🟡 | **v2+ sync / multi-instance** — NVM load + polyphony need explicit staging model | **W9** · **G19** |
+| **I10** | 🟡 | **MSG detail / audit log** — expanded firmware notes; scan table = **§ MSG** | — |
+| **I11** | 🟡 | **Player verbosity** — cumulative log-level enum; orthogonal to **S7i** | — |
+| **I12** | 🟡 | **v1.3+ synth note continuity** — legato/tie gaps in `synth_engine.c` | **G17** |
+| **T1** | 🟡 | `PLAY_language_design.md` dedupe + implementer quick-ref | **GP1** |
+| **T2** | 🟡 | Host + serial test harness (`play_melody.py` / `play_scenarios.py`) | **GP2** · **GP3** |
+| **T4** | 🔴 | **Normative EBNF** — standalone formal grammar (v1 stretch) | **GP4** |
+| **T5** | 🔴 | **Musician howto** — user guide + tiered repertoire (v1 stretch) | **GP5** |
+| **GP9** | 🟡 | **v1.2 docs + golden migration** — in-place vs `grammar_torture_v12` | — |
+
+*Recently locked (2026-06-21): **S12** signed repeat · **G13**/**GP11** shipped · **D25** `=`/`>` · **Q2**–**Q4** · **D26**/**G15**/**GP10**.*
+
+---
+
 ## Summary decision table: **The Big Board**
 
-*D-items **D1–D22** listed in numeric order; detail sections below may still be out of order until T1 doc pass.*
+*Grouped **D → S → I → T → Q**; numeric order within each group. Detail stubs and history follow **§ MSG**.*
 
+### Design (D)
 
-| ID  | Status | Subject                                                                                                                                     |
-| --- | ------ | ------------------------------------------------------------------------------------------------------------------------------------------- |
-| D1  | 🟢     | Voice selection (`P<n>`, note memory); default = sine until more voices exist                                                               |
-| D2  | 🟢     | Note-repeat — `**~`** top-level only (whole smash)                                                                                          |
-| D3  | 🟢     | Octave pitch step (`^` up, `v` down)                                                                                                        |
-| D4  | 🟢     | Sixteenth / thirty-second durations (`X`, `Y`) — v1.1 shipped **G9** |
-| D5  | 🟢     | Note duty — `_`/`!`/`;` shorthands + `;n` general (`;` = normal)                                                                            |
-| D5c | 🟢     | `;n` scale — `PLAY_DUTY_NUMERATOR` (default 8), `n`/N, clamp 0 and >N                                                                       |
-| D5b | 🟢     | Raw-percent `;nn` duty — 1 digit → n/8 (D5c); 2 digits → nn% (**G10** ✅ 2026-06-14) |
-| D5d | 🔵     | Pizzicato shorthand — defer; add duty shorthands later                                                                                      |
-| D6  | 🟢     | Volume `V` — range 0..100; overflow clamps to max                                                                                           |
-| D7  | 🟢     | Case-sensitive `**A`–`G**`; flat `**b`/`-**`; sharp `**#`/`+**`; natural `**n**` (descriptor-only)                                          |
-| D8  | 🟢     | `**K"…"**` only; no opening `"` after `**K**` = WARNING; quote integrity = FATAL (**D8b**)                                                  |
-| D8a | 🟢     | **Rejected** — no unquoted `**K**` or command abutment; use `**K"…"**` (**D8**)                                                             |
-| D8b | 🟢     | Shared `**"…"**` delimiter + quote fault policy; **optional WS before `"**` (all string consumers)                                          |
-| D9  | 🟢     | `@ … @` comment blocks only (no title role); `\@` escape; pre-parse unterminated check                                                      |
-| D10 | 🟢     | **Rejected** — no `@` title capture; use `?"…"` for score title (**D14**, user 2026-06-13)                                                 |
-| D11 | 🟢     | No separate `M` cmd — `P` is canonical voice selection                                                                                      |
-| D12 | 🟢     | **Lexical boundaries** — WS readability; `**:**` = optional EOS (BASIC-like); `**;**` = duty only (not C-EOS)                               |
-| D13 | 🔵     | Envelope / ADSR PLAY syntax — post-v1 (after synth + duty ship)                                                                             |
-| D14 | 🟢     | `**?"…"**` print — lyrics + trace; C escapes; no auto-CRLF; bare `**?**` → CRLF                                                             |
-| D15 | 🔵     | **Tuplet / triplet timing** — syntax + duration math (v2+; not v1 blocker)                                                                  |
-| D16 | 🟢     | **String goto labels** — `<"name"` / `>"name"` (max `**PLAY_LABEL_MAX_LEN**`, default 16)                                                   |
-| D17 | 🟢     | **Label define `<` / goto `>**` — replace `*` define; `<`/`>` symmetry (**S2** semantics unchanged)                                         |
-| D18 | 🟢     | **Expansion `\` — `\`"****:****"`** → dispatch; **`ctx:`** = zero-time note-memory load                                                     |
-| D19 | 🟢     | **GOSUB / RETURN / END** — `**="name"`** / `**/**` / `*****`; `**/**` underflow + **undefined label ref** = **hard abort**                  |
-| D20 | 🟢     | `**R` rest** — full notation sub-parser → note memory + timed silence                                                                       |
-| D21 | 🟢     | **Transpose `&**` — `**&+n` / `&-n` / `&0**`; after **K**+accidentals; OOR → octave wrap + WARNING                                          |
-| D22 | 🟢     | `**N<n>**` absolute semitone — **S7j** wire cap **5** digits; suffix like notes; **K/&/acc** skip pitch + acc not stored                                 |
-| D23 | 🔵     | **`L"…"` library GOSUB** — nested **L** stack + **`b_stop_is_return`**; callee `*` / **NUL** = return (deferred)                            |
-| D24 | 🟢     | **Beat unit `%`** — `%W`/`%H`/`%Q`/`%I` sets which note value = one beat; **no measure length**; supersedes draft `**U**`                      |
-| S1  | 🟢     | Polyphony — one monophonic PLAY string = one voice; sync post-v1                                                                            |
-| S2  | 🟢     | Goto `>` = **pure PC jump** — inherit/carry ctx, **no save, no restore** (revised 2026-06-14); restore lives on `[ ]` (**S4**) + GOSUB/RETURN (**D19**); **undefined `>`/`=` ref → hard abort** |
-| S3  | 🔵     | Sync barriers — **deferred** (post-v1 polyphony); leaning `**                                                                               |
-| S11 | 🟡     | **v2+ headwind** — multi-instance + NVM/FS load **requires** explicit sync/staging model (observations; design open)                        |
-| S4  | 🟢     | Repeat `[ … ]:N` — re-entry restores `**[` snapshot** (structured-loop reset; goto **S2** no longer restores)                               |
-| S5  | 🟢     | **Timing formula** + `**U`/`W/H/Q/I` tables**; `**PLAY_TEMPO_BPM_MAX=240`**; tick budget → **I4**                                           |
-| S6  | 🟢     | Duty constants — `**#define` only** for v1 (`PLAY_DUTY_*`, `PLAY_DUTY_NUMERATOR`)                                                           |
-| S7  | 🟢     | **Error policy** — **S7i** fault-policy modes (lazy / normal / strict); **S7a–S7e** locked                                                  |
-| S7a | 🟢     | **Hard abort** — always fatal in **every** policy; `**@`**, label faults (**S7d**), `**/`** underflow, bad `**T**`, stack overflow         |
-| S7b | 🟢     | **Recoverable carve-outs** — explicit list; **NORMAL** = WARNING + continue; **LAZY** = silent; **STRICT** = promote to fatal               |
-| S7c | 🟢     | **Default recoverable** — unlisted faults; **NORMAL** = skip + WARNING once + continue; **LAZY** = skip silent; **STRICT** = fatal          |
-| S7d | 🟢     | **Pre-parse** = sanity + **label resolver**; **missing label ref** = **FATAL**; not a LINTer                                                |
-| S7e | 🟢     | **Stack depth** — `**PLAY_STACK_MAX_DEPTH`** (default **10**); overflow → hard abort                                                        |
-| S7f | 🟢     | **Superseded by S7i** — old “strict mode” flag → `**PLAY_FAULT_POLICY_STRICT**` (debug `**playstr**` / host preview)                        |
-| S7g | 🟢     | **I8 resolve hook** — **does not** fire on rejected tokens; failures use fault path only                                                    |
-| S7h | 🔵     | **Optional LINT scanner** (later phase) — pre-play lint pass; may reuse **STRICT** duplicate rules (**S7i**)                               |
-| S7i | 🟢     | **Fault policy modes** — lazy / normal / strict; public `**play_fault_policy_t**` + default **NORMAL**                                      |
-| S7j | 🟢     | **Numeric digit-run cap** — max **5** ASCII digits; `**uint16_t`/`int16_t**` store; **>5** → STRICT fatal / else WARN + skip excess        |
-| S10 | 🟢     | **Session init defaults** — full note-memory struct + `**Cn4Q_`** template for first `**~**`                                                |
-| S8  | 🟢     | **Closed** — `**&0**` explicit transpose reset (**D21**); legacy `**S**` retired                                                            |
-| S9  | 🟢     | Duty on one note — **last parsed modifier wins**                                                                                            |
-| I1  | 🟢     | **PLAY v1 feature fence** (must-ship list)                                                                                                  |
-| I2  | 🟢     | Label table cap — `**PLAY_LABEL_MAX_LEN**`, `**PLAY_LABEL_TABLE_MAX**`                                                                      |
-| I3  | 🟢     | Stack depth cap → **S7e** (`PLAY_STACK_MAX_DEPTH`)                                                                                          |
-| I4  | 🟢     | **Dedicated HW timer** @ `**PLAY_SCHED_TICK_US**`; shared tick counter; integer math; no 0-tick                                             |
-| I5  | 🔵     | Per-voice RAM budget line in spec                                                                                                           |
-| I6  | 🔵     | Binary compiled event format in v1                                                                                                          |
-| I7  | 🔵     | **Module split** — deferred **v2+**; v1 = opaque `**play_handle_t**` + exposed `**play_instance_t**` (bench cast) + on-chip source (**I9**) |
-| I8  | 🟢     | **Resolve hook** — callback on every completed parse (Release-safe; verbose / test / GUI / LEDs)                                            |
-| I9  | 🟢     | **Player tests submenu** — **`1`/`2`/`s`/`q`/`p`** shipped; near-term **`g`** golden · **`l`** LED viz (**T3** / **I8**) |
-| I10 | 🟡     | **MSG detail / audit log** — expanded firmware notes under **§ I10**; **scan table = § MSG** |
-| I11 | 🟡     | **Player verbosity** — cumulative log-level enum (`_SILENT`…`_DEBUG`); **§ I11**; orthogonal to **S7i** |
-| MSG | 🟡     | **Must-Ship Gap** — **`G1`…`Gn`** firmware gaps; scan table **§ MSG** (detail: **§ I10**) |
-| T1  | 🟡     | `PLAY_language_design.md` dedupe + implementer quick-ref (header trim done 2026-06-14; full dedupe pending)                                                                   |
-| T2  | 🟡     | **Host + serial test harness** — `play_melody.py` / **`play_scenarios.py`**; dual-track with **T3** / **I9** (**user lock 2026-06-13**) |
-| T3  | 🟢     | **Golden tiers + menu order** — Smoke → Smoke+ (Williams) → Feature → Torture; **`m` → `g`** STRICT (**user lock 2026-06-13**) |
-| T4  | 🔴     | **Normative EBNF** — standalone formal grammar (**stretch** for v1 ship)                                                                  |
-| T5  | 🔴     | **Musician howto** — user guide + tiered repertoire (**stretch** for v1 ship)                                                               |
-| Q1  | 🔵     | Star Wars / triplet feel — v1 approximate; real tuplets → **D15**                                                                           |
+| ID | Status | Subject |
+| --- | ------ | ------- |
+| D1 | 🟢 | Voice selection (`P<n>`, note memory); default = sine until more voices exist |
+| D2 | 🟢 | Note-repeat — `**~**` top-level only (whole smash) |
+| D3 | 🟢 | Octave pitch step (`^` up, `v` down) |
+| D4 | 🟢 | Sixteenth / thirty-second durations (`X`, `Y`) — v1.1 shipped **G9** |
+| D5 | 🟢 | Note duty — `_`/`!`/`;` shorthands + `;n` general (`;` = normal) |
+| D5b | 🟢 | Raw-percent `;nn` duty — 1 digit → n/8 (D5c); 2 digits → nn% (**G10** ✅ 2026-06-14) |
+| D5c | 🟢 | `;n` scale — `PLAY_DUTY_NUMERATOR` (default 8), `n`/N, clamp 0 and >N |
+| D5d | 🔵 | Pizzicato shorthand — defer; add duty shorthands later |
+| D6 | 🟢 | Volume `V` — range 0..100; overflow clamps to max |
+| D7 | 🟢 | Case-sensitive `**A`–`G**`; flat `**b`/`-**`; sharp `**#`/`+**`; natural `**n**` (descriptor-only) |
+| D8 | 🟢 | `**K"…"**` only; no opening `"` after `**K**` = WARNING; quote integrity = FATAL (**D8b**) |
+| D8a | 🟢 | **Rejected** — no unquoted `**K**` or command abutment; use `**K"…"**` (**D8**) |
+| D8b | 🟢 | Shared `**"…"**` delimiter + quote fault policy; **optional WS before `"**` (all string consumers) |
+| D9 | 🟢 | `@ … @` comment blocks only (no title role); `\@` escape; pre-parse unterminated check |
+| D10 | 🟢 | **Rejected** — no `@` title capture; use `?"…"` for score title (**D14**, user 2026-06-13) |
+| D11 | 🟢 | No separate `M` cmd — `P` is canonical voice selection |
+| D12 | 🟢 | **Lexical boundaries** — WS readability; `**:**` = optional EOS (BASIC-like); `**;**` = duty only (not C-EOS) |
+| D13 | 🔵 | Envelope / ADSR PLAY syntax — post-v1 (after synth + duty ship) |
+| D14 | 🟢 | `**?"…"**` print — lyrics + trace; C escapes; no auto-CRLF; bare `**?**` → CRLF |
+| D15 | 🔵 | **Tuplet / triplet timing** — triplets, quadruplets, quintuplets, …; syntax + duration math — **leaning v1.3+**; unblocks **Q1** exact feel |
+| D16 | 🟢 | **String goto labels** — `<"name"` / `>"name"` (max `**PLAY_LABEL_MAX_LEN**`, default 16) |
+| D17 | 🟢 | **Label define `<` / goto `>**` — replace `*` define; `<`/`>` symmetry (**S2** semantics unchanged) |
+| D18 | 🟢 | **Expansion `\` — `\`"****:****"`** → dispatch; **`ctx:`** = zero-time note-memory load |
+| D19 | 🟢 | **GOSUB / RETURN / END** — `**="name"`** / `**/**` / `*****`; `**/**` underflow + **undefined label ref** = **hard abort** |
+| D20 | 🟢 | `**R` rest** — full notation sub-parser → note memory + timed silence |
+| D21 | 🟢 | **Transpose `&**` — `**&+n` / `&-n` / `&0**`; after **K**+accidentals; OOR → octave wrap + WARNING |
+| D22 | 🟢 | `**N<n>**` absolute semitone — **S7j** wire cap **5** digits; suffix like notes; **K/&/acc** skip pitch + acc not stored |
+| D23 | 🔵 | **`L"…"` library GOSUB** — nested **L** stack + **`b_stop_is_return`**; callee `*` / **NUL** = return (deferred) |
+| D24 | 🟢 | **Beat unit `%`** — `%W`/`%H`/`%Q`/`%I` sets which note value = one beat; **no measure length**; supersedes draft `**U**` |
+| D25 | 🟢 | **v1.2 goto/gosub lead chars** — **`=`** goto · **`>`** GOSUB (swap from v1.1 `>`/`=`); user lock 2026-06-21 · **G12** |
+| D26 | 🟢 | **v1.2 multi-dot duration** — contiguous `.` after length; *n* dots → factor **2 − 2⁻ⁿ**; `u8_dot_count` — **G15** ✅ |
+| D27 | 🔵 | **v1.3+ tied-note grouping** — leaning `{` `}` around pitch tokens; sustain across boundaries **without reattack** (≠ legato duty `_`) — needs **I12** |
+| D28 | 🔵 | **v1.3+ measure marker `\|`** — bar grouping / AMS-inspired sync thought; **replaces** `\|"…"` sync wire (**S3**); polyphony TBD (**S11**) |
+| D29 | 🟢 | **v1.2 quoted label refs only** — retire bare numeric `<n` / `>n` / `=n`; all define/goto/gosub use `**"…"**` text (**Q3** user lock 2026-06-21) |
 
+### Semantics (S)
+
+| ID | Status | Subject |
+| --- | ------ | ------- |
+| S1 | 🟢 | Polyphony — one monophonic PLAY string = one voice; sync post-v1 |
+| S2 | 🟢 | Goto `>` = **pure PC jump** — inherit/carry ctx, **no save, no restore**; restore on `[ ]` (**S4**) + GOSUB/RETURN (**D19**); **undefined ref → hard abort** |
+| S3 | 🔵 | **Sync barriers** — **deferred**; prior `\|"name"` candidate **may yield `\|` to D28** — polyphony model still open (**S11**) |
+| S4 | 🟢 | Repeat `[ … ]:N` — re-entry restores `**[` snapshot** (structured-loop reset; goto **S2** no longer restores) |
+| S5 | 🟢 | **Timing formula** + `**U`/`W/H/Q/I` tables**; `**PLAY_TEMPO_BPM_MAX=240`**; tick budget → **I4**; **D26** amends dot factor |
+| S6 | 🟢 | Duty constants — `**#define` only** for v1 (`PLAY_DUTY_*`, `PLAY_DUTY_NUMERATOR`) |
+| S7 | 🟢 | **Error policy** — **S7i** fault-policy modes (lazy / normal / strict); **S7a–S7e** locked |
+| S7a | 🟢 | **Hard abort** — always fatal in **every** policy; `**@`**, label faults (**S7d**), `**/`** underflow, bad `**T**`, stack overflow |
+| S7b | 🟢 | **Recoverable carve-outs** — explicit list; **NORMAL** = WARNING + continue; **LAZY** = silent; **STRICT** = promote to fatal |
+| S7c | 🟢 | **Default recoverable** — unlisted faults; **NORMAL** = skip + WARNING once + continue; **LAZY** = skip silent; **STRICT** = fatal |
+| S7d | 🟢 | **Pre-parse** = sanity + **label resolver**; **missing label ref** = **FATAL**; not a LINTer |
+| S7e | 🟢 | **Stack depth** — `**PLAY_STACK_MAX_DEPTH`** (default **10**); overflow → hard abort |
+| S7f | 🟢 | **Superseded by S7i** — old strict mode flag → `**PLAY_FAULT_POLICY_STRICT**` (debug `**playstr**` / host preview) |
+| S7g | 🟢 | **I8 resolve hook** — **does not** fire on rejected tokens; failures use fault path only |
+| S7h | 🔵 | **Optional LINT scanner** (later phase) — pre-play lint pass; may reuse **STRICT** duplicate rules (**S7i**) |
+| S7i | 🟢 | **Fault policy modes** — lazy / normal / strict; public `**play_fault_policy_t**` + default **NORMAL** |
+| S7j | 🟢 | **Numeric digit-run cap** — max **5** ASCII digits; `**uint16_t`/`int16_t**` store; **>5** → STRICT fatal / else WARN + skip excess |
+| S8 | 🟢 | **Closed** — `**&0**` explicit transpose reset (**D21**); legacy `**S**` retired |
+| S9 | 🟢 | Duty on one note — **last parsed modifier wins** |
+| S10 | 🟢 | **Session init defaults** — full note-memory struct + `**Cn4Q_`** template for first `**~**` |
+| S11 | 🟡 | **v2+ headwind** — multi-instance + NVM/FS load **requires** explicit sync/staging model (observations; design open) |
+| S12 | 🟢 | **v1.2 signed repeat close** — `]:N` / `]:+N` = **`[`** snapshot restore on re-entry; `]:-N` = **no restore**; sign = restore flag only — magnitude per **S14**; **G13** ✅ |
+| S13 | 🟢 | **v1.2 GOSUB caller restore flag** — on GOSUB call (wire char per **D25**): default **restore on `/`**; caller **`+`/`-` modifier outside quotes** (`>-"label"`) opts out; flag on **call stack frame**; goto ignores modifier (**S2**) |
+| S14 | 🟢 | **v1.2 repeat iteration count** — `]:N` runs **max(1, N)** passes (`:0` and `:1` → once; `:2` → twice; …) (**Q4** user lock 2026-06-21) |
+
+### Implementation (I)
+
+| ID | Status | Subject |
+| --- | ------ | ------- |
+| I1 | 🟢 | **PLAY v1 feature fence** (must-ship list) |
+| I2 | 🟢 | Label table cap — `**PLAY_LABEL_MAX_LEN**`, `**PLAY_LABEL_TABLE_MAX**` |
+| I3 | 🟢 | Stack depth cap → **S7e** (`PLAY_STACK_MAX_DEPTH`) |
+| I4 | 🟢 | **Dedicated HW timer** @ `**PLAY_SCHED_TICK_US**`; shared tick counter; integer math; no 0-tick |
+| I5 | 🔵 | Per-voice RAM budget line in spec |
+| I6 | 🔵 | Binary compiled event format in v1 |
+| I7 | 🔵 | **Module split** — deferred **v2+**; v1 = opaque `**play_handle_t**` + exposed `**play_instance_t**` (bench cast) + on-chip source (**I9**) |
+| I8 | 🟢 | **Resolve hook** — callback on every completed parse (Release-safe; verbose / test / GUI / LEDs) |
+| I9 | 🟢 | **Player tests submenu** — **`1`/`2`/`s`/`q`/`p`** shipped; near-term **`g`** golden · **`l`** LED viz (**T3** / **I8**) |
+| I10 | 🟡 | **MSG detail / audit log** — expanded firmware notes under **§ I10**; **scan table = § MSG** |
+| I11 | 🟡 | **Player verbosity** — cumulative log-level enum (`_SILENT`…`_DEBUG`); orthogonal to **S7i** |
+| I12 | 🟡 | **v1.3+ synth note continuity** — legato (`_`) and future ties still have audible inter-note gaps today (per-note attack/decay in `synth_engine.c`) |
+
+### Tooling (T)
+
+| ID | Status | Subject |
+| --- | ------ | ------- |
+| T1 | 🟡 | `PLAY_language_design.md` dedupe + implementer quick-ref (header trim done 2026-06-14; full dedupe pending) |
+| T2 | 🟡 | **Host + serial test harness** — `play_melody.py` / **`play_scenarios.py`**; dual-track with **T3** / **I9** (**user lock 2026-06-13**) |
+| T3 | 🟢 | **Golden tiers + menu order** — Smoke → Smoke+ (Williams) → Feature → Torture; **`m` → `g`** STRICT (**user lock 2026-06-13**) |
+| T4 | 🔴 | **Normative EBNF** — standalone formal grammar (**stretch** for v1 ship) |
+| T5 | 🔴 | **Musician howto** — user guide + tiered repertoire (**stretch** for v1 ship) |
+
+### Questions (Q)
+
+| ID | Status | Subject |
+| --- | ------ | ------- |
+| Q1 | 🔵 | Star Wars / triplet feel — v1 approximate; exact → **D15** (**v1.3+** leaning) |
+| Q2 | 🟢 | **v1.2 GOSUB modifier placement** — **`+`/`-` outside quotes** (`>-"label"`, `>"+label"`); parse executive sign then `"…"` (**user lock 2026-06-21**) |
+| Q3 | 🟢 | **v1.2 label refs** — **quoted text only** (**D29**); drop numeric `<n`/`>n`/`=n`; `"01234"` ≠ `"1234"`; modifier stripped before lookup (**user lock 2026-06-21**) |
+| Q4 | 🟢 | **v1.2 repeat count** — **S14**: `:0`/`:1` play once; `:n` (n≥2) plays n times; **S12** `-` on close = no-restore only (not negative iteration) (**user lock 2026-06-21**) |
 
 *Status key: 🔴 unaddressed · 🟡 leaning / in discussion · 🟢 resolved · 🔵 deferred*
 
@@ -133,61 +192,61 @@ Cross-ref: [Docs/PROJECT.md](../PROJECT.md) long-term goals · deferred briefs u
 
 ## Must-Ship Gap (MSG)
 
-*“Mine-Shaft-Gap” — what **I1** says must exist in `App/Src/play.c` but does not yet. **Scan here first** for coding work; peripheral docs/tests at **§ MSG-GP** below. Wish-list rows (**W3+**) are **not** MSG — they are v2+ or optional stretch. **Last audited:** 2026-06-14 (post-**G10** raw-percent `;nn` duty — **v1.1 required PLAY firmware complete**).*
+*"Mine-Shaft-Gap" — what **I1** says must exist in `App/Src/play.c` but does not yet. **Scan open rows first** for coding work. Wish-list rows (**W3+**) are **not** MSG. **Last audited:** 2026-06-21 (post-**G15** multi-dot **D26** ✅).*
 
-**Row IDs:** **`G1`…`Gn`** = firmware gap rows (append-only — **never renumber** when a row ships; mark **FW** ✅ instead). **`GP1`…** = peripheral rows (**§ MSG-GP**). Resolve in chat by gap ID (*"close G4"*, *"G9 next"*). **Ord** = bring-up order tier (1 before 2) — **not** PLAY voice **`P<n>`**.
+**Row IDs:** **`G1`…`Gn`** = firmware gap rows (append-only — **never renumber** when a row ships; mark **FW** ✅). **`GP1`…** = peripheral rows. Resolve in chat by gap ID (*"close G4"*, *"G9 next"*). **Ord** = bring-up order tier (1 before 2) — **not** PLAY voice **`P<n>`**.
 
 **Legend:** ✅ shipped · ❌ not in firmware · 🟡 partial · — (withdrawn / N/A)
 
 **Authoritative code:** `App/Src/play.c` · **I1** fence in LOCKED CONTEXT · bench goldens: `scripts/play_golden/`
 
-### MSG — v1 firmware (must ship before v1 “done”)
-
-| G | Ord | Ref | Feature | FW | Blocked by / notes |
-| --- | --- | --- | ------- | -- | ------------------ |
-| **G1** | 1 | **D6** | **`V<n>`** volume executive | ✅ | Live level on `PLAY_SCHED_SOUND`; >100 clamps |
-| **G2** | 1 | **D1** | **`P<n>`** voice executive | ✅ | Voice **0** sine · **1** triangle · unknown → WARNING + sine |
-| **G3** | 1 | **D22** | **`N<n>`** absolute semitone notes | ✅ | OOR → D21 salvage; `~` replays absolute path |
-| **G4** | 1 | **S7d** + **I2** | **Startup pre-parse** + label table | ✅ | `b_play_preparse()` at LOADING; `@`/`\@`, `<`/`>`/`=` ref resolve; table on runtime for **G5** · goldens: `labels_scan`, `labels_fatal_*` |
-| **G5** | 1 | **D16–D19** | **Labels, goto, GOSUB, RETURN** | ✅ | Runtime `>` pure PC jump (S2); `=`/`/` call stack + snapshot restore; goldens `labels_goto`, `labels_gosub`; torture label block fixed |
-| **G6** | 2 | **D18** | **`\"ctx:…"`** expansion dispatch | ✅ | `ctx:` zero-time suffix · `noop:` + unknown echo args |
-| **G7** | 2 | **D9** | **`\@`** inside `@ … @` | ✅ | `b_play_skip_comment` — `\@` does not close |
-| **G8** | 2 | — | **Key LUT in repeat/label snapshots** | ✅ | `ai8_key_lut[7]` in `play_ctx_snapshot_t`; S4 re-entry restore; golden `key_snapshot` |
-
-**v1 firmware already landed (MSG ✅ — do not re-open):** notes/rest sub-FSM, inheritance, order-flex, duty, `R`, `~`, `T`/`%`/`O`/`^`/`v`, `&`, **`K"…"`**, **`N<n>`** (**G3**), `?"…"`, `[ ]:N` + **`[` snapshot restore on re-entry** (**G8**/**S4**), `*`, `@` skip + **`\@`** (**G7**), **`V`/`P`** (**G1**/**G2**), **`\"ctx:…"`** (**G6**), **startup pre-parse + label table** (**G4**), **labels/goto/GOSUB/RETURN** (**G5**), **key LUT in snapshots** (**G8**), **S7i**, **I4** scheduler, **I8** hook, **I9** submenu `1`/`2`/`s`.
-
-**Suggested code order (v1):** ~~sub-FSM~~ → ~~`~`~~ → ~~**K**~~ → ~~**G1**/**G2**~~ → ~~**G3**~~ → ~~**G6**~~ → ~~**G4**~~ → ~~**G5**~~ → ~~**G7**~~ → ~~**G8**~~ — **v1 firmware MSG closed 2026-06-14**.
-
-### MSG — v1.1 firmware (additive after v1)
+### MSG — open firmware gaps (implement next)
 
 | G | Ord | Ref | Feature | FW | Notes |
 | --- | --- | --- | ------- | -- | ----- |
-| **G9** | 1 | **D4** / **W1** | **`X` / `Y` durations** | ✅ | `PLAY_DUR_*_X2` ×4 ladder; S5 X=0.25 Y=0.125; golden `grammar_torture_v11` |
-| **G10** | 1 | **D5b** / **W2** | **Raw-percent `;nn`** | ✅ | `v_play_apply_duty_percent`; shared `;` suffix parser (≤2 digits); golden `duty_percent` |
+| **G12** | 1 | **D25** 🟢 | **Goto / GOSUB lead-char assignment** | ❌ | **`=`** goto · **`>`** GOSUB (swap from v1.1). Pre-parse + executives + goldens + [Player/](../Player/) |
+| **G14** | 2 | **S13** · **Q2** | **GOSUB caller restore flag** | ❌ | `b_restore_caller` on `play_call_frame_t`; outside-quote `+`/`-` before `"…"`; `/` honors flag |
+| **G20** | 1 | **D29** · **Q3** | **Quoted label refs only** | ❌ | Remove numeric `<n`/`>n`/`=n` path; migrate `labels_*` / torture goldens |
+| **G11** | — | **W27** | **`uart_stream`** (USART2) | ❌ | v1.1 stretch — non-blocking console; not PLAY grammar |
+| **G16** | — | **D27** | **Tied-note `{` `}` grouping** | ❌ | v1.3+ planning |
+| **G17** | — | **I12** | **Synth legato/tie continuity** | ❌ | v1.3+ planning |
+| **G18** | — | **D15** | **Tuplets / N-in-time-of-M** | ❌ | v1.3+ planning |
+| **G19** | — | **D28** | **Measure marker `\|`** | ❌ | v1.3+ planning |
 
-*v1.1 has no other **required** PLAY grammar deltas per session roadmap.*
+**Suggested v1.2 code order:** **G20** (text-only labels) → **G14** (call-frame flag) → **G12** (char swap) → **GP9** docs/goldens.
 
-### MSG — v1.1 stretch (code, optional)
-
-| G | Ref | Feature | FW | Notes |
-| --- | --- | ------- | -- | ----- |
-| **G11** | **W27** | **`uart_stream`** (USART2) | ❌ | Non-blocking console; not PLAY — [uart_stream-port-notes.md](uart_stream-port-notes.md) |
-
-### MSG-GP — peripheral (docs, tests, bench — not firmware gates)
+### MSG — open peripheral gaps
 
 | GP | Ref | Item | Status | Notes |
 | --- | --- | ---- | ------ | ----- |
 | **GP1** | **T1** | Implementer trim of `PLAY_language_design.md` | 🟡 | Header + EBNF withdrawal done; link **Player/** + **T4**/**T5** |
 | **GP2** | **T3** | **`m` → `g`** on-device golden runner | 🟡 | Menu + STRICT banner; shares `scripts/play_golden/` |
-| **GP3** | **T2** | **`play_scenarios.py`** host matrix | 🟡 | Dual-track with **T3**; smoke/feature scenarios |
-| **GP4** | **T4** | Normative EBNF | 🔴 | `Docs/Player/v1_grammar.md` (not yet authored) — v1 **stretch** doc |
-| **GP5** | **T5** | Musician howto + repertoire | 🔴 | `Docs/Player/howto.md` (not yet authored) — v1 **stretch** doc |
-| **GP6** | — | Living docs sync | 🟡 | [Player/chatbot_brief.md](../Player/chatbot_brief.md) · [Player/cheat_sheet.md](../Player/cheat_sheet.md) — Phase 1 **2026-06-14** |
-| **GP7** | — | **`grammar_torture.play`** | ✅ | v1 fence; re-run after each v1 **G** close |
-| **GP8** | — | **`grammar_torture_v11.play`** | ✅ | **G9** — N0..N95 chromatic X/Y torture (loops + GOSUB; `--timeout 120`) |
+| **GP3** | **T2** | **`play_scenarios.py`** host matrix | 🟡 | Dual-track with **T3** |
+| **GP4** | **T4** | Normative EBNF | 🔴 | `Docs/Player/v1_grammar.md` (not yet authored) |
+| **GP5** | **T5** | Musician howto + repertoire | 🔴 | `Docs/Player/howto.md` (not yet authored) |
+| **GP6** | — | Living docs sync | 🟡 | [Player/chatbot_brief.md](../Player/chatbot_brief.md) · [cheat_sheet.md](../Player/cheat_sheet.md) |
+| **GP9** | — | **v1.2 living docs + golden migration** | ❌ | v1.1→v1.2 one-liner (**D25** `=`/`>` swap); **D29** label syntax; **S12**/**S14** repeat docs; golden strategy |
+
+### MSG — shipped firmware (collapsed)
+
+| Tier | Rows | Status |
+| ---- | ---- | ------ |
+| **v1** | **G1**–**G8** | ✅ closed 2026-06-14 |
+| **v1.1** | **G9** · **G10** | ✅ **X**/**Y** + raw-percent `;nn` |
+| **v1.2** | **G15** · **G13** | ✅ multi-dot **D26** + signed repeat **S12**/**S14** (2026-06-21) |
+
+### MSG — shipped peripheral (collapsed)
+
+| GP | Item | Status |
+| --- | ---- | ------ |
+| **GP7** | `grammar_torture.play` | ✅ |
+| **GP8** | `grammar_torture_v11.play` | ✅ |
+| **GP10** | `multi_dot` golden (**D26**) | ✅ bench PASS 2026-06-21 |
+| **GP11** | Repeat signed-close goldens (**G13**/**S12**/**S14**) | ✅ `repeat_carry` · `repeat_restore` · `repeat_restore_plus` · `repeat_count_edge` · `repeat_carry_one` · `repeat_nested` — bench PASS 2026-06-21 |
 
 *Promote a row off MSG when firmware lands; bump **Last audited** and sync **I10** detail + living docs.*
 
+---
 ---
 
 ## PLAY wish list (v2+ backlog)
@@ -203,11 +262,11 @@ Cross-ref: [Docs/PROJECT.md](../PROJECT.md) long-term goals · deferred briefs u
 | W1 | v1.1 | **`X` / `Y` durations** (D4) | ✅ **G9** shipped 2026-06-14 |
 | W2 | v1.1 | **Raw-percent duty `;nn`** (D5b) | **STET v1.1** (~easy): **1 digit** → n/8 (D5c); **2 digits** → percent 0–100 (e.g. `;60` = 60%). Disambiguates `;6` vs `;60` |
 | W3 | v2 | **Pizzicato shorthand** (D5d) | Likely needs envelope shape, not duty alone |
-| W4 | v2 | **Tuplets / triplets** (D15, Q1) | “N notes in time of M”; Raiders / Star Wars swing; no v1 syntax |
+| W4 | v1.3+ | **Tuplets / triplets** (D15, Q1) | “N notes in time of M”; triplets/quads/quints; was v2 — author leaning **v1.3+** |
 | W5 | v2 | **VIB / TRM / ADSR PLAY syntax** (D13) | Modulation in `synth_engine`; post duty + v1 sine ship |
 | W6 | v2 | **`L"…"` library GOSUB** (D23) | Nested **L** stack; callee `*` / NUL = return |
 | W7 | v2+ | **Polyphony** (S1 follow-on) | Multiple `play_instance_t`; one string = one voice today |
-| W8 | v2+ | **Sync barriers `\|"name"`** (S3) | Multi-voice rendezvous; blocked on **S11** staging model |
+| W8 | v2+ | **Sync barriers `\|"name"`** (S3) | **Superseded candidate** — author leaning **`\|` measure marker** (**D28**) instead; multi-voice rendezvous still blocked on **S11** |
 | W9 | v2+ | **NVM / FS `playfile` loader** (I7) | LittleFS / SD / host upload; async load + readiness (**S11**) |
 | W10 | v2+ | **Module split** (I7) | e.g. `play_pitch.c`, loader, multi-file instance pool |
 | W11 | v2+ | **Binary compiled scores** (I6) | Event stream vs interpreted ASCII; flash/RAM tradeoff |
@@ -217,23 +276,26 @@ Cross-ref: [Docs/PROJECT.md](../PROJECT.md) long-term goals · deferred briefs u
 | W15 | tooling | **Normative EBNF** (T4) | Standalone formal grammar post spec-lock |
 | W16 | tooling | **Musician howto** (T5) | User guide + tiered example repertoire |
 | W17 | tooling | **`?"…"` `%` formats** (D14 ext) | Runtime data in debug print — deferred from v1 |
-| W18 | expr | **Slur / legato grouping** (E1) | Connect notes without reattack; extends scheduler + duty |
+| W18 | v1.3+ | **Slur / legato grouping** (E1) | Overlaps **D27** ties + **I12** synth; duty `_` alone insufficient (audible gaps today) |
 | W19 | expr | **Portamento** (E2) | Short pitch slide between written notes; synth freq ramp |
 | W20 | expr | **Glissando** (E3) | Continuous sweep over interval/time; trombone hand-slide feel |
 | W21 | expr | **Extra timbres `P1…`** (D1 ext) | FM / PWM / filtered waves beyond v1 CORDIC sine |
 | W22 | expr | **Runtime duty tuning** | Today `#define` only (**S6**); live tweak from menu/NVM |
 | W23 | bench | **LED strip score viz** (I9 `l`) | Optional live pitch/level on WS2812 during PLAY |
 | W24 | spec | **Per-voice RAM budget line** (I5) | Documented cap for multi-instance v2+ planning |
-| W25 | revisit | **Repeat `[` snapshot on re-entry** | Spec drift: loop body mutations persist; restore optional? |
+| W25 | v1.2 | **Repeat `[` snapshot on re-entry** | → **S12** signed `]:-N` opt-out; promote off wish list when **G13** ships |
 
 | W26 | post-v1 | **vTree+ Mk 5 audio-reactive stack** | I2S mic · analog path · DSP leveling · LED mapping; see **Session & product roadmap** + PROJECT.md lineage |
 | W27 | v1.1 stretch | **`uart_stream` (USART2)** | Non-blocking debug UART — register ISR, HAL init-only; **not** PLAY grammar · [uart_stream-port-notes.md](uart_stream-port-notes.md) · enables terminal piano (**I9** / **I8**) |
 | W28 | v2 · low | **Wall-clock note duration (ms)** | Absolute time per note/rest — **ignores `T`/`%`**; **keeps duty ratio** (`_`/`!`/`;`); bench timing torture / scheduler drift / sync latency; inheritance optional · see **W28** stub |
 | W29 | v2 | **Musical dynamics & volume ramps** | Step markings via **`\"dyn:xxx"`** (D18) — pp…ff, sfz, fp, …; ramps via **`\"cresc:`** / **`\"dim:`** (beats + scale); **V-relative** scaling · see **W29** |
 | W30 | v2+ | **Deadline-driven PLAY service** (event not poll) | One-shot HW compare or job post only at **sound-off** + **rest-end**; drop per-loop `v_play_poll` spin while idle/in-note · see **W30** |
-| W31 | v2 | **No-context-restore loops / GOSUB** (opt-out snapshot) | Optional flag char on the loop close `]` and/or RETURN so note-context (octave/dur/key/…) is **not** restored on iterate/return — e.g. `C0 [CDEFGAB^]8` plays one continuous ascending scale run instead of 8 resets. Actionable form of the **W25** drift question · relates **G8**/**S4** (`[` snapshot restore), **D23** (RETURN), **W6** (`L"…"`) · see **W31** |
+| W31 | v1.2 | **No-context-restore loops / GOSUB** (opt-out snapshot) | → **S12** (`]:-N`) + **S13** (GOSUB caller `+`/`-`); superseded stub **W31** below · **G13**/**G14** |
+| W32 | v1.3+ | **Tied notes `{` `}`** (D27) | Group same-pitch sustain; parser + scheduler; needs **I12**/**G17** |
+| W33 | v1.3+ | **Synth note-to-note continuity** (I12) | Fix legato/tie gaps in `synth_engine.c` (attack/decay per note today) |
+| W34 | v1.3+ | **Measure marker `\|`** (D28) | Bar grouping; Atari AMS inspiration; not polyphony sync until **S11** closes |
 
-*Last wish-list pass: 2026-06-20 (W31 opt-out context-restore for loops/GOSUB; prior: W30 deadline-driven scheduler, W29 **`\"dyn:xxx"`** step-syntax, W28 wall-clock duration).*
+*Last wish-list pass: 2026-06-21 (v1.2 **D26**/**G15** multi-dot; v1.3+ **D27**/**D28**/**I12**/**G16–G19**; **W32–W34**).*
 
 ---
 
@@ -357,51 +419,116 @@ Duty partition (S5 / **I4**): `active_ticks = (note_ticks * duty_num) / duty_den
 
 ---
 
-### W31 — No-context-restore loops / GOSUB (v2 · opt-out snapshot)
+---
 
-**Status:** 🔵 · **Needs user:** yes (syntax **open** — idea capture 2026-06-20)
+## PLAY v1.2 (planned — author lock 2026-06-21)
 
-**Intent:** Let a loop iteration or a GOSUB return **optionally keep** the note-context the body mutated, instead of restoring the entry snapshot. The motivating example is a single, continuously climbing scale:
+*Additive grammar on the G474 v1.1 ship tree. **Solo-author hobby project** — breaking changes (especially **D25** char swap) are acceptable when convenient; no multi-user migration obligation.*
+
+**Package summary:**
+
+| Area | v1.1 today | v1.2 intent | IDs |
+| ---- | ---------- | ----------- | --- |
+| **Goto / GOSUB leads** | `>` goto · `=` GOSUB | **`=`** goto · **`>`** GOSUB (**D25** 🟢) | **G12** |
+| **Label refs** | Quoted **or** bare numeric id | **Quoted text only** (**D29** / **Q3**) | **G20** |
+| **Repeat re-entry** | `]:N` always restores **`[`** snapshot (**S4**/**G8**) | `]:N` / `]:+N` = legacy restore; `]:-N` = **no restore**; count **S14** | **S12** · **G13** |
+| **GOSUB return** | `/` always restores caller snapshot | Caller sets restore on **`>`** via `+`/`-` modifier; flag on **call frame**; `/` unchanged at wire | **S13** · **G14** |
+| **Goto** | Pure PC jump (**S2**) | Unchanged — modifier permitted on label ref but **ignored**; shared parser with GOSUB | **S2** · **S13** |
+| **Multi-dot** | Single `.` → ×1.5 duration (**S5**) | Chained `.` — **D26** 🟢: factor **2−2⁻ⁿ** | **G15** |
+
+**Motivating score (multi-dot — v1.2):**
 
 ```
-C0 [CDEFGAB^]8
+C4Q      ; 1.000× quarter
+C4Q.     ; 1.500×
+C4Q..    ; 1.750×
+C4Q...   ; 1.875×
 ```
 
-…where each pass should **inherit** the octave the previous pass left (so the `^` octave-ups accumulate into a full multi-octave run), rather than resetting to the `[`-entry octave every iteration.
+**Motivating score (repeat carry — illustrative wire):**
 
-> **Syntax caveat (author's own note):** the example above is illustrative, not verified grammar — in the current dialect octave-up is **`^`** (octave-down **`v`**), repeat count is **`]:N`**, and `[ ]` snapshots/restores on re-entry per **G8**/**S4**. The point is the *semantics* (opt-out of restore), not the exact glyphs.
+```
+C0 [CDEFGAB^]:-8 *
+```
 
-**v1 today (what this opts out of):**
+Each pass inherits octave from the prior pass (`^` accumulates) instead of resetting to the `[`-entry snapshot.
 
-| Construct | Current restore behavior | Ref |
-| --------- | ------------------------ | --- |
-| **Repeat `[ … ]:N`** | On each re-entry the play-state **snapshot taken at `[`** (octave, duration, key, accidental state, …) is **restored** — body mutations do **not** persist across iterations | **G8** / **S4** |
-| **GOSUB / RETURN** | On return, callee context is unwound (e.g. octave restored on `/`) so the caller resumes as before the call | **G5** / **D23** |
+### Implementation notes — multi-dot (**G15** ✅ / **D26**)
 
-**Desired (opt-in non-restore):**
+*Shipped 2026-06-21: `u8_dot_count` in note memory/snapshots; `b_play_apply_dot_run` + `u8_play_consume_dot_run`; integer tick factor **(2^(n+1)−1)/2^n** in `u32_play_calc_note_ticks`.*
 
-| Aspect | Rule |
-| ------ | ---- |
-| **Trigger** | An **optional flag char** on the **return operator(s)** — the loop close `]` and/or the RETURN token — selects *no restore* for that construct |
-| **Effect** | The body's mutations to play-context (octave at minimum; ideally the full snapshot set) **carry forward** to the next iteration / to the caller |
-| **Default** | **Unchanged** — bare `]` / bare RETURN still restore (back-compat with all shipped scores + golden tests `loop`, `labels_gosub`) |
-| **Scope of carry** | TBD — *all* snapshotted fields vs. a defined subset (octave/duration only). Decide at design; full-snapshot is simplest to reason about |
+| Change | Target |
+| ------ | ------ |
+| Note memory / snapshot | `u8_dot_count` (0 = plain, 1 = old `.`, 2+ = chained) |
+| Sub-FSM | Consume run of `.` after duration letter; **retire** duplicate-dot warning |
+| **S5** tick math | `factor = 2 - 2^(-n)` for `n` dots (integer rational math on `dur_x2` ladder) |
+| Duty | Still applied to **dotted** nominal slot (**D5** unchanged) |
 
-**Syntax candidates (do not implement without closing):**
+**Cross-ref:** **D26** · **S5** (amended **D26** 🟢) · **GP10** golden ✅.
 
-- Suffix flag on close: `]!N` / `]~:N` / `]+:N` — pick a char **not** colliding with staccato `!`, top-level replay `~`, or accidental/octave `+`/`^`; a fresh glyph may be cleaner.
-- Distinct RETURN variant token for the no-restore case (mirror whatever loop chooses).
-- Sticky mode executive (`\"loopmode:carry"`-style, D18 surface) toggling restore on/off — heavier, but avoids per-operator glyph pressure and reads self-documenting.
+**Motivating score (GOSUB carry — wire per Q2 🟢):**
 
-**Open questions:** which fields carry (octave-only vs full snapshot)? · does no-restore on a *nested* loop/sub compose intuitively? · interaction with key (`K`) and transpose (`&`) sticky state · STRICT vs NORMAL handling of the flag on a construct that has no snapshot.
+```
+>-"TURN" … /    ; callee body mutates ctx; return without restoring caller snapshot
+>"TURN" … /     ; legacy restore (default)
+```
 
-**Relation to W25:** this is the **actionable feature** behind the open **W25** question ("loop body mutations persist; restore optional?"). Promote together.
+*(**D25** 🟢: `=` goto · `>` GOSUB. **D29**: quoted label only — no bare numeric id.)*
 
-**Firmware refs (when promoted):** `App/Src/play.c` — `[` snapshot save/restore path (G8/S4), GOSUB/RETURN frame restore (G5/D23). Golden coverage to extend: `loop`, `labels_gosub`, `key_snapshot`.
+### Implementation notes (`App/Src/play.c` — for **Q2** closure)
 
-**Cross-ref:** **W25** (snapshot drift) · **G8** / **S4** (repeat snapshot) · **D23** / **G5** (RETURN) · **W6** (`L"…"` library GOSUB).
+*Read-only audit 2026-06-21; no firmware changes in this session.*
 
-**Promote when:** scores want accumulating runs/sequences (scale climbs, ostinato transposition by loop) without unrolling the body by hand.
+| Hook | Today | v1.2 touch |
+| ---- | ----- | ---------- |
+| **`b_play_parse_label_ref`** | Shared by goto + GOSUB; optional WS skip → quoted string → table lookup (**D29** retires unsigned digit path) | Parse optional `+`/`-` **before** `"` on GOSUB only; strip modifier before lookup; return **restore flag** out-param for GOSUB only |
+| **`b_play_exec_goto` / `b_play_exec_gosub`** | Goto sets PC only; GOSUB pushes `play_call_frame_t` + always saves snapshot | GOSUB stores **`b_restore_caller`** (default true) on frame from modifier |
+| **`b_play_exec_return`** | Always `v_play_snapshot_restore` from frame | Restore only when frame flag requests it |
+| **`b_play_open_repeat`** | `]:` + `b_play_consume_digit_run_u16_at` (unsigned); fatal on 0 | Optional `+`/`-` then ≤5-digit magnitude; **`b_restore_on_reentry`** on `play_repeat_frame_t` (default true; false when count was negative); iteration = **max(1, N)** per **S14** |
+| **`b_play_close_repeat`** | Restores snapshot when `u16_remaining > 1` | Skip restore when frame flag false |
+
+**Modifier placement (**Q2** 🟢):** **`+`/`-` outside quotes** — `>-"label"` / `>"+label"`. Matches transpose `&-n`; no ambiguity with label names that start with `-`; smallest change to `b_play_parse_label_ref` (read sign, then `"…"`).
+
+**Label refs (**Q3**/**D29** 🟢):** Quoted text only — no bare `<n` / `>n` / `=n`. `"01234"` and `"1234"` remain **distinct** string labels.
+
+**Repeat count (**Q4**/**S14** 🟢):** `]:N` runs **max(1, N)** passes — `[CDEFGAB]:0` and `:1` each play once; `:2` plays twice. **S12** negative sign on close is **restore opt-out only** (`]:-8` = no restore, 8 passes).
+
+**`/`` RETURN:** No wire change — behavior follows flag pushed at call time.
+
+**Pre-parse (**S7d**): Still resolves label **identity** only; restore semantics are **runtime** on the call frame / repeat frame.
+
+**Cross-ref:** **W25** · **W31** (promoted) · **D19** · **D26** · **S2** · **S4** · **G5** · **G8** · future **D23**/**W6** (`L"…"`) should inherit **S13** caller-flag model.
+
+---
+
+## PLAY v1.3+ (planning stub — author 2026-06-21)
+
+*Likely same G474 tree after v1.2. Not active MSG until v1.2 closes. Author leaning — not locked.*
+
+| # | Topic | IDs | Notes |
+| - | ----- | --- | ----- |
+| 1 | **Tied notes** | **D27** · **G16** · **W32** | `{` `}` grouping around pitch tokens; same pitch sustained **without reattack** — **not** the same as legato duty `_` (timing/gate only) |
+| 2 | **Synth continuity** | **I12** · **G17** · **W33** | `synth_engine.c` applies ~7 ms attack + decay per note start — causes audible gap even when PLAY schedules legato `_` back-to-back; ties (**D27**) need this too |
+| 3 | **Tuplets** | **D15** · **G18** · **W4** | Triplets, quadruplets, quintuplets, … — syntax open; closes **Q1** exact Star Wars path |
+| 4 | **Measure `\|`** | **D28** · **G19** · **W34** | Bar/measure grouping; inspired by Atari Advanced Music System; **replaces** prior `\|"name"` sync-barrier sketch (**S3**/**W8**). Reliable multi-voice sync still **S11** — measure marker may be notation-only until polyphony lands |
+
+**Tie vs legato (distinction to preserve in spec):**
+
+| Mechanism | Layer | Effect |
+| --------- | ----- | ------ |
+| **`_` / duty** | Note gate within one token’s time slot | Sounding fraction vs gap **inside** the note |
+| **Legato scheduling** | PLAY scheduler | Adjacent notes abut in time (duty `_`) — still reattacks synth today (**I12**) |
+| **Tie `{` `}`** | Notation + scheduler + synth | **One sounding** across multiple written note heads; suppress inter-note off/on |
+
+---
+
+### W31 — No-context-restore loops / GOSUB (superseded → v1.2)
+
+**Status:** 🔵 **superseded** by **PLAY v1.2** (**S12**/**S13**) — retained as history stub only.
+
+**Was:** Optional flag char on loop close / RETURN (**2026-06-20** capture).
+
+**Now:** **S12** signed `]:-N` for loops; **S13** GOSUB caller `+`/`-` on call frame. See **PLAY v1.2** above and Big Board **Q2**–**Q4**.
 
 ---
 
@@ -490,7 +617,8 @@ These are **already chosen** in the spec or firmware; v1 implementation should a
 - **Unified note memory** — one per-voice struct holds note attributes *and* command-driven state (tempo, key, volume, transpose, duty ratio, …).
 - **Inheritance** — omitted note fields inherit from note memory; accidentals do **not** inherit implicitly (K LUT + explicit `#`/`b` override).
 - **Lead vs metadata chars** — first char of token disambiguates note vs command; W/H/Q/I/X/Y, `.`, `_`, `!`, `**;` duty**, only valid **after** note letter **A–G** or after `**N` semitone digits** (**D22**). Lowercase `**n**` = natural accidental (**D7**) — not `**N**` command.
-- **Order-flexible note descriptors** — after the lead letter, accidental / octave / duration / dot / duty modifier may appear in any order; exactly one duration required per note token.
+- **Order-flexible note descriptors** — after the lead letter, accidental / octave / duration / **contiguous `.` run** / duty modifier may appear in any order; exactly one duration required per note token.
+- **Multi-dot duration (D26 🟢, v1.2)** — `u8_dot_count` = length of contiguous `.` run in descriptor; timing factor **`2 - 2^(-n)`** on undotted base (**S5**); duty (**D5**) on fully dotted slot; multi-dot is **not** an S9 duplicate-modifier fault. Firmware: **G15**.
 - **Note duty (D5 🟢, D5c 🟢, S9 🟢)** — one `**duty_ratio**` in note memory (inherited). Shorthands `**_**`, `**!**`, bare `**;**`, `**;n**` (see D5 detail). More duty shorthands (e.g. pizzicato, D5d 🔵) are **non-blocking** — same modifier pattern. **Envelope / ADSR PLAY surface** deferred (**D13 🔵**); v1 uses existing `synth_engine` linear attack/decay only.
 - **Command letters (current):** `R` rest · `**N` absolute semitone (**D22** 🟢) · `T` tempo · `O` octave · `**^` / `v` octave step (D3 🟢)** · `K` key · `**&` transpose (D21 🟢)** · `**%` beat unit (**D24** 🟢)** · `**V` volume (D6 🟢)** · `**P` voice selection (D1 🟢)** · `**?` print / lyrics (D14 🟢)** · `**\` expansion hook (D18 🟢)** · `[ ]:` repeat · **`<` label (D17 🟢)** · **`>` goto** · **`=` GOSUB (D19 🟢)** · **`/` RETURN** · **`*` END** · **`~` note-repeat (D2 🟢)** · **`L"…"` library GOSUB (**D23** 🔵 — **lead reserved**, not in v1)**. _(Legacy **`S`** retired; **`U`** beat-unit draft → **`%`** **D24**; **`T`** = tempo only.)_
 - **Expansion hook (D18 🟢)** — top-level `**\` + quoted string** only: **`\"cmd:args"`** (payload pattern **`cmd:args`**, colon-separated). Core parser extracts decoded payload → **`play_extension_fn_t`** dispatch table; **v1 default stub** echoes payload to debug UART (**same spirit as D14 `?"…"`**, for bench-test). Reserved **`ctx:`** cmd → **zero-time note-memory load** (see **D18** / **D20**). Unknown **`cmd`** → stub path (WARNING optional per **S7**). Not valid inside note descriptors. **`\@**` remains comment-escape only (**D9**).
@@ -980,9 +1108,9 @@ C4Q ?"after C4" E4Q
 - Snapshot behavior at labels/repeats (**S2/S4**) — likely same marker-restore model.
 - Dotting inside a tuplet (defer or define explicitly).
 
-**Cross-refs:** **Q1** (Star Wars v1 approximation) · **D4** (X/Y finer subdivisions — orthogonal but often scheduled together) · **T5** Star Wars chapter · **T3** optional `star_wars_approx.play` golden string.
+**Cross-refs:** **Q1** (Star Wars v1 approximation) · **D4** (X/Y finer subdivisions — orthogonal but often scheduled together) · **T5** Star Wars chapter · **T3** optional `star_wars_approx.play` golden string · **G18** (**v1.3+** MSG).
 
-**Resolution:** **Deferred post-v1 (v2+ default). Track in D15; v1 uses approximation. Re-open when scheduling tuplet syntax or if early design wins during v1.**
+**Resolution:** **Deferred — author leaning v1.3+** (was v2+). Track in **D15**/**G18**; v1–v1.2 use approximation (**Q1**). Re-open when scheduling tuplet syntax.
 
 ---
 
@@ -1394,6 +1522,83 @@ where `beat_unit_beats` comes from the current `%` executive. Same internal `×2
 
 ---
 
+### D25 — Goto / GOSUB lead characters (v1.2)
+
+**Status:** 🟢 · **User lock 2026-06-21**
+
+**v1.1 wire (shipped **G5**):** `>` **goto** · `=` **GOSUB** · `/` RETURN · `<` define.
+
+**v1.2 wire (locked):** **`=` goto** · **`>` GOSUB** — swap from v1.1.
+
+**Implementation:** Pre-parse resolves `="ref"` (goto) and `>"ref"` (GOSUB) against the same label table (**S7d**). [Player/](../Player/) docs get a one-line v1.1→v1.2 migration note (**GP9**).
+
+**Unchanged:** `/` RETURN · `<` define · `*` END · goto = pure PC jump (**S2**).
+
+**MSG:** **G12** (char assignment in firmware).
+
+**Cross-ref:** **D19** · **D17** · **S2** · **S13** · **Q2** · **Q3** · **D29**.
+
+**Resolution:** **`=` goto · `>` GOSUB locked for v1.2.**
+
+### D26 — Multi-dot duration (chained `.`) (v1.2)
+
+**Status:** 🟢 · **Needs user:** no (locked 2026-06-21)
+
+**Problem:** Single `.` today multiplies duration ×1.5 (**S5**). Standard notation uses double- and triple-dotted notes.
+
+**Locked semantics:**
+
+Allow a **contiguous run** of `.` characters in one note/rest descriptor (order-flex with other suffix fields). Each dot adds **half of the previous dot’s addition** — equivalent to **2⁻ⁿ** of the **undotted** base for the *n*th dot:
+
+| Token | Factor on base duration |
+| ----- | ----------------------- |
+| `C4Q` | 1.000 |
+| `C4Q.` | 1.500 (1 + ½) |
+| `C4Q..` | 1.750 (1 + ½ + ¼) |
+| `C4Q...` | 1.875 (1 + ½ + ¼ + ⅛) |
+
+Closed form: **`dot_factor = 2 - 2^(-n)`** for `n = u8_dot_count` (`n ≥ 1`; `n = 0` → factor **1.0**).
+
+**Wire:** Contiguous `.` run only — not scattered dots. **Retires** v1.1 S9 “duplicate dot” WARNING for intentional multi-dot.
+
+**Storage:** **`u8_dot_count`** (0 = undotted) in note memory, snapshots, completed-note template — replaces `bool b_dotted`.
+
+**Duty (**D5**):** Applied to the **fully dotted** nominal slot length.
+
+**Firmware:** **G15** ✅ — `App/Src/play.c` · golden: **GP10** `multi_dot.play`.
+
+**Cross-ref:** **S5** (amended) · **S9** (amended) · **S10** default `u8_dot_count = 0`.
+
+**Resolution:** **Chained `.` duration locked for v1.2; implement in G15.**
+
+---
+
+### D27 — Tied-note grouping `{` `}` (v1.3+)
+
+**Status:** 🔵 · **Needs user:** yes (syntax sketch only 2026-06-21)
+
+**Intent:** Notation for **same pitch sustained across multiple note heads** without a **reattack** — distinct from legato duty `_` (gate ratio within one token) and from scheduler abut alone (**I12**).
+
+**Leaning syntax:** `{` opens tie group · `}` closes — wraps a run of pitch tokens sharing one sounding (exact nesting/scope TBD).
+
+**Requires:** Parser/scheduler (**G16**) + synth continuity (**I12**/**G17**). Overlaps wish **W18** / **W32**.
+
+**Cross-ref:** **D5** `_` · **I12** · **S5** (each tied segment may still have written duration for engraving).
+
+---
+
+### D28 — Measure marker `|` (v1.3+ thought)
+
+**Status:** 🔵 · **Needs user:** yes — polyphony/sync model open (**S11**)
+
+**Intent:** Use **`|`** as a **measure/bar marker** for grouping notation — inspired by **Atari Advanced Music System** (legacy heritage for this player). **Replaces** the earlier `\|"name"` multi-voice sync-barrier candidate (**S3**/**W8**).
+
+**Not locked:** Whether `|` is cosmetic/trace-only in monophonic v1.3, or becomes a sync anchor when polyphony lands. No reliable multi-voice synchronization design yet.
+
+**MSG:** **G19** (blocked). **Cross-ref:** **D24** `%` (beat unit ≠ measure length) · **S11**.
+
+---
+
 ### D19 — Subroutine / GOSUB, RETURN, and END (hard STOP)
 
 **Status:** 🟢 · **Needs user:** no (wire syntax + stack error policy resolved 2026-06-11)
@@ -1757,6 +1962,59 @@ T140 D4Q >2               ; forward to >2 — T140 in effect
 
 **Resolution (2026-06-14):** **Goto `>` = pure PC jump, both directions; inherit/carry context; no per-label snapshot saved or restored. Reset-per-iteration = `[ ]:N` (S4); caller-context restore = `/` RETURN (D19). Wire: `<` define, `>` goto, quoted or numeric id.**
 
+> **v1.2 amendment (2026-06-21 — **D25** 🟢):** Wire is **`=`** goto · **`>`** GOSUB (swap from v1.1). **S13** adds optional **no-restore** GOSUB via caller `+`/`-` modifier outside quotes on the call token; goto still ignores modifier. See **PLAY v1.2**.
+
+---
+
+### S12 — Signed repeat close `]:±N` (v1.2)
+
+**Status:** 🟢 · **User lock 2026-06-21** · **G13** ✅
+
+**Intent:** Opt out of **`[` snapshot restore** on loop re-entry without a new close glyph.
+
+| Close tail | Passes (**S14**) | Re-entry restore |
+| ---------- | ---------------- | ---------------- |
+| `]:N` or `]:+N` | **max(1, N)** | **Yes** — legacy **S4**/**G8** |
+| `]:-N` | **max(1, \|N\|)** | **No** — body note-context **carries** |
+| `]:0` / `]:1` | 1 each | `+`/unsigned → restore; `-` → no restore (moot on single pass) |
+
+**Digit run:** Magnitude ≤ **5** digits (**S7j**); optional leading `+`/`-` **not** counted toward digit cap. **`b_restore_on_reentry`** on repeat frame (default true).
+
+**Firmware:** `App/Src/play.c` — `u16_play_repeat_pass_count`, `b_restore_on_reentry` on `play_repeat_frame_t`.
+
+**Goldens:** **GP11** — `repeat_carry` (`]:-3` climb), `repeat_restore` (`]:3`), `repeat_restore_plus`, `repeat_count_edge`, `repeat_carry_one`, `repeat_nested`.
+
+**Cross-ref:** **S4** · **S14** · **G8** · **PLAY v1.2** impl notes.
+
+**Resolution:** Signed repeat close locked and shipped in **G13**.
+
+---
+
+### S13 — GOSUB caller-controlled context restore (v1.2)
+
+**Status:** 🟢 semantics · **G14** ❌ firmware · **Q2** 🟢 (2026-06-21)
+
+**Intent:** Caller chooses whether `/` restores the pre-call snapshot saved at GOSUB entry.
+
+| Call (wire char per **D25**; examples assume `>` = GOSUB) | `/` behavior |
+| ----------------------------------------------------------- | ------------ |
+| `>"label"` or `>"+label"` | **Restore** caller snapshot (legacy **D19** / **G5**) |
+| `>"-label"` (or `>-` + quoted name per **Q2**) | **No restore** — callee mutations visible to caller |
+
+**Rules (leaning 🟡):**
+
+- Restore flag lives on **`play_call_frame_t`**, set at call time (default **restore**).
+- Leading `+`/`-` is **not** part of the label identity — stripped before table lookup.
+- **Goto** accepts the same label-ref grammar but **ignores** restore modifier (**S2**).
+- **`\"cmd:args"`** expansion (**D18**) — out of scope; no `+`/`-` restore modifier.
+- **Bare numeric label** (if retained): `>-8` and `>8` → same target (**Q3** `abs()`); sign sets GOSUB restore flag only.
+
+**RETURN `/`:** Wire unchanged; honors frame flag.
+
+**MSG:** **G14** (blocked on **Q2**). Supersedes wish **W31**.
+
+**Cross-ref:** **D19** · **D25** · **Q2** · **Q3** · **Q4** · future **D23**/**W6**.
+
 ---
 
 ### S3 — Sync barriers vs goto labels
@@ -1912,7 +2170,7 @@ T120 [ C4Q T140 D4Q ]:2
 ```
 beat_ms       = 60000 / tempo_bpm
 unit_ms       = beat_ms * (duration_beats / beat_unit_beats)   // % sets beat_unit
-note_ms       = unit_ms * dot_factor                           // dot_factor = 1.5 or 1.0
+note_ms       = unit_ms * dot_factor                           // D26: dot_factor = 2 - 2^(-n), n = u8_dot_count (0 → 1.0)
 active_ms     = note_ms * duty_ratio                          // 0.0..1.0 (D5/S6)
 rest_ms       = note_ms - active_ms
 ```
@@ -1990,6 +2248,8 @@ duty step   ≈ 4 ticks per ;n quantum on that note
 **Rest (`R`):** same `**note_ms`** path (dot applies); **full `note_ms` silence** on the timeline (duty fields may update memory per **D20** but do not split the rest gap).
 
 **Resolution:** **Formula + tables + `PLAY_TEMPO_BPM_MAX=240` locked. Integer tick math + HW timer → I4. Shared `play_calc_*` helper name TBD at implement.**
+
+> **v1.2 amendment (**D26** 🟢):** `dot_factor` from **`u8_dot_count`**: `n=0` → **1.0**; `n≥1` → **2 − 2⁻ⁿ** (replaces boolean ×1.5). Implement in **G15** / `u32_play_calc_note_ticks`.
 
 ---
 
@@ -2379,6 +2639,8 @@ Separate stacks, **shared numeric limit**. Depth **10** is `**#define`-able** on
 **Locked rule:** While collecting one note descriptor (order-flexible), each of `**_`**, `**!**`, `**;**`, `**;n**` updates `**duty_ratio**` when seen; **the last such modifier in parse order** sets both **this note’s** duty and **sticky** note memory for following notes. No “forbid combo” rule. Whitespace ends the note token — duty modifiers after duration cluster only, same as other descriptor parts.
 
 **Examples:** `AN5Q!;6` → **75%** (`;6` last). `AN5Q;6!` → staccato constant. `AN5Q;` → normal (~80%). `AN5Q;0` → **100%** (0 clamps to N).
+
+> **v1.2 (**D26** 🟢):** Contiguous `.` run sets **`u8_dot_count`** — **not** a duplicate-modifier fault. Duty “last wins” unchanged.
 
 **Resolution:** **Last parsed duty modifier wins (current note + inherit).**
 
@@ -3080,6 +3342,30 @@ Examples:
 
 ---
 
+### I12 — Synth note-to-note continuity (legato / ties) (v1.3+)
+
+**Status:** 🟡 · **Needs user:** no for problem statement (2026-06-21) · **Firmware:** ❌
+
+**Problem:** PLAY can schedule back-to-back notes with legato duty (`_` = 100% gate) so there is **no intentional silence** between note deadlines — yet playback still has an **audible gap/reattack** between successive notes.
+
+**Root cause (today):** `App/Src/synth_engine.c` applies a **per-note linear attack** (~7 ms) and decay envelope on every note start. Each new `v_synth_engine_play_note` (or equivalent) retriggers that envelope even when the scheduler intended seamless legato.
+
+**Blocks:** Audible **D27** ties (`{` `}`) and wish **W18** slur grouping — duty/scheduler alone are insufficient.
+
+**Leaning fixes (not locked):**
+
+| Approach | Sketch |
+| -------- | ------ |
+| **Legato retrigger** | If new note is same pitch (or tie group) and gap ≤ 1 tick, skip attack — continue phase/envelope |
+| **Tie flag from PLAY** | Interpreter passes `b_tied_to_next` / `b_tied_from_prev` into synth when **D27** lands |
+| **Envelope tweak** | Shorter attack when `duty == legato` and previous note still sounding |
+
+**MSG:** **G17** (v1.3+). **Cross-ref:** **D5** `_` · **D27** · **W33** · **W32**.
+
+**Resolution:** **Track as v1.3+ infra; open when ties or legato polish is scheduled.**
+
+---
+
 ## Tooling / docs (T)
 
 > **Post-lock documentation bundle (user request, pre-implementation):** Once **D/S/I 🟢 rows needed for v1** are locked (minimum: **I1**, **S5**, **S7**, **I2**), produce **two separate user-facing / formal docs** — not buried in `PLAY_language_design.md`. **T4** = machine-readable grammar; **T5** = human howto. **T1** trims the legacy design doc for implementers and **links** T4/T5; **T3** golden strings feed **T5** examples and **T2** tests.
@@ -3422,6 +3708,51 @@ Teach features first with **small** excerpts; grow into the **repertoire roadmap
 ---
 
 ## Questions (Q)
+
+### Q2 — GOSUB restore modifier placement (v1.2)
+
+**Status:** 🟢 · **User lock 2026-06-21**
+
+**Resolution:** **`+`/`-` outside quotes** — `>-"TURN"` / `>"+TURN"`. Parse flow: read optional sign at the executive (GOSUB call site only), then required `"…"` label string. Modifier stripped before label lookup; not stored in the label table.
+
+**Rationale:** Easiest parse — same pattern as `&-n`; avoids `>"-foo"` ambiguity (modifier vs literal leading hyphen in label name); no second form inside quotes.
+
+**Cross-ref:** **S13** · **G14** · **PLAY v1.2** impl-notes.
+
+---
+
+### Q3 — Quoted vs numeric label identity (v1.2)
+
+**Status:** 🟢 · **User lock 2026-06-21** → **D29**
+
+**Resolution:** **Drop numeric label refs.** All define/goto/gosub use quoted text only: `<"foo"`, `="foo"`, `>"foo"` (**D25** 🟢: `=` goto · `>` GOSUB). Retire bare `<8` / `>8` / `=8` paths in pre-parse and runtime.
+
+**Quoted labels:** Exact string match — `"01234"` and `"1234"` are **different** defines. GOSUB restore modifier (**Q2**) is outside quotes, stripped before lookup.
+
+**Cross-ref:** **D16**/**D17** (v1 history) · **D29** · **G20** · **I2**.
+
+---
+
+### Q4 — v1.2 repeat count and edge cases
+
+**Status:** 🟢 · **User lock 2026-06-21** → **S14**
+
+**Repeat iteration (locked):** `]:N` runs **max(1, N)** passes.
+
+| Close | Passes |
+| ----- | ------ |
+| `]:0` | 1 |
+| `]:1` | 1 |
+| `]:2` | 2 |
+| `]:-8` | 8 (no **`[`** snapshot restore on re-entry — **S12**) |
+
+**Reconciliation with S12:** Negative sign on the repeat close means **no restore**, not negative iteration count. Magnitude always uses **S14** rules.
+
+**Still open (GP9):** Golden migration strategy (in-place update vs `grammar_torture_v12.play`).
+
+**Cross-ref:** **S12** · **S14** · **G13** · **GP9**.
+
+---
 
 ### Q1 — Star Wars triplet passage (v1 approximation)
 

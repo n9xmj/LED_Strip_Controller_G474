@@ -53,7 +53,7 @@ typedef struct
     uint8_t             u8_octave;
     uint8_t             u8_volume_pct;
     uint8_t             u8_dur_x2;
-    bool                b_dotted;
+    uint8_t             u8_dot_count;
     bool                b_is_rest;
     char                c_letter;
     float               f_hz;

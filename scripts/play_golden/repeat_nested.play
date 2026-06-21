@@ -1,0 +1,2 @@
+@ G13 - nested loops; inner ]:-2 carry ^; outer ]:+2 restore @
+T120 O4 %Q \"ctx:C4Q" [ [CDEFGAB^]:-2 ]:+2 *

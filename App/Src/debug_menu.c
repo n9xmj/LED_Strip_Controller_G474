@@ -457,18 +457,31 @@ static char *psz_play_line_buf_acquire(void)
     return sp_play_line_buf;
 }
 
-static const char *psz_play_dur_suffix(uint8_t u8_dur_x2, bool b_dotted)
+static char s_ac_play_dur_buf[8];
+
+static const char *psz_play_dur_suffix(uint8_t u8_dur_x2, uint8_t u8_dot_count)
 {
+    char c_base = '?';
+    uint8_t u8_i = 0U;
+
     switch (u8_dur_x2)
     {
-        case 32U: return b_dotted ? "W." : "W";
-        case 16U: return b_dotted ? "H." : "H";
-        case 8U:  return b_dotted ? "Q." : "Q";
-        case 4U:  return b_dotted ? "I." : "I";
-        case 2U:  return b_dotted ? "X." : "X";
-        case 1U:  return b_dotted ? "Y." : "Y";
-        default:  return "?";
+        case 32U: c_base = 'W'; break;
+        case 16U: c_base = 'H'; break;
+        case 8U:  c_base = 'Q'; break;
+        case 4U:  c_base = 'I'; break;
+        case 2U:  c_base = 'X'; break;
+        case 1U:  c_base = 'Y'; break;
+        default:  c_base = '?'; break;
     }
+    s_ac_play_dur_buf[u8_i++] = c_base;
+    while (u8_dot_count > 0U && u8_i < (uint8_t)(sizeof(s_ac_play_dur_buf) - 1U))
+    {
+        s_ac_play_dur_buf[u8_i++] = '.';
+        u8_dot_count--;
+    }
+    s_ac_play_dur_buf[u8_i] = '\0';
+    return s_ac_play_dur_buf;
 }
 
 static void v_debug_play_resolve(play_instance_t *px_instance,
@@ -488,7 +501,7 @@ static void v_debug_play_resolve(play_instance_t *px_instance,
             printf("PLAY + %c%u%s %.1fHz %lums @%lu\r\n",
                    px_event->c_letter,
                    (unsigned)px_event->u8_octave,
-                   psz_play_dur_suffix(px_event->u8_dur_x2, px_event->b_dotted),
+                   psz_play_dur_suffix(px_event->u8_dur_x2, px_event->u8_dot_count),
                    (double)px_event->f_hz,
                    (unsigned long)(px_event->u32_ticks *
                                    (PLAY_SCHED_TICK_US / 1000U)),
@@ -497,7 +510,7 @@ static void v_debug_play_resolve(play_instance_t *px_instance,
 
         case PLAY_RESOLVE_REST:
             printf("PLAY + R%s %lums @%lu\r\n",
-                   psz_play_dur_suffix(px_event->u8_dur_x2, px_event->b_dotted),
+                   psz_play_dur_suffix(px_event->u8_dur_x2, px_event->u8_dot_count),
                    (unsigned long)(px_event->u32_ticks *
                                    (PLAY_SCHED_TICK_US / 1000U)),
                    (unsigned long)px_event->u32_src_offset);

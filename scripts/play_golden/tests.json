@@ -107,5 +107,54 @@
     "file": "duty_percent.play",
     "policy": "strict",
     "aliases": ["G10", "duty-nn", "D5b"]
+  },
+  "multi_dot": {
+    "description": "G15 D26 - chained dot duration (Q / Q. / Q.. / Q...)",
+    "tier": "feature",
+    "file": "multi_dot.play",
+    "policy": "strict",
+    "aliases": ["G15", "D26", "multi-dot"]
+  },
+  "repeat_carry": {
+    "description": "G13 S12 - ]:-3 no restore; CDEFGAB^ climbs 3 octaves + final C",
+    "tier": "feature",
+    "file": "repeat_carry.play",
+    "policy": "strict",
+    "aliases": ["G13", "S12", "repeat-carry"]
+  },
+  "repeat_restore": {
+    "description": "G13 S12 S14 - ]:3 restore; C4 major scale x3",
+    "tier": "feature",
+    "file": "repeat_restore.play",
+    "policy": "strict",
+    "aliases": ["G13-restore", "repeat-restore"]
+  },
+  "repeat_restore_plus": {
+    "description": "G13 S12 - ]:+3 explicit restore; C4 major x3",
+    "tier": "feature",
+    "file": "repeat_restore_plus.play",
+    "policy": "strict",
+    "aliases": ["repeat-restore-plus"]
+  },
+  "repeat_count_edge": {
+    "description": "G13 S14 - ]:0/:1 once; ]:2 twice",
+    "tier": "feature",
+    "file": "repeat_count_edge.play",
+    "policy": "strict",
+    "aliases": ["S14", "repeat-count"]
+  },
+  "repeat_carry_one": {
+    "description": "G13 S12 - ]:-1 single pass",
+    "tier": "feature",
+    "file": "repeat_carry_one.play",
+    "policy": "strict",
+    "aliases": ["repeat-carry-one"]
+  },
+  "repeat_nested": {
+    "description": "G13 - nested loop; inner ]:-2 carry; outer ]:+2 restore",
+    "tier": "feature",
+    "file": "repeat_nested.play",
+    "policy": "strict",
+    "aliases": ["repeat-nested"]
   }
 }

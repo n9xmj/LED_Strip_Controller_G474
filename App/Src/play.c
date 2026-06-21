@@ -43,7 +43,7 @@ typedef struct
 {
     uint8_t  u8_octave;
     uint8_t  u8_dur_x2;
-    bool     b_dotted;
+    uint8_t  u8_dot_count;
     uint8_t  u8_duty_num;
     uint8_t  u8_duty_den;
     char     c_last_letter;
@@ -57,7 +57,7 @@ typedef struct
     uint8_t  u8_volume_pct;
     uint8_t  u8_beat_unit_x2;
     uint8_t  u8_dur_x2;
-    bool     b_dotted;
+    uint8_t  u8_dot_count;
     uint8_t  u8_duty_num;
     uint8_t  u8_duty_den;
     int16_t  i16_transpose;
@@ -71,7 +71,7 @@ typedef struct
     int8_t   i8_semi;
     uint8_t  u8_octave;
     uint8_t  u8_dur_x2;
-    bool     b_dotted;
+    uint8_t  u8_dot_count;
     uint8_t  u8_duty_num;
     uint8_t  u8_duty_den;
     bool     b_is_rest;
@@ -84,6 +84,7 @@ typedef struct
     uint32_t            u32_close_bracket;
     uint32_t            u32_after_block;
     uint16_t            u16_remaining;
+    bool                b_restore_on_reentry;
     play_ctx_snapshot_t x_snap;
 } play_repeat_frame_t;
 typedef struct
@@ -182,7 +183,7 @@ static float f_play_calc_hz(uint8_t u8_octave, int8_t i8_semitone);
 static uint32_t u32_play_calc_note_ticks(uint16_t u16_tempo_bpm,
                                          uint8_t u8_beat_unit_x2,
                                          uint8_t u8_dur_x2,
-                                         bool b_dotted);
+                                         uint8_t u8_dot_count);
 static void v_play_apply_duty_shorthand(play_note_memory_t *px_mem,
                                         uint8_t u8_num);
 static void v_play_apply_duty_percent(play_note_memory_t *px_mem,
@@ -226,7 +227,7 @@ static void v_play_start_note(play_runtime_t *px_rt,
                               int8_t i8_semi,
                               uint8_t u8_octave,
                               uint8_t u8_dur_x2,
-                              bool b_dotted,
+                              uint8_t u8_dot_count,
                               uint8_t u8_duty_num,
                               uint8_t u8_duty_den,
                               bool b_is_rest,
@@ -241,7 +242,7 @@ static void v_play_emit_resolve(play_runtime_t *px_rt,
                                 char c_letter,
                                 uint8_t u8_octave,
                                 uint8_t u8_dur_x2,
-                                bool b_dotted,
+                                uint8_t u8_dot_count,
                                 bool b_is_rest,
                                 float f_hz,
                                 uint32_t u32_ticks);
@@ -372,7 +373,7 @@ static void v_play_note_mem_init_defaults(play_note_memory_t *px_mem)
     }
     px_mem->u8_octave = PLAY_DEFAULT_OCTAVE;
     px_mem->u8_dur_x2 = PLAY_DEFAULT_DUR_X2;
-    px_mem->b_dotted = false;
+    px_mem->u8_dot_count = 0U;
     px_mem->u8_duty_num = PLAY_DEFAULT_DUTY_NUM;
     px_mem->u8_duty_den = PLAY_DEFAULT_DUTY_DEN;
     px_mem->c_last_letter = 'C';
@@ -429,7 +430,7 @@ static void v_play_emit_resolve(play_runtime_t *px_rt,
                                 char c_letter,
                                 uint8_t u8_octave,
                                 uint8_t u8_dur_x2,
-                                bool b_dotted,
+                                uint8_t u8_dot_count,
                                 bool b_is_rest,
                                 float f_hz,
                                 uint32_t u32_ticks)
@@ -445,7 +446,7 @@ static void v_play_emit_resolve(play_runtime_t *px_rt,
         .u8_octave = u8_octave,
         .u8_volume_pct = px_rt->x_public.u8_volume_pct,
         .u8_dur_x2 = u8_dur_x2,
-        .b_dotted = b_dotted,
+        .u8_dot_count = u8_dot_count,
         .b_is_rest = b_is_rest,
         .c_letter = c_letter,
         .f_hz = f_hz,
@@ -465,6 +466,49 @@ static void v_play_skip_ws(play_runtime_t *px_rt)
     {
         px_rt->x_public.u32_src_offset++;
     }
+}
+/** @brief Count contiguous `.` at *pu32_off and advance (D26). */
+static uint8_t u8_play_consume_dot_run(const char *psz, uint32_t *pu32_off)
+{
+    uint8_t u8_n = 0U;
+    if (psz == NULL || pu32_off == NULL)
+    {
+        return 0U;
+    }
+    while (psz[*pu32_off] == '.' && u8_n < 255U)
+    {
+        u8_n++;
+        (*pu32_off)++;
+    }
+    return u8_n;
+}
+/** @brief Apply one dot-modifier run; STRICT faults on second run in same token. */
+static bool b_play_apply_dot_run(play_runtime_t *px_rt,
+                                 play_note_memory_t *px_work,
+                                 bool *pb_saw_dot,
+                                 const char *psz,
+                                 uint32_t *pu32_off)
+{
+    uint8_t u8_run;
+    if (px_rt == NULL || px_work == NULL || pb_saw_dot == NULL ||
+        psz == NULL || pu32_off == NULL)
+    {
+        return false;
+    }
+    u8_run = u8_play_consume_dot_run(psz, pu32_off);
+    if (u8_run == 0U)
+    {
+        (void)b_play_fault(px_rt, PLAY_FAULT_CLASS_RECOVERABLE, "bad dot suffix");
+        return false;
+    }
+    if (*pb_saw_dot && px_rt->e_fault_policy == PLAY_FAULT_POLICY_STRICT)
+    {
+        (void)b_play_fault(px_rt, PLAY_FAULT_CLASS_RECOVERABLE, "duplicate dot");
+        return false;
+    }
+    px_work->u8_dot_count = u8_run;
+    *pb_saw_dot = true;
+    return true;
 }
 static bool b_play_scan_digit_run_u16(const char *psz,
                                       uint32_t u32_off_in,
@@ -1632,7 +1676,7 @@ static float f_play_calc_hz(uint8_t u8_octave, int8_t i8_semitone)
 static uint32_t u32_play_calc_note_ticks(uint16_t u16_tempo_bpm,
                                          uint8_t u8_beat_unit_x2,
                                          uint8_t u8_dur_x2,
-                                         bool b_dotted)
+                                         uint8_t u8_dot_count)
 {
     if (u16_tempo_bpm == 0U)
     {
@@ -1643,9 +1687,10 @@ static uint32_t u32_play_calc_note_ticks(uint16_t u16_tempo_bpm,
         u8_beat_unit_x2 = PLAY_DEFAULT_BEAT_UNIT_X2;
     }
     uint64_t u64_num = 60000ULL * (uint64_t)u8_dur_x2;
-    if (b_dotted)
+    if (u8_dot_count > 0U)
     {
-        u64_num = (u64_num * 3ULL) / 2ULL;
+        uint64_t u64_pow = 1ULL << u8_dot_count;
+        u64_num = u64_num * ((u64_pow << 1U) - 1ULL) / u64_pow;
     }
     uint64_t u64_den = (uint64_t)u16_tempo_bpm * (uint64_t)u8_beat_unit_x2;
     uint32_t u32_ms = (uint32_t)(u64_num / u64_den);
@@ -1832,21 +1877,23 @@ static bool b_play_parse_pitch_token(play_runtime_t *px_rt,
                                        "bad duration letter");
                     return false;
                 }
-                x_work.b_dotted = false;
+                x_work.u8_dot_count = 0U;
                 b_saw_dur = true;
                 px_rt->x_public.u32_src_offset++;
                 if (psz[px_rt->x_public.u32_src_offset] == '.')
                 {
-                    if (b_saw_dot &&
-                        px_rt->e_fault_policy == PLAY_FAULT_POLICY_STRICT)
+                    if (!b_play_apply_dot_run(px_rt, &x_work, &b_saw_dot, psz,
+                                              &px_rt->x_public.u32_src_offset))
                     {
-                        (void)b_play_fault(px_rt, PLAY_FAULT_CLASS_RECOVERABLE,
-                                           "duplicate dot");
                         return false;
                     }
-                    x_work.b_dotted = true;
-                    b_saw_dot = true;
-                    px_rt->x_public.u32_src_offset++;
+                }
+                break;
+            case '.':
+                if (!b_play_apply_dot_run(px_rt, &x_work, &b_saw_dot, psz,
+                                          &px_rt->x_public.u32_src_offset))
+                {
+                    return false;
                 }
                 break;
             case '_':
@@ -1944,7 +1991,7 @@ static bool b_play_parse_pitch_token(play_runtime_t *px_rt,
             return false;
         }
         x_work.u8_dur_x2 = px_rt->x_note_mem.u8_dur_x2;
-        x_work.b_dotted = px_rt->x_note_mem.b_dotted;
+        x_work.u8_dot_count = px_rt->x_note_mem.u8_dot_count;
     }
     if (!b_saw_oct)
     {
@@ -1976,7 +2023,7 @@ static bool b_play_parse_pitch_token(play_runtime_t *px_rt,
         px_rt->x_note_mem.b_has_last_note = true;
     }
     v_play_start_note(px_rt, *pu32_token_start, c_letter, i8_semi,
-                      x_work.u8_octave, x_work.u8_dur_x2, x_work.b_dotted,
+                      x_work.u8_octave, x_work.u8_dur_x2, x_work.u8_dot_count,
                       x_work.u8_duty_num, x_work.u8_duty_den, b_is_rest, -1);
     return true;
 }
@@ -2065,21 +2112,23 @@ static bool b_play_parse_absolute_token(play_runtime_t *px_rt,
                                        "bad duration letter");
                     return false;
                 }
-                x_work.b_dotted = false;
+                x_work.u8_dot_count = 0U;
                 b_saw_dur = true;
                 px_rt->x_public.u32_src_offset++;
                 if (psz[px_rt->x_public.u32_src_offset] == '.')
                 {
-                    if (b_saw_dot &&
-                        px_rt->e_fault_policy == PLAY_FAULT_POLICY_STRICT)
+                    if (!b_play_apply_dot_run(px_rt, &x_work, &b_saw_dot, psz,
+                                              &px_rt->x_public.u32_src_offset))
                     {
-                        (void)b_play_fault(px_rt, PLAY_FAULT_CLASS_RECOVERABLE,
-                                           "duplicate dot");
                         return false;
                     }
-                    x_work.b_dotted = true;
-                    b_saw_dot = true;
-                    px_rt->x_public.u32_src_offset++;
+                }
+                break;
+            case '.':
+                if (!b_play_apply_dot_run(px_rt, &x_work, &b_saw_dot, psz,
+                                          &px_rt->x_public.u32_src_offset))
+                {
+                    return false;
                 }
                 break;
             case '_':
@@ -2148,7 +2197,7 @@ static bool b_play_parse_absolute_token(play_runtime_t *px_rt,
             return false;
         }
         x_work.u8_dur_x2 = px_rt->x_note_mem.u8_dur_x2;
-        x_work.b_dotted = px_rt->x_note_mem.b_dotted;
+        x_work.u8_dot_count = px_rt->x_note_mem.u8_dot_count;
     }
     if (!b_saw_oct)
     {
@@ -2160,7 +2209,7 @@ static bool b_play_parse_absolute_token(play_runtime_t *px_rt,
     px_rt->x_note_mem.i8_last_semi = 0;
     px_rt->x_note_mem.b_has_last_note = true;
     v_play_start_note(px_rt, *pu32_token_start, 'N', 0, x_work.u8_octave,
-                      x_work.u8_dur_x2, x_work.b_dotted, x_work.u8_duty_num,
+                      x_work.u8_dur_x2, x_work.u8_dot_count, x_work.u8_duty_num,
                       x_work.u8_duty_den, false, i16_abs);
     return true;
 }
@@ -2170,7 +2219,7 @@ static void v_play_start_note(play_runtime_t *px_rt,
                               int8_t i8_semi,
                               uint8_t u8_octave,
                               uint8_t u8_dur_x2,
-                              bool b_dotted,
+                              uint8_t u8_dot_count,
                               uint8_t u8_duty_num,
                               uint8_t u8_duty_den,
                               bool b_is_rest,
@@ -2179,7 +2228,7 @@ static void v_play_start_note(play_runtime_t *px_rt,
     uint32_t u32_note_ticks = u32_play_calc_note_ticks(px_rt->x_public.u16_tempo_bpm,
                                                        px_rt->u8_beat_unit_x2,
                                                        u8_dur_x2,
-                                                       b_dotted);
+                                                       u8_dot_count);
     uint32_t u32_active = (u32_note_ticks * (uint32_t)u8_duty_num) /
                           (uint32_t)u8_duty_den;
     uint32_t u32_off = u32_token_start;
@@ -2189,7 +2238,7 @@ static void v_play_start_note(play_runtime_t *px_rt,
     px_rt->x_last_completed.i8_semi = i8_semi;
     px_rt->x_last_completed.u8_octave = u8_octave;
     px_rt->x_last_completed.u8_dur_x2 = u8_dur_x2;
-    px_rt->x_last_completed.b_dotted = b_dotted;
+    px_rt->x_last_completed.u8_dot_count = u8_dot_count;
     px_rt->x_last_completed.u8_duty_num = u8_duty_num;
     px_rt->x_last_completed.u8_duty_den = u8_duty_den;
     px_rt->x_last_completed.b_is_rest = b_is_rest;
@@ -2211,7 +2260,7 @@ static void v_play_start_note(play_runtime_t *px_rt,
         px_rt->e_phase = PLAY_SCHED_GAP;
         px_rt->u32_deadline_tick = px_rt->u32_note_end_tick;
         v_play_emit_resolve(px_rt, PLAY_RESOLVE_REST, u32_off, c_letter, u8_octave,
-                            u8_dur_x2, b_dotted, true, 0.0f, u32_note_ticks);
+                            u8_dur_x2, u8_dot_count, true, 0.0f, u32_note_ticks);
         return;
     }
     px_rt->e_phase = PLAY_SCHED_SOUND;
@@ -2230,7 +2279,7 @@ static void v_play_start_note(play_runtime_t *px_rt,
     px_rt->f_current_level = (float)px_rt->x_public.u8_volume_pct / 100.0f;
     v_synth_engine_set_tone(px_rt->f_current_hz, px_rt->f_current_level);
     v_play_emit_resolve(px_rt, PLAY_RESOLVE_NOTE, u32_off, c_letter, u8_octave,
-                        u8_dur_x2, b_dotted, false, px_rt->f_current_hz,
+                        u8_dur_x2, u8_dot_count, false, px_rt->f_current_hz,
                         u32_note_ticks);
 }
 static void v_play_snapshot_save(play_runtime_t *px_rt, play_ctx_snapshot_t *px_out)
@@ -2244,7 +2293,7 @@ static void v_play_snapshot_save(play_runtime_t *px_rt, play_ctx_snapshot_t *px_
     px_out->u8_volume_pct = px_rt->x_public.u8_volume_pct;
     px_out->u8_beat_unit_x2 = px_rt->u8_beat_unit_x2;
     px_out->u8_dur_x2 = px_rt->x_note_mem.u8_dur_x2;
-    px_out->b_dotted = px_rt->x_note_mem.b_dotted;
+    px_out->u8_dot_count = px_rt->x_note_mem.u8_dot_count;
     px_out->u8_duty_num = px_rt->x_note_mem.u8_duty_num;
     px_out->u8_duty_den = px_rt->x_note_mem.u8_duty_den;
     px_out->i16_transpose = px_rt->i16_transpose;
@@ -2264,7 +2313,7 @@ static void v_play_snapshot_restore(play_runtime_t *px_rt,
     px_rt->x_public.u8_volume_pct = px_in->u8_volume_pct;
     px_rt->u8_beat_unit_x2 = px_in->u8_beat_unit_x2;
     px_rt->x_note_mem.u8_dur_x2 = px_in->u8_dur_x2;
-    px_rt->x_note_mem.b_dotted = px_in->b_dotted;
+    px_rt->x_note_mem.u8_dot_count = px_in->u8_dot_count;
     px_rt->x_note_mem.u8_duty_num = px_in->u8_duty_num;
     px_rt->x_note_mem.u8_duty_den = px_in->u8_duty_den;
     px_rt->i16_transpose = px_in->i16_transpose;
@@ -2367,6 +2416,7 @@ static bool b_play_apply_ctx_suffix(play_runtime_t *px_rt, const char *psz_args)
     bool b_saw_oct = false;
     bool b_saw_dot = false;
     bool b_saw_duty = false;
+    bool b_saw_letter = false;
     if (px_rt == NULL || psz_args == NULL)
     {
         return false;
@@ -2382,6 +2432,35 @@ static bool b_play_apply_ctx_suffix(play_runtime_t *px_rt, const char *psz_args)
         }
         switch (c_ch)
         {
+            case 'A':
+            case 'B':
+            case 'C':
+            case 'D':
+            case 'E':
+            case 'F':
+            case 'G':
+            {
+                int8_t i8_semi = i8_play_semitone_for_letter(c_ch);
+                if (i8_semi < 0)
+                {
+                    (void)b_play_fault(px_rt, PLAY_FAULT_CLASS_RECOVERABLE,
+                                       "bad ctx pitch letter");
+                    return false;
+                }
+                if (b_saw_letter &&
+                    px_rt->e_fault_policy == PLAY_FAULT_POLICY_STRICT)
+                {
+                    (void)b_play_fault(px_rt, PLAY_FAULT_CLASS_RECOVERABLE,
+                                       "duplicate ctx pitch");
+                    return false;
+                }
+                x_work.c_last_letter = c_ch;
+                x_work.i8_last_semi = i8_semi;
+                x_work.b_has_last_note = true;
+                b_saw_letter = true;
+                u32_i++;
+                break;
+            }
             case '0':
             case '1':
             case '2':
@@ -2422,21 +2501,23 @@ static bool b_play_apply_ctx_suffix(play_runtime_t *px_rt, const char *psz_args)
                                        "bad duration letter");
                     return false;
                 }
-                x_work.b_dotted = false;
+                x_work.u8_dot_count = 0U;
                 b_saw_dur = true;
                 u32_i++;
                 if (psz_args[u32_i] == '.')
                 {
-                    if (b_saw_dot &&
-                        px_rt->e_fault_policy == PLAY_FAULT_POLICY_STRICT)
+                    if (!b_play_apply_dot_run(px_rt, &x_work, &b_saw_dot, psz_args,
+                                              &u32_i))
                     {
-                        (void)b_play_fault(px_rt, PLAY_FAULT_CLASS_RECOVERABLE,
-                                           "duplicate dot");
                         return false;
                     }
-                    x_work.b_dotted = true;
-                    b_saw_dot = true;
-                    u32_i++;
+                }
+                break;
+            case '.':
+                if (!b_play_apply_dot_run(px_rt, &x_work, &b_saw_dot, psz_args,
+                                          &u32_i))
+                {
+                    return false;
                 }
                 break;
             case '_':
@@ -2505,7 +2586,7 @@ static bool b_play_apply_ctx_suffix(play_runtime_t *px_rt, const char *psz_args)
             return false;
         }
         x_work.u8_dur_x2 = px_rt->x_note_mem.u8_dur_x2;
-        x_work.b_dotted = px_rt->x_note_mem.b_dotted;
+        x_work.u8_dot_count = px_rt->x_note_mem.u8_dot_count;
     }
     if (!b_saw_oct)
     {
@@ -2557,7 +2638,7 @@ static bool b_play_exec_extension(play_runtime_t *px_rt)
         v_play_emit_resolve(px_rt, PLAY_RESOLVE_DEBUG, u32_off, '\\',
                             px_rt->x_note_mem.u8_octave,
                             px_rt->x_note_mem.u8_dur_x2,
-                            px_rt->x_note_mem.b_dotted, false, 0.0f, 0U);
+                            px_rt->x_note_mem.u8_dot_count, false, 0.0f, 0U);
         return true;
     }
     if (strcmp(psz_cmd, "noop") != 0)
@@ -2690,6 +2771,15 @@ static bool b_play_exec_question(play_runtime_t *px_rt)
                         false, false, 0.0f, 0U);
     return true;
 }
+static uint16_t u16_play_repeat_pass_count(uint16_t u16_mag)
+{
+    /* S14: :0 and :1 each play once; :n (n>=2) plays n times. */
+    if (u16_mag <= 1U)
+    {
+        return 1U;
+    }
+    return u16_mag;
+}
 static bool b_play_open_repeat(play_runtime_t *px_rt)
 {
     const char *psz = px_rt->x_public.psz_src;
@@ -2729,17 +2819,29 @@ static bool b_play_open_repeat(play_runtime_t *px_rt)
         return false;
     }
     u32_i++;
-    uint16_t u16_count = 0U;
+    bool b_restore = true;
+    if (psz[u32_i] == '+')
+    {
+        b_restore = true;
+        u32_i++;
+    }
+    else if (psz[u32_i] == '-')
+    {
+        b_restore = false;
+        u32_i++;
+    }
+    uint16_t u16_mag = 0U;
     bool b_have_count = false;
-    if (!b_play_consume_digit_run_u16_at(px_rt, &u32_i, &u16_count, &b_have_count))
+    if (!b_play_consume_digit_run_u16_at(px_rt, &u32_i, &u16_mag, &b_have_count))
     {
         return false;
     }
-    if (!b_have_count || u16_count == 0U)
+    if (!b_have_count)
     {
         (void)b_play_fault(px_rt, PLAY_FAULT_CLASS_FATAL, "bad repeat count");
         return false;
     }
+    uint16_t u16_count = u16_play_repeat_pass_count(u16_mag);
     if (px_rt->u8_repeat_depth >= PLAY_STACK_MAX_DEPTH)
     {
         (void)b_play_fault(px_rt, PLAY_FAULT_CLASS_FATAL, "repeat stack overflow");
@@ -2750,6 +2852,7 @@ static bool b_play_open_repeat(play_runtime_t *px_rt)
     px_f->u32_close_bracket = u32_close;
     px_f->u32_after_block = u32_i;
     px_f->u16_remaining = u16_count;
+    px_f->b_restore_on_reentry = b_restore;
     v_play_snapshot_save(px_rt, &px_f->x_snap);
     px_rt->u8_repeat_depth++;
     px_rt->x_public.u32_src_offset = px_f->u32_body_start;
@@ -2772,7 +2875,10 @@ static bool b_play_close_repeat(play_runtime_t *px_rt)
     if (px_f->u16_remaining > 1U)
     {
         px_f->u16_remaining--;
-        v_play_snapshot_restore(px_rt, &px_f->x_snap);
+        if (px_f->b_restore_on_reentry)
+        {
+            v_play_snapshot_restore(px_rt, &px_f->x_snap);
+        }
         px_rt->x_public.u32_src_offset = px_f->u32_body_start;
     }
     else
@@ -3010,7 +3116,7 @@ static bool b_play_exec_next(play_runtime_t *px_rt)
             int8_t i8_replay_semi;
             uint8_t u8_replay_oct;
             uint8_t u8_replay_dur;
-            bool b_replay_dot;
+            uint8_t u8_replay_dot_count;
             uint8_t u8_replay_duty_num;
             uint8_t u8_replay_duty_den;
             bool b_replay_rest;
@@ -3024,7 +3130,7 @@ static bool b_play_exec_next(play_runtime_t *px_rt)
                 i8_replay_semi = 0;
                 u8_replay_oct = PLAY_DEFAULT_OCTAVE;
                 u8_replay_dur = PLAY_DEFAULT_DUR_X2;
-                b_replay_dot = false;
+                u8_replay_dot_count = 0U;
                 u8_replay_duty_num = PLAY_DEFAULT_DUTY_NUM;
                 u8_replay_duty_den = PLAY_DEFAULT_DUTY_DEN;
                 b_replay_rest = false;
@@ -3035,7 +3141,7 @@ static bool b_play_exec_next(play_runtime_t *px_rt)
                 i8_replay_semi = px_rt->x_last_completed.i8_semi;
                 u8_replay_oct = px_rt->x_last_completed.u8_octave;
                 u8_replay_dur = px_rt->x_last_completed.u8_dur_x2;
-                b_replay_dot = px_rt->x_last_completed.b_dotted;
+                u8_replay_dot_count = px_rt->x_last_completed.u8_dot_count;
                 u8_replay_duty_num = px_rt->x_last_completed.u8_duty_num;
                 u8_replay_duty_den = px_rt->x_last_completed.u8_duty_den;
                 b_replay_rest = px_rt->x_last_completed.b_is_rest;
@@ -3045,9 +3151,9 @@ static bool b_play_exec_next(play_runtime_t *px_rt)
                 }
             }
             v_play_emit_resolve(px_rt, PLAY_RESOLVE_META, u32_off, '~', u8_replay_oct,
-                                u8_replay_dur, b_replay_dot, b_replay_rest, 0.0f, 0U);
+                                u8_replay_dur, u8_replay_dot_count, b_replay_rest, 0.0f, 0U);
             v_play_start_note(px_rt, u32_off, c_replay_letter, i8_replay_semi,
-                              u8_replay_oct, u8_replay_dur, b_replay_dot,
+                              u8_replay_oct, u8_replay_dur, u8_replay_dot_count,
                               u8_replay_duty_num, u8_replay_duty_den, b_replay_rest,
                               i16_replay_abs);
             return true;
