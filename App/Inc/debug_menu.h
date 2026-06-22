@@ -9,6 +9,8 @@
 extern void v_debug_menu_init(void);
 extern void v_debug_menu_service(void);
 
-/* The PLAY string-entry handler (also the top-level 'S' automation hook).
- * Exported so the test executive can reuse it verbatim (test_harness 'P' op). */
+/** HuIL PLAY string entry (top-level @c S and @c m→@c s): term line editor, 255 chars. */
 extern void v_debug_play_playstr(void);
+
+/** Start PLAY from a NUL-terminated source (test-harness @c P op; up to PLAY_HARNESS_LINE_MAX). */
+extern bool b_debug_play_feed_string(const char *psz_src);

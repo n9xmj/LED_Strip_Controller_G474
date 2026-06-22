@@ -1,0 +1,82 @@
+{
+  "_about": "Golden vectors for bounded x_term_getline_editor (W16), via harness 'B [preload_hex]/key_hex'. field_width=21, max_len=81. preload in JSON is plain ASCII (script hex-encodes it). Tab=09 rc=1, Shift-Tab CSI Z rc=2, ESC rc=3, Ctrl-C rc=4.",
+
+  "field_enter_empty": {
+    "desc": "Enter on empty bounded field",
+    "send": "0D",
+    "expect_rc": "0",
+    "expect_line": ""
+  },
+  "field_type_hello": {
+    "desc": "Type hello + Enter",
+    "send": "68656C6C6F0D",
+    "expect_rc": "0",
+    "expect_line": "hello"
+  },
+  "field_escape": {
+    "desc": "Partial line + bare ESC (no newline on exit)",
+    "send": "68656C6C1B",
+    "expect_rc": "3",
+    "expect_line": "hell"
+  },
+  "field_tab_accept": {
+    "desc": "hello + Tab -> TERM_LINE_TAB form accept",
+    "send": "68656C6C6F09",
+    "expect_rc": "1",
+    "expect_line": "hello"
+  },
+  "field_shift_tab": {
+    "desc": "hello + Shift-Tab (CSI Z) -> TERM_LINE_SHIFT_TAB",
+    "send": "68656C6C6F1B5B5A",
+    "expect_rc": "2",
+    "expect_line": "hello"
+  },
+  "field_long_entry": {
+    "desc": "Type 30 chars (> viewport 21) + Enter; full buffer kept",
+    "send": "6162636465666768696A6B6C6D6E6F707172737475767778797A313233340D",
+    "expect_rc": "0",
+    "expect_line": "abcdefghijklmnopqrstuvwxyz1234"
+  },
+  "field_preload_append": {
+    "desc": "Preload 24 digits, append X at EOL + Enter",
+    "preload": "012345678901234567890123",
+    "send": "580D",
+    "expect_rc": "0",
+    "expect_line": "012345678901234567890123X"
+  },
+  "field_preload_home_insert": {
+    "desc": "Preload 30x a, Home, insert b at start",
+    "preload": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+    "send": "1B5B48620D",
+    "expect_rc": "0",
+    "expect_line": "baaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+  },
+  "field_preload_left_insert": {
+    "desc": "Preload 21 chars (full viewport), Left, insert X before last char",
+    "preload": "012345678901234567890",
+    "send": "1B5B44580D",
+    "expect_rc": "0",
+    "expect_line": "01234567890123456789X0"
+  },
+  "field_preload_scroll_edit": {
+    "desc": "Preload 40 zeros, Home+Right+Right, insert dot at index 2",
+    "preload": "0000000000000000000000000000000000000000",
+    "send": "1B5B481B5B431B5B432E0D",
+    "expect_rc": "0",
+    "expect_line": "00.00000000000000000000000000000000000000"
+  },
+  "field_backspace_eol": {
+    "desc": "Preload hello, BS at EOL + Enter -> hell",
+    "preload": "hello",
+    "send": "080D",
+    "expect_rc": "0",
+    "expect_line": "hell"
+  },
+  "field_ctrlk_kill": {
+    "desc": "Preload hello, Home+Right+Ctrl-K + Enter -> h",
+    "preload": "hello",
+    "send": "1B5B481B5B430B0D",
+    "expect_rc": "0",
+    "expect_line": "h"
+  }
+}

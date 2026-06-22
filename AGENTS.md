@@ -123,15 +123,15 @@ Working end-to-end on the bench (mic → DMA → job queue → main-context hand
 
 ### Terminal line editor (`App/term.*` — `x_term_getline_editor`)
 
-Cooperative line editor on `i16_term_get_key()`. Options in `term_line_edit_t`: **`pc_line`**
-(in/out buffer + optional default on entry — not from history), **`u16_max_len`** (required),
-**`pu8_hist` / `u16_hist_size`**, **`pc_prompt`** (editor-owned print), **`u16_field_width`**
-(`0` = full-line soft-wrap; non-zero = single-row bounded field, EOL-clamped).
+Cooperative line editor on `i16_term_get_key()`. Options in `term_line_edit_t`:
+**`pc_line`** (in/out + optional default on entry — cursor starts at end),
+**`u16_max_len`**, history pool, **`pc_prompt`**, **`u16_field_width`**
+(`0` = unbounded canvas `N=max_len-1`, scroll-up OK; non-zero = single-row bounded
+viewport, EOL-clamped, entry still up to `max_len-1` with horizontal scroll).
 
-**Bounded field invariants:** clear/paint uses **space overwrite** within the field window
-(never DCH — inline neighbors on the same row must not shift). Tab / Shift-Tab accept with
-`TERM_LINE_TAB` / `TERM_LINE_SHIFT_TAB` (full-line mode ignores Tab). No newline on bounded
-exit. HuIL: debug-menu `<term>` → **`l`** full-line, **`f`** three-label form demo.
+**Canvas init (both modes):** prompt → `N` spaces → CEL if unbounded → `CUB(N)` →
+`DECSC`. Bounded: suffix repaint + space-pad; no CEL (protects inline neighbors).
+Tab / Shift-Tab accept in bounded mode. HuIL: `<term>` → **`l`** / **`f`**.
 
 See [`Docs/planning/line-editor-plan.md`](Docs/planning/line-editor-plan.md) and
 [`.grok/memory/session-handoff-2026-06-21-line-editor.md`](.grok/memory/session-handoff-2026-06-21-line-editor.md).

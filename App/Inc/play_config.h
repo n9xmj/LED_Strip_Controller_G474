@@ -36,9 +36,21 @@
 
 
 
-/** @brief Max typed PLAY line for UART entry (incl. room for NUL); heap-backed in debug menu. */
+/** @brief HuIL playstr line editor buffer (255 entry chars + NUL). */
 
-#define PLAY_DEBUG_LINE_MAX          (4096U)
+#define PLAY_HUIL_LINE_MAX           (256U)
+
+/** @brief HuIL playstr history pool (static, dedicated to string entry). */
+
+#define PLAY_HUIL_HIST_SIZE          (1024U)
+
+/** @brief Test-harness @c P op — max PLAY source bytes (golden-file ceiling). */
+
+#define PLAY_HARNESS_LINE_MAX        (4096U)
+
+/** @brief Legacy alias for host scripts (@c play_bench.py). */
+
+#define PLAY_DEBUG_LINE_MAX          PLAY_HARNESS_LINE_MAX
 
 
 

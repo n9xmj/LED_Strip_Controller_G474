@@ -14,8 +14,8 @@ there as wish-list item **W1**; promoted to its own board here.
 **Home:** the `term.*` module (`App/Src/term.c` / `App/Inc/term.h`), alongside the
 key reader and the size/cursor queries.
 
-**Status:** v1 **SHIPPED** on G474 bench (2026-06-21) · W7/W11/W15 remain on wish list.
-
+**Status:** v1 **SHIPPED** on G474 bench (2026-06-21) · canvas rework + **W16** viewport **SHIPPED** (2026-06-22).
+Run te
 **Planning model:** [`decision-log-model.md`](decision-log-model.md). Not PLAY work;
 no Must-Ship-Gap fence — just a Big Board + wish list. **ID numbering continues the
 sibling plan's sequence** (it ended at D12 / S6 / I4 / T3 / Q3) so the two boards
@@ -50,8 +50,7 @@ typedef struct
     uint8_t  *pu8_hist;         /* in/out history pool; NULL = history disabled  */
     uint16_t  u16_hist_size;    /* sizeof pool when pu8_hist != NULL             */
     const char *pc_prompt;      /* optional; NULL = no prompt; plain printables  */
-    const char *pc_prompt;      /* optional; NULL = none.               */
-    uint16_t  u16_field_width;  /* max entry + clear window; 0 = EOL.  */
+    uint16_t  u16_field_width;  /* 0 = unbounded canvas; else bounded viewport. */
     /* future (W11/W12/…): completion hook, default insert mode, key timeout, …  */
 }
 term_line_edit_t;
@@ -170,9 +169,14 @@ Instead, track **buffer + cursor index** and emit the **smallest** ANSI update p
 mode restored on every exit path (ENTER / ESC / Ctrl-C / error) is fragile; manual
 suffix print + `CUF` keeps terminal state predictable for the rest of the app.
 
-**v1 scope limit:** soft-wrap + auto-scroll at viewport bottom are handled via CPR
-re-anchor and prompt restore on full redraw (interim **W7** lift). Optional: clamp
-`u16_max_len` from `b_term_get_size()` minus prompt width.
+**v1 scope limit:** ~~soft-wrap + auto-scroll at viewport bottom~~ **Removed 2026-06-22**
+(dynamic wrap / CPR re-anchor deleted). **Fixed canvas** at session open: `N` spaces →
+optional CEL (unbounded only) → `CUB(N)` → `DECSC`. Unbounded: `N = u16_max_len - 1`
+(freeform scroll-up OK). Bounded: `N = field_width` (EOL-clamped, one row) +
+horizontal viewport (**W16**). Entry limit is always `u16_max_len - 1` in both modes.
+Initial cursor at end of `pc_line` (preload / history). Destructive edits: partial
+suffix repaint + space-pad (bounded) or full canvas fill (unbounded); full viewport
+repaint when `u16_view_offset` changes.
 
 **Sync risk:** incremental updates assume no external output during edit. Same as
 today's blocking `i_getline`; history/recall and wrap paths do bounded origin-repaint to
@@ -188,13 +192,14 @@ text to the left on the origin row). Plain printables only in the prompt string.
 **Caller contract:** mid-line entry is supported; text left of `u16_prompt_col` on
 the origin row is preserved across wrap redraw. BOL start remains the common case.
 
-### S11 — bounded field window *(resolved 2026-06-22)*
-`u16_field_width` (0 = unbounded to EOL, HuIL default) caps **entry length** and the
-**clear/paint span** independently of `u16_max_len` / history pool size. Redraw uses
-`DCH` over `prompt_len + field_width` cells only — neighbors on the same row (e.g.
-`Tempo:` / `Volume:` / `Voice:` on one status line) are not disturbed unless the caller
-places fields closer together than the declared width. No horizontal shifting of
-external text (stretch: **W15** multiline sub-window editor).
+### S11 — bounded field window *(resolved 2026-06-22; canvas model 2026-06-22)*
+`u16_field_width` (0 = unbounded canvas) sets the **display viewport width** on one
+row (EOL-clamped). Entry limit is **`u16_max_len - 1`** independently (**W16**).
+Session open reserves the canvas (`N` spaces, no CEL in bounded mode, `CUB(N)`,
+`DECSC`). Clear/paint never uses DCH on the row — space overwrite / suffix repaint
+only — so inline neighbors (`Tempo:` / `Volume:` on one status line) stay put.
+`u16_view_offset` slides the viewport when the cursor would leave the window.
+Tab / Shift-Tab accept in bounded mode; no trailing newline on exit.
 
 ### D15 — exit code & line contract *(resolved 2026-06-21)*
 Small enum `term_line_t`. `pc_line` is **always** NUL-terminated and holds the current
@@ -342,6 +347,10 @@ Mirror the existing harness pattern (T2/T3).
   `{rc, line}` (and optional resulting history) covering insert, mid-line insert,
   Left/Right/Home/End, BS, Delete, **mid-line Space (S10)**, whole-line erase, Up/Down
   recall, ESC/Ctrl-C.
+- **Bounded field (W16):** harness **`B [preload_hex]/key_hex`** op (field_width=21,
+  max_len=81); golden `scripts/term_golden/lineedit_field.json`; bench
+  `scripts/term_lineedit_field_bench.py` — Tab/Shift-Tab accept, long entry beyond
+  viewport, preload + Home/Left scroll-path edits.
 - **HuIL menu entry** under the `<term>` submenu (suggest key `l` = "line") for live
   feel-testing.
 
@@ -367,7 +376,8 @@ function signature. `TERM_LINE_ERROR` if `px_edit` is NULL, `pc_line` is NULL, o
 
 | ID | Subject |
 |----|---------|
-| **W7** | **Soft-wrap-aware redraw** — v1 ships interim single-line wrap + scroll re-anchor; full W7 = polish + golden vectors for long-line edge cases |
+| **W7** | ~~Soft-wrap-aware redraw~~ **Retired** — dynamic wrap machinery removed; unbounded uses fixed `max_len-1` canvas + terminal scroll |
+| **W16** | **Bounded horizontal viewport** — ✅ shipped 2026-06-22: `field_width` = display window; entry up to `max_len-1`; `u16_view_offset` scroll |
 | **W15** | **Multiline mini text editor** — dedicated sub-window (DECSTBM or alternate screen), basic keys only (motion, insert, delete, kill); not vim/nano; builds on line editor + **I7** |
 | **W8** | **Word-wise motion / edit** — Ctrl/Alt-Left/Right, delete-word (`Ctrl-W`), if the terminal delivers the modified-key sequences |
 | **W9** | **Kill-ring / yank** (`Ctrl-K`/`Ctrl-U`/`Ctrl-Y`) — readline-style cut buffer (builds on D17 option B) |
@@ -390,10 +400,9 @@ function signature. `TERM_LINE_ERROR` if `px_edit` is NULL, `pc_line` is NULL, o
 - **2026-06-21** — **S10** 🟢 Space-at-cursor in v1 (insert path). **I7** 🟢 public
   `v_term_*` primitives — v1 subset (line editor + query refactor), organic growth, **W14**
   = complete the set for API users. **W12** confirmed stretch goal.
-- **2026-06-22** — **D14** revised: `pc_prompt` on `term_line_edit_t`; editor prints +
-  flushes + pins origin. Interim **W7** wrap/scroll + prompt restore on full redraw.
-  **D16** updated: `0x08` = BS, `0x7F`/`ESC[3~` = forward delete. **W15** multiline
-  sub-window editor added to wish list. **S11** `u16_field_width` bounded clear/paint
-  window for inline multi-label rows.
+- **2026-06-22** — **Canvas rework:** unified init (spaces / optional CEL / CUB /
+  DECSC); removed dynamic soft-wrap (`b_wrap_mode`, CPR re-anchor, `v_line_full_redraw`).
+  Unbounded canvas = `max_len-1` cells; bounded = EOL-clamped viewport + **W16**
+  horizontal scroll; entry limit decoupled from display width; cursor starts at EOL.
 - **2026-06-21** — **D14/D15/S7/I5/T4/Q4** 🟢. **Q5** 🟢 `term_line_edit_t` options struct
   (author ~>4-param rule). v1 board locked; PLAY recall+mid-line edit called out under **S10**.

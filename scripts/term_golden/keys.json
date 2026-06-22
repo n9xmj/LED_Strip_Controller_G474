@@ -35,7 +35,7 @@
   "alt_a":     { "desc": "Alt+a meta (D7): ESC 'a'",      "send": "1B61",       "expect": "0x2061" },
   "alt_z":     { "desc": "Alt+Z meta (D7): ESC 'Z'",      "send": "1B5A",       "expect": "0x205A" },
 
-  "unknown":   { "desc": "CSI Z (back-tab) — not in v1 table", "send": "1B5B5A",           "expect": "0xFFFE" },
+  "shift_tab_csi": { "desc": "Shift-Tab / back-tab CSI Z",   "send": "1B5B5A",           "expect": "0x010A" },
   "modified":  { "desc": "Ctrl-Right CSI 1;5C — ;mod deferred","send": "1B5B313B3543",     "expect": "0xFFFE" },
   "overflow":  { "desc": "over-long CSI burst (>5 bytes)",     "send": "1B5B313233343536", "expect": "0xFFFD" }
 }

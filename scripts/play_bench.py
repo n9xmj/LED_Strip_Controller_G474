@@ -10,8 +10,8 @@ Subcommands (also exposed as agent skills /playstr, /playfile, /playtest, /repla
   python scripts/play_bench.py test smoke
   python scripts/play_bench.py list
 
-Automation path on device: ESC×3 → main menu → S (PLAY_DEBUG_MENU_HOOK_KEY) → PLAY>.
-Host sends long bodies in 24-char bursts with 10 ms gaps.
+Automation path on device: enter test harness (0xDA) → P <hex> → PLAY witnesses → 0xA5.
+HuIL: top-level S or m→s uses x_term_getline_editor (255 chars, 1 KiB history).
 """
 
 from __future__ import annotations
@@ -179,7 +179,7 @@ def cmd_test(args: argparse.Namespace) -> int:
 
 def build_parser() -> argparse.ArgumentParser:
     defaults = load_bench_defaults()
-    p = argparse.ArgumentParser(description="PLAY bench runner (debug menu harness)")
+    p = argparse.ArgumentParser(description="PLAY bench runner (harness P op + menu presets)")
     p.add_argument("--port", default=None, help=f"COM port (default {defaults.get('com_port', 'from bench.defaults.json')})")
     p.add_argument("--baud", type=int, default=None, help=f"Baud (default {defaults.get('baud', 921600)})")
     p.add_argument("--stlink-sn", default=None, help="ST-Link SN for optional --reset")
@@ -191,7 +191,7 @@ def build_parser() -> argparse.ArgumentParser:
     p_list = sub.add_parser("list", help="List golden test names")
     p_list.set_defaults(func=cmd_list)
 
-    p_str = sub.add_parser("str", help="Feed inline PLAY via top-level S hook (paced UART)")
+    p_str = sub.add_parser("str", help="Feed inline PLAY via harness P op (hex inject)")
     p_str.add_argument("play_string", help='PLAY source, e.g. "CQ4DEFGABC5 *"')
     p_str.set_defaults(func=cmd_str)
 

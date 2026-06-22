@@ -16,13 +16,13 @@
   "escape_cancel": {
     "desc": "Type partial line + bare ESC",
     "send": "68656C6C1B",
-    "expect_rc": "1",
+    "expect_rc": "3",
     "expect_line": "hell"
   },
   "ctrlc_abort": {
     "desc": "Type partial line + Ctrl-C",
     "send": "7465737403",
-    "expect_rc": "2",
+    "expect_rc": "4",
     "expect_line": "test"
   },
   "mid_space": {

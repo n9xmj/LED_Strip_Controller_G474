@@ -257,10 +257,11 @@ term_line_t;
  *  = no prompt (origin at cursor when the call starts); otherwise the editor
  *  CPR-fetches cursor, prints the prompt there, flushes, and pins the first
  *  editable cell at pre-prompt col + strlen(prompt). @p u16_field_width: 0 =
- *  full-line soft-wrap (entry capped by @p u16_max_len only); non-zero =
- *  single-row bounded field — normalized to min(requested, @p u16_max_len - 1,
- *  cols to EOL from origin). Prompts should be plain printables — no embedded
- *  control/ANSI sequences. */
+ *  unbounded canvas (N = @p u16_max_len - 1 cells; terminal may scroll up;
+ *  CEL on init). Non-zero = single-row bounded viewport — display width is
+ *  min(requested, cols to EOL); entry limit remains @p u16_max_len - 1 with
+ *  horizontal scroll (@ref W16). Prompts should be plain printables — no
+ *  embedded control/ANSI sequences. */
 typedef struct
 {
     char     *pc_line;          /**< in/out buffer; initial default if non-empty. */
@@ -280,10 +281,10 @@ term_line_edit_t;
 /**
  * @brief Cooperative line editor: navigation, insert-at-cursor, history, kill keys.
  *
- * Optional @p pc_prompt is emitted by the editor (entry + wrap redraw). NULL means
- * no prompt. Entry: CPR before prompt print → anchor col = fetched col + prompt
- * len; then flush and DECSC-pin. @p u16_field_width non-zero confines clear/paint
- * to prompt + field on one row (clamped to terminal width); 0 = full-line wrap.
+ * Optional @p pc_prompt is emitted by the editor before canvas init. NULL means
+ * no prompt. Session open: print N spaces (N = canvas cells), optional CEL
+ * (unbounded only), CUB(N), DECSC. @p u16_field_width non-zero selects bounded
+ * single-row mode with horizontal viewport; 0 = unbounded multi-row canvas.
  * In bounded mode Tab / Shift-Tab accept like Enter with @ref TERM_LINE_TAB /
  * @ref TERM_LINE_SHIFT_TAB; ignored in full-line mode.
  * Initial field text is taken from @p px_edit->pc_line only (never prefilled

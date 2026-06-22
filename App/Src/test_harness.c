@@ -14,11 +14,13 @@
 #include <stdbool.h>        /* bool */
 #include <stddef.h>         /* NULL */
 #include <stdlib.h>         /* strtoul */
+#include <string.h>         /* memcpy */
 
 #include "platform.h"       /* HAL_GetTick, ELAPSED_TIME, PROJECT_NAME, ... */
 #include "utils.h"          /* v_app_polling_task */
 #include "term.h"           /* i16_term_get_key, v_term_inject, pc_term_key_name */
-#include "debug_menu.h"     /* v_debug_play_playstr (reused by the 'P' op) */
+#include "play_config.h"    /* PLAY_HARNESS_LINE_MAX */
+#include "debug_menu.h"     /* b_debug_play_feed_string (P op) */
 #include "uart_stream.h"    /* tx-ring status (used by the 'F' flush op) */
 
 /* Defined in app_main.c — the debug-console uart_stream handle, so the flush op
@@ -36,8 +38,12 @@ extern uart_stream_h_t x_app_debug_console_handle(void);
 /** Command-line buffer. Domain commands are short (a letter + a hex burst);
  *  the PLAY op delegates to its own large-line reader, so this stays small. */
 #define HARNESS_LINE_MAX            512u
+/** Long command lines (P op hex = 2× PLAY_HARNESS_LINE_MAX); static, not on stack. */
+#define HARNESS_CMD_LINE_MAX        ((PLAY_HARNESS_LINE_MAX * 2u) + 16u)
 #define HARNESS_LINE_HUIL_MAX       121u   /* 120 entry chars + NUL */
-#define HARNESS_FIELD_WIDTH         21u
+#define HARNESS_LINE_HUIL_HIST_SIZE 1024u  /* [l] history pool (static; not on stack) */
+#define HARNESS_FIELD_WIDTH         21u    /* [f] on-screen viewport width */
+#define HARNESS_FIELD_BUF_MAX       81u    /* [f] line buffer: 80 entry chars + NUL */
 #define HARNESS_FIELD_HIST_SIZE     (HARNESS_FIELD_WIDTH * 21u * 4u + 5u)
 
 typedef enum
@@ -58,6 +64,9 @@ typedef struct
     void      (*pfn_op)(const char *pc_arg);
 }
 harness_op_t;
+
+/** Command-line accumulator (P op hex can be ~8 KiB). */
+static char s_ac_harness_cmd_line[HARNESS_CMD_LINE_MAX];
 
 //------------------------------------------------------------------------------
 // Private helpers
@@ -199,11 +208,55 @@ static void v_harness_op_key(const char *pc_arg)
            (unsigned) (uint16_t) i16_key, pc_term_key_name(i16_key));
 }
 
-/* P : reuse the human/menu PLAY string entry verbatim (reads its own line). */
+/* P <hex> : decode PLAY source bytes (optional trailing 0D stripped), dispatch PLAY,
+ * frame ok=0/1. Buffer holds up to PLAY_HARNESS_LINE_MAX bytes (automation path). */
+static char s_ac_play_harness_line[PLAY_HARNESS_LINE_MAX + 1u];
+
 static void v_harness_op_play(const char *pc_arg)
 {
-    (void) pc_arg;
-    v_debug_play_playstr();
+    uint8_t  au8[PLAY_HARNESS_LINE_MAX];
+    uint16_t u16_n;
+    uint16_t u16_i;
+
+    if (pc_arg == NULL)
+    {
+        printf("<HRN P ERR badhex>\r\n");
+        return;
+    }
+
+    u16_n = u16_harness_hex_to_bytes(pc_arg, au8, PLAY_HARNESS_LINE_MAX);
+    if (u16_n == 0u)
+    {
+        printf("<HRN P ERR badhex>\r\n");
+        return;
+    }
+
+    if ((u16_n > 0u) && (au8[u16_n - 1u] == 0x0Du))
+    {
+        u16_n--;
+    }
+
+    if (u16_n == 0u)
+    {
+        printf("<HRN P ERR empty>\r\n");
+        return;
+    }
+
+    for (u16_i = 0u; u16_i < u16_n; u16_i++)
+    {
+        s_ac_play_harness_line[u16_i] = (char) au8[u16_i];
+    }
+
+    s_ac_play_harness_line[u16_n] = '\0';
+
+    if (b_debug_play_feed_string(s_ac_play_harness_line))
+    {
+        printf("<HRN P ok=1>\r\n");
+    }
+    else
+    {
+        printf("<HRN P ok=0>\r\n");
+    }
 }
 
 /* Print a string with " and \\ escaped for framed harness output. */
@@ -226,22 +279,36 @@ static void v_harness_print_escaped(const char *pc_s)
     }
 }
 
+/* Synthetic terminal replies consumed by x_term_getline_editor() init (CPR + XTWINOPS
+ * 18t) so the injected edit stream is not eaten by query reads (T4 HIL). */
+static const uint8_t s_au8_lineedit_preamble[] =
+{
+    0x1Bu, '[', '1', ';', '1', 'R',
+    0x1Bu, '[', '8', ';', '2', '4', ';', '8', '0', 't',
+};
+
 /* E <hex> : inject scripted key stream, run x_term_getline_editor on an empty
  * line buffer, frame rc + resulting line for golden-vector matching (T4). */
 static void v_harness_op_lineedit(const char *pc_arg)
 {
-    uint8_t          au8_burst[TERM_INJECT_MAX];
-    uint16_t         u16_len = u16_harness_hex_to_bytes(pc_arg, au8_burst,
-                                                          (uint16_t) sizeof(au8_burst));
+    uint8_t          au8_inject[TERM_INJECT_MAX];
+    uint16_t         u16_pre;
+    uint16_t         u16_burst;
     char             ac_line[128];
     term_line_edit_t x_edit = {0};
     term_line_t      x_rc;
 
-    if (u16_len == 0u)
+    u16_pre = (uint16_t) sizeof(s_au8_lineedit_preamble);
+    u16_burst = u16_harness_hex_to_bytes(pc_arg, &au8_inject[u16_pre],
+                                         (uint16_t) (TERM_INJECT_MAX - u16_pre));
+
+    if (u16_burst == 0u)
     {
         printf("<HRN E ERR badhex>\r\n");
         return;
     }
+
+    (void) memcpy(au8_inject, s_au8_lineedit_preamble, (size_t) u16_pre);
 
     ac_line[0]             = '\0';
     x_edit.pc_line         = ac_line;
@@ -250,9 +317,141 @@ static void v_harness_op_lineedit(const char *pc_arg)
     x_edit.pu8_hist        = NULL;
     x_edit.u16_hist_size   = 0u;
 
-    v_term_inject(au8_burst, u16_len);
+    v_term_inject(au8_inject, (uint16_t) (u16_pre + u16_burst));
     x_rc = x_term_getline_editor(&x_edit);
     printf("<HRN E rc=%u line=\"", (unsigned) x_rc);
+    v_harness_print_escaped(ac_line);
+    printf("\">\r\n");
+}
+
+/* Parse printable ASCII from a hex blob into @p pc_out (NUL-terminated). Returns
+ * byte count, or 0 on empty input / parse error. */
+static uint16_t u16_harness_hex_to_cstr(const char *pc_hex, char *pc_out, uint16_t u16_out_max)
+{
+    uint8_t  au8[HARNESS_FIELD_BUF_MAX];
+    uint16_t u16_n;
+    uint16_t u16_i;
+
+    if ((pc_out == NULL) || (u16_out_max == 0u))
+    {
+        return 0u;
+    }
+
+    pc_out[0] = '\0';
+
+    if ((pc_hex == NULL) || (pc_hex[0] == '\0'))
+    {
+        return 0u;
+    }
+
+    u16_n = u16_harness_hex_to_bytes(pc_hex, au8, (uint16_t) (u16_out_max - 1u));
+    if (u16_n == 0u)
+    {
+        return 0u;
+    }
+
+    for (u16_i = 0u; u16_i < u16_n; u16_i++)
+    {
+        pc_out[u16_i] = (char) au8[u16_i];
+    }
+
+    pc_out[u16_n] = '\0';
+    return u16_n;
+}
+
+/* Split "preload_hex/key_hex" at the first '/'. With no slash, preload is empty
+ * and the whole arg is the key stream. Returns key-stream pointer or NULL on error. */
+static const char *pc_harness_field_key_stream(const char *pc_arg, char *pc_pre_hex,
+                                               uint16_t u16_pre_hex_max)
+{
+    const char *pc_slash;
+
+    if (pc_pre_hex != NULL)
+    {
+        pc_pre_hex[0] = '\0';
+    }
+
+    if (pc_arg == NULL)
+    {
+        return NULL;
+    }
+
+    pc_slash = strchr(pc_arg, '/');
+    if (pc_slash == NULL)
+    {
+        return pc_arg;
+    }
+
+    if (pc_pre_hex != NULL)
+    {
+        size_t u_n = (size_t) (pc_slash - pc_arg);
+
+        if (u_n >= (size_t) u16_pre_hex_max)
+        {
+            return NULL;
+        }
+
+        (void) memcpy(pc_pre_hex, pc_arg, u_n);
+        pc_pre_hex[u_n] = '\0';
+    }
+
+    return pc_slash + 1u;
+}
+
+/* B [preload_hex]/key_hex : bounded field editor (field_width=21, max_len=81).
+ * Optional preload is ASCII as hex before '/'; inject stream + run editor; frame
+ * rc + line like the unbounded 'E' op (T4 bounded HIL). */
+static void v_harness_op_lineedit_field(const char *pc_arg)
+{
+    uint8_t          au8_inject[TERM_INJECT_MAX];
+    uint16_t         u16_pre;
+    uint16_t         u16_burst;
+    char             ac_line[HARNESS_FIELD_BUF_MAX];
+    char             ac_pre_hex[HARNESS_FIELD_BUF_MAX * 2u + 1u];
+    const char      *pc_keys;
+    term_line_edit_t x_edit = {0};
+    term_line_t      x_rc;
+
+    pc_keys = pc_harness_field_key_stream(pc_arg, ac_pre_hex, (uint16_t) sizeof(ac_pre_hex));
+    if (pc_keys == NULL)
+    {
+        printf("<HRN B ERR arg>\r\n");
+        return;
+    }
+
+    if ((ac_pre_hex[0] != '\0')
+        && (u16_harness_hex_to_cstr(ac_pre_hex, ac_line, HARNESS_FIELD_BUF_MAX) == 0u))
+    {
+        printf("<HRN B ERR badpreload>\r\n");
+        return;
+    }
+
+    u16_pre = (uint16_t) sizeof(s_au8_lineedit_preamble);
+    u16_burst = u16_harness_hex_to_bytes(pc_keys, &au8_inject[u16_pre],
+                                         (uint16_t) (TERM_INJECT_MAX - u16_pre));
+
+    if (u16_burst == 0u)
+    {
+        printf("<HRN B ERR badhex>\r\n");
+        return;
+    }
+
+    (void) memcpy(au8_inject, s_au8_lineedit_preamble, (size_t) u16_pre);
+
+    if (ac_pre_hex[0] == '\0')
+    {
+        ac_line[0] = '\0';
+    }
+
+    x_edit.pc_line         = ac_line;
+    x_edit.u16_max_len     = HARNESS_FIELD_BUF_MAX;
+    x_edit.u16_field_width = HARNESS_FIELD_WIDTH;
+    x_edit.pu8_hist        = NULL;
+    x_edit.u16_hist_size   = 0u;
+
+    v_term_inject(au8_inject, (uint16_t) (u16_pre + u16_burst));
+    x_rc = x_term_getline_editor(&x_edit);
+    printf("<HRN B rc=%u line=\"", (unsigned) x_rc);
     v_harness_print_escaped(ac_line);
     printf("\">\r\n");
 }
@@ -352,7 +551,8 @@ static const harness_op_t s_ax_harness_ops[] =
 {
     { 'K', "decode key burst <hex> (e.g. K 1B5B41)",        v_harness_op_key         },
     { 'E', "line editor: inject <hex> key stream, run editor", v_harness_op_lineedit },
-    { 'P', "PLAY string entry (reads its own line)",         v_harness_op_play        },
+    { 'B', "bounded field: [preload_hex]/key_hex, field_width=21", v_harness_op_lineedit_field },
+    { 'P', "PLAY: inject source <hex>, start interpreter (<=4096 B)", v_harness_op_play        },
     { 'C', "cursor: inject CPR reply <hex>, run get_cursor",  v_harness_op_cursor      },
     { 'X', "size: inject 18t reply <hex>, run get_size_direct", v_harness_op_size_direct },
     { 'Z', "size: inject CPR reply <hex>, run get_size_cpr",   v_harness_op_size_cpr    },
@@ -365,14 +565,14 @@ static const harness_op_t s_ax_harness_ops[] =
 
 static void v_harness_loop(const harness_op_t *px_ops, uint8_t u8_count)
 {
-    char ac_line[HARNESS_LINE_MAX];
     bool b_running = true;
 
     printf("\r\n<HRN v1 RDY>\r\n");
 
     while (b_running)
     {
-        hrn_line_t x_line = x_harness_read_line(ac_line, (uint16_t) sizeof(ac_line));
+        hrn_line_t x_line = x_harness_read_line(s_ac_harness_cmd_line,
+                                               (uint16_t) sizeof(s_ac_harness_cmd_line));
         char       c_cmd;
         bool       b_dispatched;
 
@@ -386,7 +586,7 @@ static void v_harness_loop(const harness_op_t *px_ops, uint8_t u8_count)
             break;
         }
 
-        c_cmd = ac_line[0];
+        c_cmd = s_ac_harness_cmd_line[0];
         if (c_cmd == '\0')
         {
             continue;                                   /* empty line -> ignore */
@@ -415,7 +615,7 @@ static void v_harness_loop(const harness_op_t *px_ops, uint8_t u8_count)
             {
                 if (px_ops[u8_i].pfn_op != NULL)
                 {
-                    px_ops[u8_i].pfn_op(pc_harness_arg(ac_line));
+                    px_ops[u8_i].pfn_op(pc_harness_arg(s_ac_harness_cmd_line));
                 }
                 b_dispatched = true;
                 break;
@@ -624,7 +824,7 @@ static void v_harness_print_entry_test_layout(void)
 
 void v_test_harness_line_huil(void)
 {
-    static uint8_t s_au8_hist[256];
+    static uint8_t s_au8_hist[HARNESS_LINE_HUIL_HIST_SIZE];
     char           ac_line[HARNESS_LINE_HUIL_MAX];
     term_line_edit_t x_edit = {0};
     term_line_t    x_rc;
@@ -667,7 +867,7 @@ void v_test_harness_line_fields_huil(void)
         { 3u, 68u },  /* after "Label 3:" at col 60 */
     };
     static uint8_t s_au8_hist[HARNESS_FIELD_HIST_SIZE];
-    static char    aa_field_line[3][HARNESS_FIELD_WIDTH + 1u];
+    static char    aa_field_line[3][HARNESS_FIELD_BUF_MAX];
     term_line_edit_t x_edit = {0};
     term_line_t    x_rc;
     uint16_t       u16_field;
@@ -685,7 +885,7 @@ void v_test_harness_line_fields_huil(void)
         (void) fflush(stdout);
 
         x_edit.pc_line         = aa_field_line[u16_field];
-        x_edit.u16_max_len     = (uint16_t) (HARNESS_FIELD_WIDTH + 1u);
+        x_edit.u16_max_len     = HARNESS_FIELD_BUF_MAX;
         x_edit.u16_field_width = HARNESS_FIELD_WIDTH;
         x_edit.pu8_hist        = s_au8_hist;
         x_edit.u16_hist_size   = (uint16_t) sizeof(s_au8_hist);

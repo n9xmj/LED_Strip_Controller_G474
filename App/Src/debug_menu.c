@@ -437,26 +437,6 @@ static void v_debug_led_strip4_off(void)
 
 static play_handle_t px_active_play = PLAY_HANDLE_NULL;
 
-/** @brief Heap line buffer for playstr; kept for reuse across bench sessions. */
-static char *sp_play_line_buf = NULL;
-
-static char *psz_play_line_buf_acquire(void)
-{
-    if (sp_play_line_buf == NULL)
-    {
-        sp_play_line_buf = (char *)malloc((size_t)PLAY_DEBUG_LINE_MAX + 1U);
-        if (sp_play_line_buf == NULL)
-        {
-            printf("PLAY playstr: out of memory (%u bytes)\r\n",
-                   (unsigned)PLAY_DEBUG_LINE_MAX + 1U);
-            return NULL;
-        }
-    }
-
-    sp_play_line_buf[0] = '\0';
-    return sp_play_line_buf;
-}
-
 static char s_ac_play_dur_buf[8];
 
 static const char *psz_play_dur_suffix(uint8_t u8_dur_x2, uint8_t u8_dot_count)
@@ -639,9 +619,29 @@ static void v_debug_play_loop(void)
     (void)b_debug_play_start(psz_play_loop_test, "loop", "PLAY loop test started");
 }
 
+bool b_debug_play_feed_string(const char *psz_src)
+{
+    if (b_play_is_running(px_active_play))
+    {
+        printf("PLAY already running — stop first\r\n");
+        return false;
+    }
+
+    if ((psz_src == NULL) || (psz_src[0] == '\0'))
+    {
+        printf("Empty line\r\n");
+        return false;
+    }
+
+    return b_debug_play_start(psz_src, "playstr", "PLAY started");
+}
+
 void v_debug_play_playstr(void)
 {
-    char *p_c_line;
+    static char    s_ac_line[PLAY_HUIL_LINE_MAX];
+    static uint8_t s_au8_hist[PLAY_HUIL_HIST_SIZE];
+    term_line_edit_t x_edit = {0};
+    term_line_t      x_rc;
 
     if (b_play_is_running(px_active_play))
     {
@@ -649,26 +649,30 @@ void v_debug_play_playstr(void)
         return;
     }
 
-    p_c_line = psz_play_line_buf_acquire();
-    if (p_c_line == NULL)
-    {
-        return;
-    }
+    s_ac_line[0]             = '\0';
+    x_edit.pc_line           = s_ac_line;
+    x_edit.u16_max_len       = PLAY_HUIL_LINE_MAX;
+    x_edit.u16_field_width   = 0u;
+    x_edit.pu8_hist          = s_au8_hist;
+    x_edit.u16_hist_size     = PLAY_HUIL_HIST_SIZE;
+    x_edit.pc_prompt         = "PLAY> ";
 
-    printf("PLAY> ");
-    if (i_getline(p_c_line, (uint16_t)PLAY_DEBUG_LINE_MAX) < 0)
-    {
-        printf("Input cancelled\r\n");
-        return;
-    }
+    x_rc = x_term_getline_editor(&x_edit);
 
-    if (p_c_line[0] == '\0')
+    switch (x_rc)
     {
-        printf("Empty line\r\n");
-        return;
-    }
+        case TERM_LINE_ENTER:
+            (void)b_debug_play_feed_string(s_ac_line);
+            break;
 
-    (void)b_debug_play_start(p_c_line, "playstr", "PLAY started");
+        case TERM_LINE_ESCAPE:
+        case TERM_LINE_CTRLC:
+            printf("Input cancelled\r\n");
+            break;
+
+        default:
+            break;
+    }
 }
 
 static void v_debug_play_terminal_piano(void)
@@ -713,7 +717,7 @@ static const menu_item_t x_player_tests_submenu[] =
     {
         .x_type = MENU_ITEM_FUNCTION,
         .c_key = 's',
-        .p_c_text = "PLAY string entry (<=128 chars)",
+        .p_c_text = "PLAY string entry (line editor, <=255 chars)",
         .pfn_function = v_debug_play_playstr
     },
     {
@@ -1393,7 +1397,7 @@ static const menu_item_t x_debug_top_menu[] =
     {
         .x_type = MENU_ITEM_FUNCTION,
         .c_key = PLAY_DEBUG_MENU_HOOK_KEY,
-        .p_c_text = "PLAY string entry (automation hook; top-level, <=4096 chars)",
+        .p_c_text = "PLAY string entry (line editor, <=255 chars; automation: harness P)",
         .pfn_function = v_debug_play_playstr
     },
     {

@@ -1,16 +1,18 @@
 #!/usr/bin/env python3
 """
-PLAY bench client — drive the debug menu player submenu over UART.
+PLAY bench client — drive PLAY on the G474 via the test-harness REPL or debug menu.
 
-Opens the serial port first (same discipline as smoke_capture.py), optionally
-resets via ST-Link, unwinds submenus with ESC, then feeds PLAY strings or
-menu preset keys and watches for firmware witness lines.
+String feed (playstr / playfile / golden file tests):
+  enter harness (0xDA) → P <hex> → await PLAY witnesses → quit (0xA5)
+
+Menu preset tests (smoke-menu, loop) still use m → preset key.
 """
 
 from __future__ import annotations
 
 import json
 import os
+import re
 import subprocess
 import sys
 import time
@@ -32,14 +34,13 @@ WITNESS_ENDED = "PLAY ended @ off="
 WITNESS_GOLDEN_PASS = "PLAY GOLDEN PASS"
 WITNESS_GOLDEN_FAIL = "PLAY GOLDEN FAIL"
 
-# Match App/Inc/play_config.h — top-level menu hook (not m → s).
-PLAY_MENU_HOOK_KEY = "S"
-PLAY_MAX_LINE_CHARS = 4096
+HARNESS_ENTER = b"\xDA"
+HARNESS_EXIT = b"\xA5"
+HRN_P_OK_RE = re.compile(r"<HRN P ok=(0|1)>")
 
-# Console UART is blocking i_getchar @ 921600 — pace long lines to avoid RX overrun.
-PLAY_TX_BURST_CHARS = 16
-PLAY_TX_BURST_DELAY_S = 0.020
-PLAY_TX_PRE_SEND_DELAY_S = 0.100
+# Match App/Inc/play_config.h — harness P op (HuIL playstr is PLAY_HUIL_LINE_MAX-1).
+PLAY_HARNESS_LINE_MAX = 4096
+PLAY_MAX_LINE_CHARS = PLAY_HARNESS_LINE_MAX
 
 
 def load_bench_defaults() -> dict:
@@ -125,19 +126,37 @@ class PlayBenchClient:
                 time.sleep(0.02)
         return "".join(self._log_chunks)
 
+    def _read_until(self, token: str, timeout_s: float) -> str:
+        assert self._ser is not None
+        buf = ""
+        deadline = time.monotonic() + timeout_s
+        while time.monotonic() < deadline:
+            chunk = self._ser.read(4096)
+            if chunk:
+                text = chunk.decode("utf-8", errors="replace")
+                buf += text
+                self._log_chunks.append(text)
+                sys.stdout.write(text)
+                sys.stdout.flush()
+                if token in buf:
+                    return buf
+            else:
+                time.sleep(0.01)
+        return buf
+
     def _send_key(self, key: str, pause_s: float = 0.08) -> None:
         self._write(key.encode("ascii"))
         time.sleep(pause_s)
 
-    def _send_play_line_paced(self, play_src: str) -> None:
-        """Send PLAY body in bursts; CR terminates i_getline on the MCU."""
-        body = play_src.rstrip("\r\n")
-        for offset in range(0, len(body), PLAY_TX_BURST_CHARS):
-            chunk = body[offset : offset + PLAY_TX_BURST_CHARS]
-            self._write(chunk.encode("ascii"))
-            if offset + PLAY_TX_BURST_CHARS < len(body):
-                time.sleep(PLAY_TX_BURST_DELAY_S)
-        self._write(b"\r")
+    def enter_harness(self) -> bool:
+        self.unwind_to_main_menu()
+        self._write(HARNESS_ENTER)
+        text = self._read_until("<HRN v1 RDY>", 2.0)
+        return "RDY" in text
+
+    def quit_harness(self) -> None:
+        self._write(HARNESS_EXIT)
+        self._read_until("<HRN BYE>", 1.0)
 
     def unwind_to_main_menu(self) -> None:
         for _ in range(3):
@@ -171,36 +190,39 @@ class PlayBenchClient:
             )
 
         self._log_chunks.clear()
-        self.unwind_to_main_menu()
-        self._read_for(0.15)
-        self._send_key(PLAY_MENU_HOOK_KEY, 0.15)
 
-        deadline = time.monotonic() + 5.0
-        buf = ""
-        while time.monotonic() < deadline:
-            chunk = self._ser.read(4096) if self._ser else b""
-            if chunk:
-                text = chunk.decode("utf-8", errors="replace")
-                buf += text
-                self._log_chunks.append(text)
-                sys.stdout.write(text)
-                sys.stdout.flush()
-                if "PLAY>" in buf:
-                    break
-            else:
-                time.sleep(0.02)
-
-        if "PLAY>" not in buf:
+        if not self.enter_harness():
             return PlayRunResult(
                 passed=False,
                 log="".join(self._log_chunks),
-                error="Timed out waiting for PLAY> prompt (top-level S hook)",
+                error="Harness not ready (<HRN v1 RDY> missing)",
             )
 
-        time.sleep(PLAY_TX_PRE_SEND_DELAY_S)
-        self._send_play_line_paced(play_src)
-        return self._await_play_completion(timeout_s, strict=strict,
-                                           expect_start_fail=expect_start_fail)
+        hex_body = play_src.encode("ascii").hex()
+        self._write(f"P {hex_body}\r".encode("ascii"))
+
+        p_text = self._read_until("<HRN P ok=", 5.0)
+        m = HRN_P_OK_RE.search(p_text)
+        if not m:
+            self.quit_harness()
+            return PlayRunResult(
+                passed=False,
+                log="".join(self._log_chunks),
+                error="Timed out waiting for <HRN P ok=…> (harness P op)",
+            )
+
+        if m.group(1) != "1":
+            self.quit_harness()
+            return PlayRunResult(
+                passed=False,
+                log="".join(self._log_chunks),
+                error="PLAY start rejected (<HRN P ok=0>)",
+            )
+
+        result = self._await_play_completion(timeout_s, strict=strict,
+                                             expect_start_fail=expect_start_fail)
+        self.quit_harness()
+        return result
 
     def _await_play_completion(self, timeout_s: float, *,
                                strict: bool = False,
