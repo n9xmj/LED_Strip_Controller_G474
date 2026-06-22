@@ -1,0 +1,76 @@
+{
+  "_about": "Golden vectors for x_term_getline_editor (T4), driven via test-harness 'E <hex>'. Each entry: hex byte stream (printables + edit escapes + terminator 0D/1B/03) injected ahead of the editor; expect_rc = TERM_LINE_* numeric; expect_line = final buffer text. ESC=1B, CSI Left=1B5B44, BS=08 (delete-left), 0x7F=delete-right (Del key / rubout), CSI Del fwd=1B5B337E.",
+
+  "enter_empty": {
+    "desc": "Enter on empty line",
+    "send": "0D",
+    "expect_rc": "0",
+    "expect_line": ""
+  },
+  "type_hello": {
+    "desc": "Type hello + Enter",
+    "send": "68656C6C6F0D",
+    "expect_rc": "0",
+    "expect_line": "hello"
+  },
+  "escape_cancel": {
+    "desc": "Type partial line + bare ESC",
+    "send": "68656C6C1B",
+    "expect_rc": "1",
+    "expect_line": "hell"
+  },
+  "ctrlc_abort": {
+    "desc": "Type partial line + Ctrl-C",
+    "send": "7465737403",
+    "expect_rc": "2",
+    "expect_line": "test"
+  },
+  "mid_space": {
+    "desc": "ab + Left + Space + Enter -> a b",
+    "send": "61621B5B44200D",
+    "expect_rc": "0",
+    "expect_line": "a b"
+  },
+  "mid_insert": {
+    "desc": "abc + Left + insert X + Enter -> abXc",
+    "send": "6162631B5B44580D",
+    "expect_rc": "0",
+    "expect_line": "abXc"
+  },
+  "backspace_eol": {
+    "desc": "hello + BS (0x08) + Enter -> hell",
+    "send": "68656C6C6F080D",
+    "expect_rc": "0",
+    "expect_line": "hell"
+  },
+  "delete_forward": {
+    "desc": "abc + Home + Right + Delete (CSI 3~) + Enter -> ac",
+    "send": "6162631B5B481B5B431B5B337E0D",
+    "expect_rc": "0",
+    "expect_line": "ac"
+  },
+  "delete_forward_7f": {
+    "desc": "abc + Home + Right + Del byte (0x7F) + Enter -> ac",
+    "send": "6162631B5B481B5B437F0D",
+    "expect_rc": "0",
+    "expect_line": "ac"
+  },
+  "mid_multi_space": {
+    "desc": "ab,c + Left + Space x3 + Enter -> ab,   c",
+    "send": "61622C631B5B442020200D",
+    "expect_rc": "0",
+    "expect_line": "ab,   c"
+  },
+  "ctrlx_clear": {
+    "desc": "hello + Ctrl-X + type hi + Enter",
+    "send": "68656C6C6F1868690D",
+    "expect_rc": "0",
+    "expect_line": "hi"
+  },
+  "ctrlk_kill": {
+    "desc": "hello + Home + Right + Ctrl-K + Enter -> h",
+    "send": "68656C6C6F1B5B481B5B430B0D",
+    "expect_rc": "0",
+    "expect_line": "h"
+  }
+}

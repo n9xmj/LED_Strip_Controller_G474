@@ -60,6 +60,7 @@ typedef enum
     EXT_KEY_DELETE,
     EXT_KEY_PGUP,
     EXT_KEY_PGDN,
+    EXT_KEY_SHIFT_TAB,          /* CSI Z (Shift-Tab / back-tab). */
 
     /* --- function keys (0x0200..); enum reserved, v1 keymap does not emit --- */
     EXT_KEY_FUNC_BASE   = 0x0200,
@@ -202,6 +203,104 @@ extern char *pc_term_char_to_str(char c_in, char *pc_out, size_t sz_max);
 extern int i_term_putc_visible(uint8_t u8_ch);
 
 /******************************************************************************
+ * ANSI output primitives (building block #3 — I7)
+ * ----------------------------------------------------------------------------
+ * Public thin wrappers over ANSI.h macros. Application code and higher-level
+ * term.* functions (line editor, queries) emit terminal control through these
+ * rather than scattering raw printf(ANSI_*). See line-editor-plan.md (I7).
+ ******************************************************************************/
+
+extern void v_term_cursor_up(uint16_t u16_count);
+extern void v_term_cursor_down(uint16_t u16_count);
+extern void v_term_cursor_left(uint16_t u16_count);
+extern void v_term_cursor_right(uint16_t u16_count);
+extern void v_term_cursor_move(uint16_t u16_row, uint16_t u16_col);
+extern void v_term_cursor_column(uint16_t u16_col);
+extern void v_term_cursor_visible(bool b_on);
+extern void v_term_save_cursor(void);
+extern void v_term_restore_cursor(void);
+extern void v_term_delete_chars(uint16_t u16_count);
+extern void v_term_clear_eol(void);
+extern void v_term_clear_bol(void);
+extern void v_term_clear_line(void);
+extern void v_term_clear_screen(void);
+/** Emit CSI 6n (request cursor position report). Used by b_term_get_cursor(). */
+extern void v_term_request_cursor(void);
+/** Emit CSI 18t (request text-area size report). Used by b_term_get_size_direct(). */
+extern void v_term_request_text_area(void);
+
+/******************************************************************************
+ * Line editor (building block #4)
+ * ----------------------------------------------------------------------------
+ * Cooperative in-line text entry on top of i16_term_get_key(). Caller prints
+ * its own prompt before calling; editor pins origin via v_term_save_cursor().
+ * See Docs/planning/line-editor-plan.md.
+ ******************************************************************************/
+
+typedef enum
+{
+    TERM_LINE_ENTER      = 0,   /**< Accepted via Enter (CR).                    */
+    TERM_LINE_TAB,              /**< Bounded field: Tab accept (form nav).       */
+    TERM_LINE_SHIFT_TAB,        /**< Bounded field: Shift-Tab accept (back).     */
+    TERM_LINE_ESCAPE,           /**< Bare ESC cancel.                            */
+    TERM_LINE_CTRLC,            /**< Ctrl-C abort.                               */
+    TERM_LINE_ERROR             /**< Bad args (NULL line, zero capacity, …).     */
+}
+term_line_t;
+
+/** Options for x_term_getline_editor(). Zero-init friendly: memset to 0, then
+ *  set @p pc_line and @p u16_max_len (required; 0 = @ref TERM_LINE_ERROR).
+ *  @p pc_line is the in/out buffer and the initial default: a non-empty
+ *  NUL-terminated string is presented on entry (not from history); set
+ *  @p pc_line[0] = '\0' for an empty field. @p pu8_hist NULL disables history;
+ *  @p u16_hist_size is ignored when history is disabled. @p pc_prompt NULL or ""
+ *  = no prompt (origin at cursor when the call starts); otherwise the editor
+ *  CPR-fetches cursor, prints the prompt there, flushes, and pins the first
+ *  editable cell at pre-prompt col + strlen(prompt). @p u16_field_width: 0 =
+ *  full-line soft-wrap (entry capped by @p u16_max_len only); non-zero =
+ *  single-row bounded field — normalized to min(requested, @p u16_max_len - 1,
+ *  cols to EOL from origin). Prompts should be plain printables — no embedded
+ *  control/ANSI sequences. */
+typedef struct
+{
+    char     *pc_line;          /**< in/out buffer; initial default if non-empty. */
+    uint16_t  u16_max_len;      /**< capacity incl. NUL; 0 = error.              */
+    uint8_t  *pu8_hist;         /**< in/out history pool; NULL = disabled.       */
+    uint16_t  u16_hist_size;    /**< sizeof pool when @p pu8_hist != NULL.     */
+    const char *pc_prompt;      /**< optional prompt; NULL = none.               */
+    uint16_t  u16_field_width;  /**< 0=full line; else bounded field width.      */
+}
+term_line_edit_t;
+
+/** Default key-loop timeout (ms) for x_term_getline_editor(). */
+#ifndef TERM_LINE_KEY_TIMEOUT_MS
+#define TERM_LINE_KEY_TIMEOUT_MS    250u
+#endif
+
+/**
+ * @brief Cooperative line editor: navigation, insert-at-cursor, history, kill keys.
+ *
+ * Optional @p pc_prompt is emitted by the editor (entry + wrap redraw). NULL means
+ * no prompt. Entry: CPR before prompt print → anchor col = fetched col + prompt
+ * len; then flush and DECSC-pin. @p u16_field_width non-zero confines clear/paint
+ * to prompt + field on one row (clamped to terminal width); 0 = full-line wrap.
+ * In bounded mode Tab / Shift-Tab accept like Enter with @ref TERM_LINE_TAB /
+ * @ref TERM_LINE_SHIFT_TAB; ignored in full-line mode.
+ * Initial field text is taken from @p px_edit->pc_line only (never prefilled
+ * from history). Present a default by leaving a non-empty string in @p pc_line
+ * before the call; set @p pc_line[0] = '\0' for an empty field.
+ * @p px_edit->pc_line holds the current line on every return path; use the
+ * @ref term_line_t code to accept or discard.
+ *
+ * @param px_edit  Options struct (must be non-NULL; @p pc_line and @p u16_max_len required).
+ * @return Exit code; @ref TERM_LINE_ERROR on bad args (line buffer left untouched).
+ */
+extern term_line_t x_term_getline_editor(term_line_edit_t *px_edit);
+
+/** Human-readable name for a @ref term_line_t exit code. */
+extern const char *pc_term_line_name(term_line_t x_rc);
+
+/******************************************************************************
  * Terminal size / cursor-position queries (building block #2)
  * ----------------------------------------------------------------------------
  * Cooperative queries that ask the terminal where the cursor is / how big it is
@@ -314,9 +413,9 @@ extern const char *pc_term_status_name(term_err_t x_status);
  * code must NOT depend on these.
  ******************************************************************************/
 
-/** Max bytes a single v_term_inject() burst can hold (covers the longest test
- *  vector incl. an overflow burst). */
-#define TERM_INJECT_MAX             16u
+/** Max bytes a single v_term_inject() burst can hold (line-editor harness sessions
+ *  need longer scripted streams than single-key decode vectors). */
+#define TERM_INJECT_MAX             128u
 
 /**
  * @brief [TEST/HIL ONLY] Push a byte burst to be consumed by the *next*

@@ -76,6 +76,7 @@ static const term_keymap_t s_ax_std_keymap[] =
     { TERM_INTRO_CSI, 6u, '~', EXT_KEY_PGDN   },
     { TERM_INTRO_CSI, 7u, '~', EXT_KEY_HOME   },  /* rxvt Home */
     { TERM_INTRO_CSI, 8u, '~', EXT_KEY_END    },  /* rxvt End  */
+    { TERM_INTRO_CSI, 0u, 'Z', EXT_KEY_SHIFT_TAB },
 
     /* SS3 cursor keys (application mode) */
     { TERM_INTRO_SS3, 0u, 'A', EXT_KEY_UP    },
@@ -424,6 +425,111 @@ void v_term_inject(const uint8_t *pu8_bytes, uint16_t u16_count)
 }
 
 //------------------------------------------------------------------------------
+// ANSI output primitives (building block #3 — I7)
+//------------------------------------------------------------------------------
+
+void v_term_cursor_up(uint16_t u16_count)
+{
+    if (u16_count > 0u)
+    {
+        (void) printf(ANSI_CURSOR_UP_FMT, (unsigned) u16_count);
+    }
+}
+
+void v_term_cursor_down(uint16_t u16_count)
+{
+    if (u16_count > 0u)
+    {
+        (void) printf(ANSI_CURSOR_DOWN_FMT, (unsigned) u16_count);
+    }
+}
+
+void v_term_cursor_left(uint16_t u16_count)
+{
+    if (u16_count > 0u)
+    {
+        (void) printf(ANSI_CURSOR_LEFT_FMT, (unsigned) u16_count);
+    }
+}
+
+void v_term_cursor_right(uint16_t u16_count)
+{
+    if (u16_count > 0u)
+    {
+        (void) printf(ANSI_CURSOR_RIGHT_FMT, (unsigned) u16_count);
+    }
+}
+
+void v_term_cursor_move(uint16_t u16_row, uint16_t u16_col)
+{
+    if ((u16_row > 0u) && (u16_col > 0u))
+    {
+        (void) printf(ANSI_MOVE_CURSOR_FMT, (unsigned) u16_row, (unsigned) u16_col);
+    }
+}
+
+void v_term_cursor_column(uint16_t u16_col)
+{
+    if (u16_col > 0u)
+    {
+        (void) printf(ANSI_HORIZONTAL_ABS_FMT, (unsigned) u16_col);
+    }
+}
+
+void v_term_cursor_visible(bool b_on)
+{
+    (void) fputs(b_on ? ANSI_SHOW_CURSOR : ANSI_HIDE_CURSOR, stdout);
+}
+
+void v_term_save_cursor(void)
+{
+    (void) fputs(ANSI_SAVE_CURSOR, stdout);
+}
+
+void v_term_restore_cursor(void)
+{
+    (void) fputs(ANSI_RESTORE_CURSOR, stdout);
+}
+
+void v_term_delete_chars(uint16_t u16_count)
+{
+    if (u16_count > 0u)
+    {
+        (void) printf(ANSI_DEL_CHAR_FMT, (unsigned) u16_count);
+    }
+}
+
+void v_term_clear_eol(void)
+{
+    (void) fputs(ANSI_CLEAR_EOL, stdout);
+}
+
+void v_term_clear_bol(void)
+{
+    (void) fputs(ANSI_CLEAR_BOL, stdout);
+}
+
+void v_term_clear_line(void)
+{
+    (void) fputs(ANSI_CLEAR_LINE, stdout);
+}
+
+void v_term_clear_screen(void)
+{
+    (void) fputs(ANSI_CLEAR_AND_HOME, stdout);
+}
+
+void v_term_request_cursor(void)
+{
+    (void) fputs(ANSI_GET_CURSOR, stdout);
+}
+
+void v_term_request_text_area(void)
+{
+    (void) fputs(ANSI_REPORT_TEXT_AREA, stdout);
+}
+
+//------------------------------------------------------------------------------
 // Terminal size / cursor-position queries (building block #2)
 //------------------------------------------------------------------------------
 
@@ -531,7 +637,7 @@ bool b_term_get_cursor(term_pos_t *px_pos, uint32_t u32_timeout_ms)
         return false;
     }
 
-    printf("%s", ANSI_GET_CURSOR);              /* CSI 6n */
+    v_term_request_cursor();
     x_err = x_term_read_csi_report(au16_p, (uint8_t) TERM_REPORT_MAX_PARAMS,
                                    &u8_n, &c_final, u32_timeout_ms);
 
@@ -559,7 +665,7 @@ bool b_term_get_size_direct(term_size_t *px_size, uint32_t u32_timeout_ms)
         return false;
     }
 
-    printf("%s", ANSI_REPORT_TEXT_AREA);        /* CSI 18t */
+    v_term_request_text_area();
     x_err = x_term_read_csi_report(au16_p, (uint8_t) TERM_REPORT_MAX_PARAMS,
                                    &u8_n, &c_final, u32_timeout_ms);
 
@@ -590,14 +696,14 @@ bool b_term_get_size_cpr(term_size_t *px_size, uint32_t u32_timeout_ms)
 
     /* Save cursor, jump to the far corner (clamped to the real extent), ask for
      * the cursor position (= the size), then restore the cursor (D11). */
-    printf("%s", ANSI_SAVE_CURSOR);             /* DECSC */
-    printf(ANSI_MOVE_CURSOR_FMT, 999u, 999u);   /* CSI 999;999H */
-    printf("%s", ANSI_GET_CURSOR);              /* CSI 6n */
+    v_term_save_cursor();
+    v_term_cursor_move(999u, 999u);
+    v_term_request_cursor();
 
     x_err = x_term_read_csi_report(au16_p, (uint8_t) TERM_REPORT_MAX_PARAMS,
                                    &u8_n, &c_final, u32_timeout_ms);
 
-    printf("%s", ANSI_RESTORE_CURSOR);          /* DECRC (always restore) */
+    v_term_restore_cursor();
 
     if ((x_err == TERM_OK) && (c_final == 'R') && (u8_n >= 2u))
     {
@@ -633,6 +739,1355 @@ bool b_term_get_size(term_size_t *px_size, uint32_t u32_timeout_ms)
 #endif
 }
 
+//------------------------------------------------------------------------------
+// Line editor (building block #4)
+//------------------------------------------------------------------------------
+
+#define TERM_LINE_SCRATCH_MAX           256u
+#define LINE_SHIFT_TAB_ESCZ             ((int16_t) (EXT_MOD_ALT | (uint16_t) 'Z'))
+
+typedef struct
+{
+    char     *pc_line;
+    uint16_t  u16_max_len;
+    uint16_t  u16_cursor;
+    uint16_t  u16_len;
+    uint8_t  *pu8_hist;
+    uint16_t  u16_hist_size;
+    char      ac_scratch[TERM_LINE_SCRATCH_MAX];
+    uint16_t  u16_hist_idx;
+    bool      b_scratch_valid;
+    bool      b_hist_active;
+    uint16_t  u16_origin_row;       /* entry row; from pre-prompt CPR (+ reanchor). */
+    uint16_t  u16_origin_col;       /* first editable col = pre-prompt col + prompt len. */
+    uint16_t  u16_prompt_col;       /* prompt start col (1-based); 0 if no prompt.  */
+    uint16_t  u16_term_cols;        /* terminal width (cols); default if no query */
+    uint16_t  u16_term_rows;        /* terminal height (rows); default if no query */
+    uint16_t  u16_screen_rows;      /* rows last painted for this entry (wrap).   */
+    bool      b_wrap_mode;          /* true => full redraw + absolute cursor.     */
+    const char *pc_prompt;          /* optional; printed + restored on redraw.    */
+    uint16_t  u16_prompt_len;       /* strlen(pc_prompt); 0 when NULL / empty.    */
+    uint16_t  u16_field_width;      /* bounded entry + clear/paint span; 0=full.  */
+    bool      b_bounded_field;      /* true => single-row field window (S11).     */
+}
+term_line_state_t;
+
+/* Rows the entry occupies when soft-wrapped from @p u16_origin_col. */
+static uint16_t u16_line_rows_for_len(uint16_t u16_len, uint16_t u16_origin_col, uint16_t u16_cols)
+{
+    uint16_t u16_first;
+
+    if ((u16_cols == 0u) || (u16_origin_col == 0u) || (u16_origin_col > u16_cols))
+    {
+        return 1u;
+    }
+
+    u16_first = (uint16_t) (u16_cols - u16_origin_col + 1u);
+    if (u16_len <= u16_first)
+    {
+        return 1u;
+    }
+
+    return (uint16_t) (1u + ((u16_len - u16_first) + u16_cols - 1u) / u16_cols);
+}
+
+static bool b_line_use_wrap_path(const term_line_state_t *px_st)
+{
+    if (px_st->b_wrap_mode)
+    {
+        return true;
+    }
+
+    if (px_st->b_bounded_field)
+    {
+        return (u16_line_rows_for_len((uint16_t) (px_st->u16_prompt_len + px_st->u16_field_width),
+                                        px_st->u16_prompt_col, px_st->u16_term_cols) > 1u);
+    }
+
+    return (u16_line_rows_for_len(px_st->u16_len, px_st->u16_origin_col, px_st->u16_term_cols) > 1u);
+}
+
+static bool b_line_has_field_window(const term_line_state_t *px_st)
+{
+    return px_st->b_bounded_field;
+}
+
+/* Caller @p u16_raw_fw: 0 = full-line (soft-wrap); else explicit bounded field.
+ * Normalizes width, then clamps to cols remaining on the entry row (no EOL spill). */
+static void v_line_apply_field_width(term_line_state_t *px_st, uint16_t u16_raw_fw)
+{
+    uint16_t u16_fw;
+
+    px_st->b_bounded_field = (u16_raw_fw != 0u);
+    if (!px_st->b_bounded_field)
+    {
+        px_st->u16_field_width = 0u;
+        return;
+    }
+
+    if ((u16_raw_fw == 0u) || (u16_raw_fw >= px_st->u16_max_len))
+    {
+        u16_fw = (uint16_t) (px_st->u16_max_len - 1u);
+    }
+    else
+    {
+        u16_fw = u16_raw_fw;
+    }
+
+    if ((px_st->u16_term_cols > 0u) && (px_st->u16_origin_col > 0u)
+        && (px_st->u16_origin_col <= px_st->u16_term_cols))
+    {
+        uint16_t u16_eol_cap = (uint16_t) (px_st->u16_term_cols - px_st->u16_origin_col + 1u);
+
+        if (u16_fw > u16_eol_cap)
+        {
+            u16_fw = u16_eol_cap;
+        }
+    }
+
+    px_st->u16_field_width = u16_fw;
+}
+
+static bool b_line_is_shift_tab(int16_t i16_key)
+{
+    return (i16_key == LINE_SHIFT_TAB_ESCZ)
+        || (i16_key == (int16_t) EXT_KEY_SHIFT_TAB);
+}
+
+static bool b_line_hist_on_accept(term_line_t x_rc)
+{
+    return (x_rc == TERM_LINE_ENTER) || (x_rc == TERM_LINE_TAB) || (x_rc == TERM_LINE_SHIFT_TAB);
+}
+
+static uint16_t u16_line_edit_limit(const term_line_state_t *px_st)
+{
+    uint16_t u16_lim = (uint16_t) (px_st->u16_max_len - 1u);
+
+    if (b_line_has_field_window(px_st) && (px_st->u16_field_width < u16_lim))
+    {
+        u16_lim = px_st->u16_field_width;
+    }
+
+    return u16_lim;
+}
+
+static uint16_t u16_line_window_cells(const term_line_state_t *px_st)
+{
+    return (uint16_t) (px_st->u16_prompt_len + px_st->u16_field_width);
+}
+
+static uint16_t u16_line_window_rows(const term_line_state_t *px_st)
+{
+    return u16_line_rows_for_len(u16_line_window_cells(px_st),
+                                 px_st->u16_prompt_col, px_st->u16_term_cols);
+}
+
+/* Overwrite @p u16_count cells with spaces (no DCH — neighbors stay put). */
+static void v_line_overwrite_spaces(uint16_t u16_row, uint16_t u16_col, uint16_t u16_count)
+{
+    uint16_t u16_n;
+
+    if (u16_count == 0u)
+    {
+        return;
+    }
+
+    v_term_cursor_move(u16_row, u16_col);
+    for (u16_n = 0u; u16_n < u16_count; u16_n++)
+    {
+        (void) putchar(' ');
+    }
+}
+
+/* Delete up to @p u16_count cells on one row from (@p u16_row, @p u16_col). */
+static uint16_t u16_line_erase_row_cells(uint16_t u16_row, uint16_t u16_col, uint16_t u16_cols,
+                                         uint16_t u16_count)
+{
+    uint16_t u16_cap;
+    uint16_t u16_n;
+
+    if ((u16_count == 0u) || (u16_cols == 0u) || (u16_col == 0u) || (u16_col > u16_cols))
+    {
+        return 0u;
+    }
+
+    u16_cap = (uint16_t) (u16_cols - u16_col + 1u);
+    u16_n   = (u16_count <= u16_cap) ? u16_count : u16_cap;
+    v_term_cursor_move(u16_row, u16_col);
+    v_term_delete_chars(u16_n);
+    return u16_n;
+}
+
+static void v_line_clear_window(term_line_state_t *px_st)
+{
+    uint16_t u16_left = u16_line_window_cells(px_st);
+    uint16_t u16_row  = px_st->u16_origin_row;
+    uint16_t u16_col  = px_st->u16_prompt_col;
+    uint16_t u16_n;
+
+    while (u16_left > 0u)
+    {
+        u16_n = u16_line_erase_row_cells(u16_row, u16_col, px_st->u16_term_cols, u16_left);
+        if (u16_n == 0u)
+        {
+            break;
+        }
+
+        u16_left -= u16_n;
+        u16_row++;
+        u16_col = 1u;
+    }
+}
+
+static void v_line_clear_window_row_off(term_line_state_t *px_st, uint16_t u16_row_off)
+{
+    uint16_t u16_cells = u16_line_window_cells(px_st);
+    uint16_t u16_first;
+    uint16_t u16_cell0;
+    uint16_t u16_row;
+    uint16_t u16_col;
+    uint16_t u16_n;
+    uint16_t u16_cap;
+
+    if (u16_row_off == 0u)
+    {
+        u16_cell0 = 0u;
+        u16_col   = px_st->u16_prompt_col;
+    }
+    else
+    {
+        u16_first = (px_st->u16_term_cols - px_st->u16_prompt_col + 1u);
+        u16_cell0 = (uint16_t) (u16_first + (u16_row_off - 1u) * px_st->u16_term_cols);
+        u16_col   = 1u;
+    }
+
+    if (u16_cell0 >= u16_cells)
+    {
+        return;
+    }
+
+    u16_n  = (uint16_t) (u16_cells - u16_cell0);
+    u16_row = (uint16_t) (px_st->u16_origin_row + u16_row_off);
+    u16_cap = (uint16_t) (px_st->u16_term_cols - u16_col + 1u);
+    if (u16_n > u16_cap)
+    {
+        u16_n = u16_cap;
+    }
+
+    (void) u16_line_erase_row_cells(u16_row, u16_col, px_st->u16_term_cols, u16_n);
+}
+
+/* True when the line must be painted with full redraw (never incremental putchar). */
+static bool b_line_needs_full_redraw(const term_line_state_t *px_st, uint16_t u16_len)
+{
+    if (px_st->b_wrap_mode)
+    {
+        return true;
+    }
+
+    if (b_line_has_field_window(px_st))
+    {
+        return (u16_line_window_rows(px_st) > 1u);
+    }
+
+    return (u16_line_rows_for_len(u16_len, px_st->u16_origin_col, px_st->u16_term_cols) > 1u);
+}
+
+static void v_line_buf_pos_to_screen(uint16_t u16_pos, uint16_t u16_origin_row, uint16_t u16_origin_col,
+                                     uint16_t u16_cols, uint16_t *pu16_row, uint16_t *pu16_col)
+{
+    uint16_t u16_first = (uint16_t) (u16_cols - u16_origin_col + 1u);
+    uint16_t u16_rem;
+
+    if (u16_pos < u16_first)
+    {
+        *pu16_row = u16_origin_row;
+        *pu16_col = (uint16_t) (u16_origin_col + u16_pos);
+    }
+    else
+    {
+        u16_rem   = (uint16_t) (u16_pos - u16_first);
+        *pu16_row = (uint16_t) (u16_origin_row + 1u + (u16_rem / u16_cols));
+        *pu16_col = (uint16_t) ((u16_rem % u16_cols) + 1u);
+    }
+}
+
+/* Inverse row of v_line_buf_pos_to_screen: cursor at buffer index @p u16_pos. */
+static uint16_t u16_line_origin_row_from_endpos(uint16_t u16_pos, uint16_t u16_end_row,
+                                                uint16_t u16_origin_col, uint16_t u16_cols)
+{
+    uint16_t u16_first;
+    uint16_t u16_q;
+
+    if ((u16_cols == 0u) || (u16_origin_col == 0u) || (u16_origin_col > u16_cols))
+    {
+        return u16_end_row;
+    }
+
+    u16_first = (uint16_t) (u16_cols - u16_origin_col + 1u);
+    if (u16_pos < u16_first)
+    {
+        return u16_end_row;
+    }
+
+    u16_q = (uint16_t) ((u16_pos - u16_first) / u16_cols);
+    if (u16_end_row <= u16_q)
+    {
+        return 1u;
+    }
+
+    return (uint16_t) (u16_end_row - 1u - u16_q);
+}
+
+static void v_line_flush_stdout(void)
+{
+    (void) fflush(stdout);
+}
+
+static void v_line_goto_origin(const term_line_state_t *px_st)
+{
+    v_term_cursor_move(px_st->u16_origin_row, px_st->u16_origin_col);
+}
+
+/* After printing @p u16_buf_pos characters, CPR and re-pin DECSC at line start.
+ * Needed when soft-wrap at the bottom of the viewport scrolls the saved origin. */
+static bool b_line_reanchor_from_cpr(term_line_state_t *px_st, uint16_t u16_buf_pos)
+{
+    term_pos_t x_pos;
+    uint16_t   u16_new_row;
+
+    v_line_flush_stdout();
+    if (!b_term_get_cursor(&x_pos, TERM_LINE_KEY_TIMEOUT_MS))
+    {
+        return false;
+    }
+
+    u16_new_row = u16_line_origin_row_from_endpos(u16_buf_pos, x_pos.u16_row,
+                                                   px_st->u16_origin_col, px_st->u16_term_cols);
+    px_st->u16_origin_row = u16_new_row;
+    v_line_goto_origin(px_st);
+    v_term_save_cursor();
+    return true;
+}
+
+static void v_line_clear_rows_from_origin(term_line_state_t *px_st, uint16_t u16_row_count)
+{
+    uint16_t u16_r;
+    bool     b_has_prompt;
+
+    if (b_line_has_field_window(px_st))
+    {
+        (void) u16_row_count;
+        v_line_clear_window(px_st);
+        return;
+    }
+
+    b_has_prompt = (px_st->u16_prompt_len > 0u);
+
+    v_line_goto_origin(px_st);
+    if (b_has_prompt)
+    {
+        v_term_cursor_move(px_st->u16_origin_row, px_st->u16_prompt_col);
+        v_term_clear_eol();
+    }
+    else
+    {
+        v_term_clear_eol();
+    }
+
+    for (u16_r = 1u; u16_r < u16_row_count; u16_r++)
+    {
+        v_term_cursor_move((uint16_t) (px_st->u16_origin_row + u16_r), 1u);
+        v_term_clear_line();
+    }
+}
+
+static void v_line_paint_field_cells(term_line_state_t *px_st)
+{
+    v_line_goto_origin(px_st);
+    if (px_st->u16_len > 0u)
+    {
+        (void) fputs(px_st->pc_line, stdout);
+    }
+
+    if (b_line_has_field_window(px_st) && (px_st->u16_len < px_st->u16_field_width))
+    {
+        uint16_t u16_pad = (uint16_t) (px_st->u16_field_width - px_st->u16_len);
+
+        while (u16_pad > 0u)
+        {
+            (void) putchar(' ');
+            u16_pad--;
+        }
+    }
+}
+
+static void v_line_paint_from_origin(term_line_state_t *px_st)
+{
+    if (px_st->u16_prompt_len > 0u)
+    {
+        v_term_cursor_move(px_st->u16_origin_row, px_st->u16_prompt_col);
+        (void) fputs(px_st->pc_prompt, stdout);
+    }
+
+    v_line_paint_field_cells(px_st);
+}
+
+static void v_line_clear_field_cells(term_line_state_t *px_st)
+{
+    if (!b_line_has_field_window(px_st))
+    {
+        return;
+    }
+
+    v_line_overwrite_spaces(px_st->u16_origin_row, px_st->u16_origin_col, px_st->u16_field_width);
+}
+
+static void v_line_cursor_goto(term_line_state_t *px_st)
+{
+    uint16_t u16_row;
+    uint16_t u16_col;
+
+    v_line_buf_pos_to_screen(px_st->u16_cursor, px_st->u16_origin_row, px_st->u16_origin_col,
+                             px_st->u16_term_cols, &u16_row, &u16_col);
+    v_term_cursor_move(u16_row, u16_col);
+}
+
+/* Bounded-field session open: prompt, clear entry cells, present pc_line default,
+ * pin DECSC at entry, cursor at end-of-line. Initial text comes from pc_line only. */
+static void v_line_bounded_init_present(term_line_state_t *px_st)
+{
+    if (px_st->u16_prompt_len > 0u)
+    {
+        v_term_cursor_move(px_st->u16_origin_row, px_st->u16_prompt_col);
+        (void) fputs(px_st->pc_prompt, stdout);
+    }
+
+    v_line_clear_field_cells(px_st);
+    v_line_goto_origin(px_st);
+    v_term_save_cursor();
+    v_line_paint_field_cells(px_st);
+    px_st->u16_cursor      = px_st->u16_len;
+    px_st->u16_screen_rows = u16_line_window_rows(px_st);
+    v_line_cursor_goto(px_st);
+    v_line_flush_stdout();
+}
+
+static void v_line_bounded_repaint(term_line_state_t *px_st)
+{
+    v_line_clear_field_cells(px_st);
+    v_line_paint_from_origin(px_st);
+    px_st->u16_screen_rows = u16_line_window_rows(px_st);
+    v_line_cursor_goto(px_st);
+}
+
+static void v_line_clear_display_tail(term_line_state_t *px_st)
+{
+    v_line_clear_rows_from_origin(px_st, px_st->u16_screen_rows);
+    v_line_goto_origin(px_st);
+}
+
+static void v_line_full_redraw(term_line_state_t *px_st)
+{
+    uint16_t u16_old_rows   = px_st->u16_screen_rows;
+    uint16_t u16_origin_prev;
+    uint16_t u16_new_rows;
+    uint16_t u16_clear_rows;
+    uint16_t u16_r;
+    uint8_t  u8_pass;
+
+    u16_new_rows = b_line_has_field_window(px_st)
+                   ? u16_line_window_rows(px_st)
+                   : u16_line_rows_for_len(px_st->u16_len, px_st->u16_origin_col, px_st->u16_term_cols);
+
+    for (u8_pass = 0u; u8_pass < 3u; u8_pass++)
+    {
+        u16_origin_prev = px_st->u16_origin_row;
+        u16_clear_rows  = (u16_new_rows > u16_old_rows) ? u16_new_rows : u16_old_rows;
+
+        v_line_clear_rows_from_origin(px_st, u16_clear_rows);
+        v_line_paint_from_origin(px_st);
+        (void) b_line_reanchor_from_cpr(px_st, px_st->u16_len);
+
+        u16_new_rows = b_line_has_field_window(px_st)
+                       ? u16_line_window_rows(px_st)
+                       : u16_line_rows_for_len(px_st->u16_len, px_st->u16_origin_col, px_st->u16_term_cols);
+
+        if (px_st->u16_origin_row == u16_origin_prev)
+        {
+            break;
+        }
+
+        u16_old_rows = u16_clear_rows;
+    }
+
+    for (u16_r = u16_new_rows; u16_r < u16_old_rows; u16_r++)
+    {
+        if (b_line_has_field_window(px_st))
+        {
+            v_line_clear_window_row_off(px_st, u16_r);
+        }
+        else
+        {
+            v_term_cursor_move((uint16_t) (px_st->u16_origin_row + u16_r), 1u);
+            v_term_clear_line();
+        }
+    }
+
+    px_st->u16_screen_rows = u16_new_rows;
+    px_st->b_wrap_mode     = (u16_new_rows > 1u);
+    v_line_cursor_goto(px_st);
+}
+
+static uint16_t u16_line_bounded_strlen(const char *pc_s, uint16_t u16_max)
+{
+    uint16_t u16_n = 0u;
+
+    while ((u16_n < u16_max) && (pc_s[u16_n] != '\0'))
+    {
+        u16_n++;
+    }
+    return u16_n;
+}
+
+static uint16_t u16_line_prompt_len(const char *pc_prompt)
+{
+    if (pc_prompt == NULL)
+    {
+        return 0u;
+    }
+
+    return u16_line_bounded_strlen(pc_prompt, 0xFFFFu);
+}
+
+static void v_line_emit_newline(void)
+{
+    (void) putchar('\r');
+    (void) putchar('\n');
+}
+
+static void v_line_repaint_from_origin(term_line_state_t *px_st)
+{
+    if (b_line_has_field_window(px_st))
+    {
+        v_line_bounded_repaint(px_st);
+        return;
+    }
+
+    if (b_line_use_wrap_path(px_st))
+    {
+        v_line_full_redraw(px_st);
+        return;
+    }
+
+    v_term_restore_cursor();
+    v_term_clear_eol();
+    if (px_st->u16_len > 0u)
+    {
+        (void) fputs(px_st->pc_line, stdout);
+    }
+    if (px_st->u16_cursor < px_st->u16_len)
+    {
+        v_term_cursor_left((uint16_t) (px_st->u16_len - px_st->u16_cursor));
+    }
+    px_st->u16_screen_rows = 1u;
+}
+
+static void v_line_insert_char(term_line_state_t *px_st, char c_ch)
+{
+    uint16_t u16_tail;
+
+    if (px_st->u16_len >= u16_line_edit_limit(px_st))
+    {
+        return;
+    }
+
+    if (b_line_use_wrap_path(px_st))
+    {
+        if (px_st->u16_cursor == px_st->u16_len)
+        {
+            px_st->pc_line[px_st->u16_len++] = c_ch;
+            px_st->pc_line[px_st->u16_len]   = '\0';
+            px_st->u16_cursor                = px_st->u16_len;
+        }
+        else
+        {
+            u16_tail = (uint16_t) (px_st->u16_len - px_st->u16_cursor);
+            (void) memmove(&px_st->pc_line[px_st->u16_cursor + 1u],
+                           &px_st->pc_line[px_st->u16_cursor],
+                           (size_t) u16_tail + 1u);
+            px_st->pc_line[px_st->u16_cursor] = c_ch;
+            px_st->u16_len++;
+            px_st->u16_cursor++;
+        }
+        v_line_full_redraw(px_st);
+        return;
+    }
+
+    if (px_st->u16_cursor == px_st->u16_len)
+    {
+        px_st->pc_line[px_st->u16_len++] = c_ch;
+        px_st->pc_line[px_st->u16_len]   = '\0';
+        px_st->u16_cursor                = px_st->u16_len;
+
+        if (b_line_needs_full_redraw(px_st, px_st->u16_len))
+        {
+            px_st->b_wrap_mode = true;
+            v_line_full_redraw(px_st);
+        }
+        else
+        {
+            (void) putchar(c_ch);
+        }
+    }
+    else
+    {
+        u16_tail = (uint16_t) (px_st->u16_len - px_st->u16_cursor);
+
+        (void) memmove(&px_st->pc_line[px_st->u16_cursor + 1u],
+                       &px_st->pc_line[px_st->u16_cursor],
+                       (size_t) u16_tail + 1u);
+        px_st->pc_line[px_st->u16_cursor] = c_ch;
+        px_st->u16_len++;
+
+        if (b_line_needs_full_redraw(px_st, px_st->u16_len))
+        {
+            px_st->u16_cursor++;
+            px_st->b_wrap_mode = true;
+            v_line_full_redraw(px_st);
+        }
+        else
+        {
+            (void) printf("%c%s", c_ch, &px_st->pc_line[px_st->u16_cursor + 1u]);
+            v_term_cursor_left(u16_tail);
+            px_st->u16_cursor++;
+        }
+    }
+}
+
+static void v_line_backspace(term_line_state_t *px_st)
+{
+    uint16_t u16_tail;
+
+    if (px_st->u16_cursor == 0u)
+    {
+        return;
+    }
+
+    if (b_line_use_wrap_path(px_st))
+    {
+        if (px_st->u16_cursor == px_st->u16_len)
+        {
+            px_st->u16_cursor--;
+            px_st->u16_len--;
+            px_st->pc_line[px_st->u16_len] = '\0';
+        }
+        else
+        {
+            u16_tail = (uint16_t) (px_st->u16_len - px_st->u16_cursor);
+            (void) memmove(&px_st->pc_line[px_st->u16_cursor - 1u],
+                           &px_st->pc_line[px_st->u16_cursor],
+                           (size_t) u16_tail);
+            px_st->u16_len--;
+            px_st->u16_cursor--;
+            px_st->pc_line[px_st->u16_len] = '\0';
+        }
+        v_line_full_redraw(px_st);
+        return;
+    }
+
+    if (px_st->u16_cursor == px_st->u16_len)
+    {
+        px_st->u16_cursor--;
+        px_st->u16_len--;
+        px_st->pc_line[px_st->u16_len] = '\0';
+        if (b_line_has_field_window(px_st))
+        {
+            v_line_bounded_repaint(px_st);
+        }
+        else
+        {
+            (void) fputs("\b \b", stdout);
+        }
+    }
+    else
+    {
+        u16_tail = (uint16_t) (px_st->u16_len - px_st->u16_cursor);
+
+        (void) memmove(&px_st->pc_line[px_st->u16_cursor - 1u],
+                       &px_st->pc_line[px_st->u16_cursor],
+                       (size_t) u16_tail);
+        px_st->u16_len--;
+        px_st->u16_cursor--;
+        px_st->pc_line[px_st->u16_len] = '\0';
+
+        if (b_line_has_field_window(px_st))
+        {
+            v_line_bounded_repaint(px_st);
+        }
+        else
+        {
+            v_term_cursor_left(1u);
+            v_term_delete_chars(1u);
+        }
+    }
+}
+
+static void v_line_delete_forward(term_line_state_t *px_st)
+{
+    if (px_st->u16_cursor >= px_st->u16_len)
+    {
+        return;
+    }
+
+    if (b_line_use_wrap_path(px_st))
+    {
+        (void) memmove(&px_st->pc_line[px_st->u16_cursor],
+                       &px_st->pc_line[px_st->u16_cursor + 1u],
+                       (size_t) (px_st->u16_len - px_st->u16_cursor));
+        px_st->u16_len--;
+        px_st->pc_line[px_st->u16_len] = '\0';
+        v_line_full_redraw(px_st);
+        return;
+    }
+
+    if (b_line_has_field_window(px_st))
+    {
+        (void) memmove(&px_st->pc_line[px_st->u16_cursor],
+                       &px_st->pc_line[px_st->u16_cursor + 1u],
+                       (size_t) (px_st->u16_len - px_st->u16_cursor));
+        px_st->u16_len--;
+        px_st->pc_line[px_st->u16_len] = '\0';
+        v_line_bounded_repaint(px_st);
+    }
+    else
+    {
+        v_term_delete_chars(1u);
+        (void) memmove(&px_st->pc_line[px_st->u16_cursor],
+                       &px_st->pc_line[px_st->u16_cursor + 1u],
+                       (size_t) (px_st->u16_len - px_st->u16_cursor));
+        px_st->u16_len--;
+        px_st->pc_line[px_st->u16_len] = '\0';
+    }
+}
+
+static void v_line_clear_all(term_line_state_t *px_st)
+{
+    px_st->u16_len    = 0u;
+    px_st->u16_cursor = 0u;
+    px_st->pc_line[0] = '\0';
+    px_st->b_wrap_mode = false;
+
+    if (b_line_has_field_window(px_st))
+    {
+        v_line_bounded_repaint(px_st);
+        v_line_goto_origin(px_st);
+        v_term_save_cursor();
+        return;
+    }
+
+    v_line_clear_display_tail(px_st);
+    px_st->u16_screen_rows = 1u;
+
+    if (px_st->u16_prompt_len > 0u)
+    {
+        v_term_cursor_move(px_st->u16_origin_row, px_st->u16_prompt_col);
+        (void) fputs(px_st->pc_prompt, stdout);
+    }
+
+    v_line_goto_origin(px_st);
+    v_term_clear_eol();
+    v_term_save_cursor();
+}
+
+static void v_line_kill_to_end(term_line_state_t *px_st)
+{
+    px_st->pc_line[px_st->u16_cursor] = '\0';
+    px_st->u16_len = px_st->u16_cursor;
+    if (b_line_use_wrap_path(px_st))
+    {
+        v_line_full_redraw(px_st);
+    }
+    else if (b_line_has_field_window(px_st))
+    {
+        v_line_bounded_repaint(px_st);
+    }
+    else
+    {
+        v_term_clear_eol();
+    }
+}
+
+static void v_line_kill_to_start(term_line_state_t *px_st)
+{
+    uint16_t u16_tail;
+
+    if (px_st->u16_cursor == 0u)
+    {
+        return;
+    }
+
+    u16_tail = (uint16_t) (px_st->u16_len - px_st->u16_cursor);
+    (void) memmove(px_st->pc_line, &px_st->pc_line[px_st->u16_cursor], (size_t) u16_tail + 1u);
+    px_st->u16_len    = u16_tail;
+    px_st->u16_cursor = 0u;
+    if (b_line_use_wrap_path(px_st))
+    {
+        v_line_full_redraw(px_st);
+    }
+    else if (b_line_has_field_window(px_st))
+    {
+        v_line_bounded_repaint(px_st);
+    }
+    else
+    {
+        v_term_restore_cursor();
+        if (px_st->u16_len > 0u)
+        {
+            (void) fputs(px_st->pc_line, stdout);
+        }
+        v_term_clear_eol();
+    }
+}
+
+static void v_line_cursor_left(term_line_state_t *px_st)
+{
+    if (px_st->u16_cursor > 0u)
+    {
+        px_st->u16_cursor--;
+        if (b_line_use_wrap_path(px_st))
+        {
+            v_line_cursor_goto(px_st);
+        }
+        else
+        {
+            v_term_cursor_left(1u);
+        }
+    }
+}
+
+static void v_line_cursor_right(term_line_state_t *px_st)
+{
+    if (px_st->u16_cursor < px_st->u16_len)
+    {
+        px_st->u16_cursor++;
+        if (b_line_use_wrap_path(px_st))
+        {
+            v_line_cursor_goto(px_st);
+        }
+        else
+        {
+            v_term_cursor_right(1u);
+        }
+    }
+}
+
+static void v_line_cursor_home(term_line_state_t *px_st)
+{
+    if (px_st->u16_cursor > 0u)
+    {
+        if (b_line_use_wrap_path(px_st))
+        {
+            px_st->u16_cursor = 0u;
+            v_line_cursor_goto(px_st);
+        }
+        else
+        {
+            v_term_cursor_left(px_st->u16_cursor);
+            px_st->u16_cursor = 0u;
+        }
+    }
+}
+
+static void v_line_cursor_end(term_line_state_t *px_st)
+{
+    if (px_st->u16_cursor < px_st->u16_len)
+    {
+        if (b_line_use_wrap_path(px_st))
+        {
+            px_st->u16_cursor = px_st->u16_len;
+            v_line_cursor_goto(px_st);
+        }
+        else
+        {
+            v_term_cursor_right((uint16_t) (px_st->u16_len - px_st->u16_cursor));
+            px_st->u16_cursor = px_st->u16_len;
+        }
+    }
+}
+
+static uint16_t u16_hist_end_pos(const uint8_t *pu8_pool, uint16_t u16_size)
+{
+    uint16_t u16_pos = 0u;
+
+    while (u16_pos < u16_size)
+    {
+        if (pu8_pool[u16_pos] == 0u)
+        {
+            return u16_pos;
+        }
+        while ((u16_pos < u16_size) && (pu8_pool[u16_pos] != 0u))
+        {
+            u16_pos++;
+        }
+        u16_pos++;
+    }
+    return u16_size;
+}
+
+static uint16_t u16_hist_count(const uint8_t *pu8_pool, uint16_t u16_size)
+{
+    uint16_t u16_pos   = 0u;
+    uint16_t u16_count = 0u;
+
+    while (u16_pos < u16_size)
+    {
+        if (pu8_pool[u16_pos] == 0u)
+        {
+            break;
+        }
+        u16_count++;
+        while ((u16_pos < u16_size) && (pu8_pool[u16_pos] != 0u))
+        {
+            u16_pos++;
+        }
+        u16_pos++;
+    }
+    return u16_count;
+}
+
+static const char *pc_hist_newest(const uint8_t *pu8_pool, uint16_t u16_size)
+{
+    uint16_t     u16_end  = u16_hist_end_pos(pu8_pool, u16_size);
+    uint16_t     u16_pos  = 0u;
+    const char  *pc_last  = NULL;
+
+    while (u16_pos < u16_end)
+    {
+        pc_last = (const char *) &pu8_pool[u16_pos];
+        while ((u16_pos < u16_end) && (pu8_pool[u16_pos] != 0u))
+        {
+            u16_pos++;
+        }
+        u16_pos++;
+    }
+    return pc_last;
+}
+
+static bool b_hist_get_entry(const uint8_t *pu8_pool, uint16_t u16_size,
+                             uint16_t u16_idx_from_newest,
+                             char *pc_out, uint16_t u16_out_max)
+{
+    uint16_t     u16_end   = u16_hist_end_pos(pu8_pool, u16_size);
+    uint16_t     u16_pos   = 0u;
+    uint16_t     u16_count = 0u;
+    uint16_t     u16_target;
+    const char  *pc_pick   = NULL;
+
+    if ((u16_idx_from_newest == 0u) || (u16_out_max < 2u))
+    {
+        return false;
+    }
+
+    while (u16_pos < u16_end)
+    {
+        u16_count++;
+        while ((u16_pos < u16_end) && (pu8_pool[u16_pos] != 0u))
+        {
+            u16_pos++;
+        }
+        u16_pos++;
+    }
+
+    if (u16_idx_from_newest > u16_count)
+    {
+        return false;
+    }
+
+    u16_target = (uint16_t) (u16_count - u16_idx_from_newest + 1u);
+    u16_pos    = 0u;
+    u16_count  = 0u;
+
+    while (u16_pos < u16_end)
+    {
+        u16_count++;
+        pc_pick = (const char *) &pu8_pool[u16_pos];
+        if (u16_count == u16_target)
+        {
+            break;
+        }
+        while ((u16_pos < u16_end) && (pu8_pool[u16_pos] != 0u))
+        {
+            u16_pos++;
+        }
+        u16_pos++;
+    }
+
+    if (pc_pick == NULL)
+    {
+        return false;
+    }
+
+    (void) strncpy(pc_out, pc_pick, (size_t) (u16_out_max - 1u));
+    pc_out[u16_out_max - 1u] = '\0';
+    return true;
+}
+
+static void v_line_load_text(term_line_state_t *px_st, const char *pc_text)
+{
+    uint16_t u16_lim = u16_line_edit_limit(px_st);
+    uint16_t u16_n   = u16_line_bounded_strlen(pc_text, (uint16_t) (u16_lim + 1u));
+
+    if (u16_n > u16_lim)
+    {
+        u16_n = u16_lim;
+    }
+
+    (void) memcpy(px_st->pc_line, pc_text, (size_t) u16_n);
+    px_st->pc_line[u16_n] = '\0';
+    px_st->u16_len        = u16_n;
+    px_st->u16_cursor     = u16_n;
+    v_line_repaint_from_origin(px_st);
+}
+
+static void v_line_stash_scratch(term_line_state_t *px_st)
+{
+    uint16_t u16_n = px_st->u16_len;
+
+    if (u16_n >= TERM_LINE_SCRATCH_MAX)
+    {
+        u16_n = (uint16_t) (TERM_LINE_SCRATCH_MAX - 1u);
+    }
+
+    (void) memcpy(px_st->ac_scratch, px_st->pc_line, (size_t) u16_n);
+    px_st->ac_scratch[u16_n] = '\0';
+    px_st->b_scratch_valid   = true;
+}
+
+static void v_hist_append(uint8_t *pu8_pool, uint16_t u16_pool_size, const char *pc_line)
+{
+    uint16_t    u16_line_len;
+    uint16_t    u16_end;
+    uint16_t    u16_need;
+    uint16_t    u16_pos;
+    uint16_t    u16_first_len;
+    const char *pc_newest;
+
+    if ((pu8_pool == NULL) || (u16_pool_size < 2u) || (pc_line == NULL))
+    {
+        return;
+    }
+
+    u16_line_len = u16_line_bounded_strlen(pc_line, (uint16_t) (u16_pool_size - 1u));
+    if (u16_line_len == 0u)
+    {
+        return;
+    }
+
+    pc_newest = pc_hist_newest(pu8_pool, u16_pool_size);
+    if ((pc_newest != NULL) && (strcmp(pc_newest, pc_line) == 0))
+    {
+        return;
+    }
+
+    u16_need = (uint16_t) (u16_line_len + 2u);
+    while ((u16_hist_end_pos(pu8_pool, u16_pool_size) + u16_need) > u16_pool_size)
+    {
+        if (pu8_pool[0] == 0u)
+        {
+            return;
+        }
+        u16_pos = 0u;
+        while ((u16_pos < u16_pool_size) && (pu8_pool[u16_pos] != 0u))
+        {
+            u16_pos++;
+        }
+        u16_first_len = (uint16_t) (u16_pos + 1u);
+        u16_end       = u16_hist_end_pos(pu8_pool, u16_pool_size);
+        (void) memmove(pu8_pool, &pu8_pool[u16_first_len], (size_t) (u16_end - u16_first_len + 1u));
+        (void) memset(&pu8_pool[u16_end - u16_first_len + 1u], 0,
+                      (size_t) (u16_pool_size - (u16_end - u16_first_len + 1u)));
+    }
+
+    u16_end = u16_hist_end_pos(pu8_pool, u16_pool_size);
+    (void) memcpy(&pu8_pool[u16_end], pc_line, (size_t) u16_line_len);
+    pu8_pool[u16_end + u16_line_len]       = '\0';
+    pu8_pool[u16_end + u16_line_len + 1u]  = '\0';
+}
+
+static void v_line_history_up(term_line_state_t *px_st)
+{
+    char ac_entry[TERM_LINE_SCRATCH_MAX];
+
+    if ((px_st->pu8_hist == NULL) || (px_st->u16_hist_size < 2u))
+    {
+        return;
+    }
+
+    if (!px_st->b_hist_active)
+    {
+        v_line_stash_scratch(px_st);
+        px_st->b_hist_active = true;
+        px_st->u16_hist_idx  = 1u;
+    }
+    else if (px_st->u16_hist_idx < u16_hist_count(px_st->pu8_hist, px_st->u16_hist_size))
+    {
+        px_st->u16_hist_idx++;
+    }
+    else
+    {
+        return;
+    }
+
+    if (b_hist_get_entry(px_st->pu8_hist, px_st->u16_hist_size, px_st->u16_hist_idx,
+                         ac_entry, (uint16_t) sizeof ac_entry))
+    {
+        v_line_load_text(px_st, ac_entry);
+    }
+}
+
+static void v_line_history_down(term_line_state_t *px_st)
+{
+    char ac_entry[TERM_LINE_SCRATCH_MAX];
+
+    if (!px_st->b_hist_active || (px_st->u16_hist_idx == 0u))
+    {
+        return;
+    }
+
+    if (px_st->u16_hist_idx == 1u)
+    {
+        px_st->u16_hist_idx = 0u;
+        if (px_st->b_scratch_valid)
+        {
+            v_line_load_text(px_st, px_st->ac_scratch);
+        }
+        return;
+    }
+
+    px_st->u16_hist_idx--;
+    if (b_hist_get_entry(px_st->pu8_hist, px_st->u16_hist_size, px_st->u16_hist_idx,
+                         ac_entry, (uint16_t) sizeof ac_entry))
+    {
+        v_line_load_text(px_st, ac_entry);
+    }
+}
+
+term_line_t x_term_getline_editor(term_line_edit_t *px_edit)
+{
+    term_line_state_t x_st;
+    term_line_t       x_rc = TERM_LINE_ENTER;
+    term_pos_t        x_pos;
+    term_size_t       x_size;
+    uint16_t          u16_init_rows;
+    uint16_t          u16_raw_field_width;
+
+    if ((px_edit == NULL) || (px_edit->pc_line == NULL) || (px_edit->u16_max_len == 0u))
+    {
+        return TERM_LINE_ERROR;
+    }
+
+    if (px_edit->u16_max_len < 2u)
+    {
+        return TERM_LINE_ERROR;
+    }
+
+    u16_raw_field_width  = px_edit->u16_field_width;
+    x_st.pc_line         = px_edit->pc_line;
+    x_st.u16_max_len     = px_edit->u16_max_len;
+    x_st.u16_len         = u16_line_bounded_strlen(px_edit->pc_line, px_edit->u16_max_len);
+    x_st.u16_cursor      = x_st.u16_len;
+    x_st.pu8_hist        = px_edit->pu8_hist;
+    x_st.u16_hist_size   = px_edit->u16_hist_size;
+    x_st.ac_scratch[0]   = '\0';
+    x_st.u16_hist_idx    = 0u;
+    x_st.b_scratch_valid = false;
+    x_st.b_hist_active   = false;
+    x_st.pc_prompt       = px_edit->pc_prompt;
+    x_st.u16_prompt_len  = u16_line_prompt_len(px_edit->pc_prompt);
+    x_st.u16_field_width = 0u;
+    x_st.b_bounded_field = false;
+    x_st.u16_origin_row  = 1u;
+    x_st.u16_origin_col  = 1u;
+    x_st.u16_prompt_col  = 0u;
+    x_st.u16_term_cols   = TERM_DEFAULT_COLS;
+    x_st.u16_term_rows   = TERM_DEFAULT_ROWS;
+    x_st.u16_screen_rows = 1u;
+    x_st.b_wrap_mode     = false;
+
+    v_line_flush_stdout();
+
+    if (b_term_get_cursor(&x_pos, TERM_LINE_KEY_TIMEOUT_MS))
+    {
+        x_st.u16_origin_row = x_pos.u16_row;
+        x_st.u16_origin_col = x_pos.u16_col;
+        if (x_st.u16_prompt_len > 0u)
+        {
+            x_st.u16_prompt_col = x_pos.u16_col;
+            x_st.u16_origin_col = (uint16_t) (x_pos.u16_col + x_st.u16_prompt_len);
+        }
+        else
+        {
+            x_st.u16_prompt_col = x_pos.u16_col;
+        }
+    }
+    else if (x_st.u16_prompt_len > 0u)
+    {
+        x_st.u16_prompt_col = 1u;
+        x_st.u16_origin_col = (uint16_t) (x_st.u16_prompt_len + 1u);
+    }
+    else
+    {
+        x_st.u16_prompt_col = 1u;
+    }
+
+    if (b_term_get_size(&x_size, TERM_LINE_KEY_TIMEOUT_MS))
+    {
+        x_st.u16_term_cols = x_size.u16_cols;
+        x_st.u16_term_rows = x_size.u16_rows;
+    }
+
+    v_line_apply_field_width(&x_st, u16_raw_field_width);
+
+    {
+        uint16_t u16_lim = u16_line_edit_limit(&x_st);
+
+        if (x_st.u16_len > u16_lim)
+        {
+            x_st.u16_len = u16_lim;
+            x_st.pc_line[x_st.u16_len] = '\0';
+        }
+
+        x_st.u16_cursor = x_st.u16_len;
+    }
+
+    if (b_line_has_field_window(&x_st))
+    {
+        v_line_bounded_init_present(&x_st);
+    }
+    else
+    {
+        if (x_st.u16_prompt_len > 0u)
+        {
+            v_term_cursor_move(x_st.u16_origin_row, x_st.u16_prompt_col);
+            (void) fputs(x_st.pc_prompt, stdout);
+            v_line_flush_stdout();
+        }
+
+        v_line_goto_origin(&x_st);
+        v_term_save_cursor();
+
+        u16_init_rows = u16_line_rows_for_len(x_st.u16_len, x_st.u16_origin_col, x_st.u16_term_cols);
+        if (u16_init_rows > 1u)
+        {
+            x_st.b_wrap_mode     = true;
+            x_st.u16_screen_rows = u16_init_rows;
+            v_line_full_redraw(&x_st);
+        }
+        else if (x_st.u16_len > 0u)
+        {
+            (void) fputs(x_st.pc_line, stdout);
+        }
+    }
+
+    for (;;)
+    {
+        int16_t i16_key = i16_term_get_key(TERM_LINE_KEY_TIMEOUT_MS);
+
+        if (i16_key == TERM_KEY_NONE)
+        {
+            continue;
+        }
+
+        switch (i16_key)
+        {
+            case EXT_KEY_LEFT:   v_line_cursor_left(&x_st);  break;
+            case EXT_KEY_RIGHT:  v_line_cursor_right(&x_st); break;
+            case EXT_KEY_HOME:   v_line_cursor_home(&x_st);  break;
+            case EXT_KEY_END:    v_line_cursor_end(&x_st);   break;
+            case EXT_KEY_UP:     v_line_history_up(&x_st);  break;
+            case EXT_KEY_DOWN:   v_line_history_down(&x_st); break;
+            case EXT_KEY_DELETE: v_line_delete_forward(&x_st); break;
+            default:
+                if (i16_key == 0x08)
+                {
+                    v_line_backspace(&x_st);
+                }
+                else if (i16_key == 0x7F)
+                {
+                    v_line_delete_forward(&x_st);
+                }
+                else if (i16_key == 0x18)
+                {
+                    v_line_clear_all(&x_st);
+                }
+                else if (i16_key == 0x15)
+                {
+                    v_line_kill_to_start(&x_st);
+                }
+                else if (i16_key == 0x0B)
+                {
+                    v_line_kill_to_end(&x_st);
+                }
+                else if (x_st.b_bounded_field && (i16_key == 0x09))
+                {
+                    x_rc = TERM_LINE_TAB;
+                    goto done;
+                }
+                else if (x_st.b_bounded_field && b_line_is_shift_tab(i16_key))
+                {
+                    x_rc = TERM_LINE_SHIFT_TAB;
+                    goto done;
+                }
+                else if (i16_key == 0x0D)
+                {
+                    x_rc = TERM_LINE_ENTER;
+                    goto done;
+                }
+                else if (i16_key == 0x1B)
+                {
+                    x_rc = TERM_LINE_ESCAPE;
+                    goto done;
+                }
+                else if (i16_key == 0x03)
+                {
+                    x_rc = TERM_LINE_CTRLC;
+                    goto done;
+                }
+                else if ((i16_key >= 0x20) && (i16_key <= 0x7E))
+                {
+                    v_line_insert_char(&x_st, (char) i16_key);
+                }
+                break;
+        }
+    }
+
+done:
+    if (!x_st.b_bounded_field)
+    {
+        v_line_emit_newline();
+    }
+    if (b_line_hist_on_accept(x_rc) && (x_st.pu8_hist != NULL) && (x_st.u16_hist_size >= 2u))
+    {
+        v_hist_append(x_st.pu8_hist, x_st.u16_hist_size, x_st.pc_line);
+    }
+    return x_rc;
+}
+
+const char *pc_term_line_name(term_line_t x_rc)
+{
+    switch (x_rc)
+    {
+        case TERM_LINE_ENTER:      return "ENTER";
+        case TERM_LINE_TAB:        return "TAB";
+        case TERM_LINE_SHIFT_TAB:  return "SHIFT_TAB";
+        case TERM_LINE_ESCAPE:     return "ESCAPE";
+        case TERM_LINE_CTRLC:      return "CTRLC";
+        case TERM_LINE_ERROR:      return "ERROR";
+        default:                   return "?";
+    }
+}
+
 const char *pc_term_status_name(term_err_t x_status)
 {
     switch (x_status)
@@ -660,6 +2115,7 @@ const char *pc_term_key_name(int16_t i16_key)
         case EXT_KEY_DELETE: return "DELETE";
         case EXT_KEY_PGUP:   return "PGUP";
         case EXT_KEY_PGDN:   return "PGDN";
+        case EXT_KEY_SHIFT_TAB: return "SHIFT_TAB";
         case EXT_KEY_F1:     return "F1";
         case EXT_KEY_F2:     return "F2";
         case EXT_KEY_F3:     return "F3";

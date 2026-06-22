@@ -28,6 +28,7 @@ item&gt;"*) using the **Topic Map**:
 | **LED strips / bargraph** | this file's **LED Driver** section, [`App/Src/led_strip_control.c`](App/Src/led_strip_control.c) |
 | **uart_stream** (USART2 console ISR — shipped) | [`uart_stream-port-notes.md`](Docs/planning/uart_stream-port-notes.md) (design reference / ownership rules) |
 | **terminal piano / player bench** | [`terminal-piano-and-player-notes.md`](Docs/planning/terminal-piano-and-player-notes.md) |
+| **Line editor / term HuIL** | [`line-editor-plan.md`](Docs/planning/line-editor-plan.md), [`App/Src/term.c`](App/Src/term.c), [`.grok/memory/session-handoff-2026-06-21-line-editor.md`](.grok/memory/session-handoff-2026-06-21-line-editor.md) |
 | **wishlist / roadmap / "what's next"** | [`Docs/PROJECT.md`](Docs/PROJECT.md) (TODO + product lineage) |
 | **build / flash / automation** | [`SCRIPTS.md`](SCRIPTS.md), `.claude/skills/` or `.grok/skills/` |
 
@@ -119,6 +120,21 @@ Working end-to-end on the bench (mic → DMA → job queue → main-context hand
 
 ### Other Key Details
 - Debug console is always USART2 (ST-Link VCP); firmware-side baud is 921600. The host-side COM port + baud for this bench come from `scripts/bench.defaults.json` (`COM9` / `921600` now — project-specific, subject to change).
+
+### Terminal line editor (`App/term.*` — `x_term_getline_editor`)
+
+Cooperative line editor on `i16_term_get_key()`. Options in `term_line_edit_t`: **`pc_line`**
+(in/out buffer + optional default on entry — not from history), **`u16_max_len`** (required),
+**`pu8_hist` / `u16_hist_size`**, **`pc_prompt`** (editor-owned print), **`u16_field_width`**
+(`0` = full-line soft-wrap; non-zero = single-row bounded field, EOL-clamped).
+
+**Bounded field invariants:** clear/paint uses **space overwrite** within the field window
+(never DCH — inline neighbors on the same row must not shift). Tab / Shift-Tab accept with
+`TERM_LINE_TAB` / `TERM_LINE_SHIFT_TAB` (full-line mode ignores Tab). No newline on bounded
+exit. HuIL: debug-menu `<term>` → **`l`** full-line, **`f`** three-label form demo.
+
+See [`Docs/planning/line-editor-plan.md`](Docs/planning/line-editor-plan.md) and
+[`.grok/memory/session-handoff-2026-06-21-line-editor.md`](.grok/memory/session-handoff-2026-06-21-line-editor.md).
 - Startup banner must be bordered with `***` (use `v_repeat_char` from `utils.c`), report Project / Target MCU / FIRMWARE_VERSION / BUILD_NUMBER / reset source (via `x_get_reset_source`).
 - Top-level debug menu key `@` (implemented in `debug_menu.c` with `extern` to `v_print_startup_banner()`) reprints the full banner. Used for smoke-test "identify".
 - Smoke/probe scripts use 3× ESC (0x1B, paced ~50 ms) then `@` to safely unwind submenus on a live board before capturing the banner.
@@ -224,7 +240,7 @@ Major completed items (as of the skills + automation phase):
 - Debug menu `@` key for fast banner reprint / identification.
 - SCRIPTS.md established as the general automation reference.
 
-**Recently shipped** (since the bring-up summary above): PLAY **v1 + v1.1** interpreter (`App/Src/play.c`), **`uart_stream`** (G11) non-blocking USART2 console, **`term.*`** extended-key reader + size/cursor queries, and **INMP441 digital mic streaming** with dBFS VU meter + LED bargraph.
+**Recently shipped** (since the bring-up summary above): PLAY **v1 + v1.1** interpreter (`App/Src/play.c`), **`uart_stream`** (G11) non-blocking USART2 console, **`term.*`** extended-key reader + size/cursor queries + **`x_term_getline_editor()`** (full-line + bounded fields, Tab form nav), and **INMP441 digital mic streaming** with dBFS VU meter + LED bargraph.
 
 Future major areas (see `Docs/PROJECT.md` for current TODO state): RTOS; **analog audio in** (electret + preamp → ADC) and **analog audio out** (on-chip DAC) — both CubeMX-init-only today (see *Audio paths — roadmap*); gesture sensor; TFT; CMSIS-DSP / DSP experiments (CORDIC/FMAC already enabled in CubeMX); **ANSI terminal piano UI** (TRS-80 heritage + `uart_stream`); **H7 GM synth wishlist** (companion to future FM); etc.
 

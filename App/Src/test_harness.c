@@ -35,7 +35,10 @@ extern uart_stream_h_t x_app_debug_console_handle(void);
 
 /** Command-line buffer. Domain commands are short (a letter + a hex burst);
  *  the PLAY op delegates to its own large-line reader, so this stays small. */
-#define HARNESS_LINE_MAX            48u
+#define HARNESS_LINE_MAX            512u
+#define HARNESS_LINE_HUIL_MAX       121u   /* 120 entry chars + NUL */
+#define HARNESS_FIELD_WIDTH         21u
+#define HARNESS_FIELD_HIST_SIZE     (HARNESS_FIELD_WIDTH * 21u * 4u + 5u)
 
 typedef enum
 {
@@ -203,6 +206,57 @@ static void v_harness_op_play(const char *pc_arg)
     v_debug_play_playstr();
 }
 
+/* Print a string with " and \\ escaped for framed harness output. */
+static void v_harness_print_escaped(const char *pc_s)
+{
+    if (pc_s == NULL)
+    {
+        return;
+    }
+
+    for (; *pc_s != '\0'; pc_s++)
+    {
+        char c_ch = *pc_s;
+
+        if ((c_ch == '\\') || (c_ch == '"'))
+        {
+            (void) putchar('\\');
+        }
+        (void) putchar(c_ch);
+    }
+}
+
+/* E <hex> : inject scripted key stream, run x_term_getline_editor on an empty
+ * line buffer, frame rc + resulting line for golden-vector matching (T4). */
+static void v_harness_op_lineedit(const char *pc_arg)
+{
+    uint8_t          au8_burst[TERM_INJECT_MAX];
+    uint16_t         u16_len = u16_harness_hex_to_bytes(pc_arg, au8_burst,
+                                                          (uint16_t) sizeof(au8_burst));
+    char             ac_line[128];
+    term_line_edit_t x_edit = {0};
+    term_line_t      x_rc;
+
+    if (u16_len == 0u)
+    {
+        printf("<HRN E ERR badhex>\r\n");
+        return;
+    }
+
+    ac_line[0]             = '\0';
+    x_edit.pc_line         = ac_line;
+    x_edit.u16_max_len     = (uint16_t) sizeof(ac_line);
+    x_edit.u16_field_width = 0u;
+    x_edit.pu8_hist        = NULL;
+    x_edit.u16_hist_size   = 0u;
+
+    v_term_inject(au8_burst, u16_len);
+    x_rc = x_term_getline_editor(&x_edit);
+    printf("<HRN E rc=%u line=\"", (unsigned) x_rc);
+    v_harness_print_escaped(ac_line);
+    printf("\">\r\n");
+}
+
 /* Shared back-end for the size/cursor query ops: parse the <hex> reply, inject
  * it as the synthetic terminal response, run the selected query, and frame the
  * parsed result. (The query also emits its request escape to TX — harmless; the
@@ -297,6 +351,7 @@ static void v_harness_op_flush(const char *pc_arg)
 static const harness_op_t s_ax_harness_ops[] =
 {
     { 'K', "decode key burst <hex> (e.g. K 1B5B41)",        v_harness_op_key         },
+    { 'E', "line editor: inject <hex> key stream, run editor", v_harness_op_lineedit },
     { 'P', "PLAY string entry (reads its own line)",         v_harness_op_play        },
     { 'C', "cursor: inject CPR reply <hex>, run get_cursor",  v_harness_op_cursor      },
     { 'X', "size: inject 18t reply <hex>, run get_size_direct", v_harness_op_size_direct },
@@ -530,6 +585,136 @@ void v_test_harness_size_huil(void)
            b_ok ? "OK" : "FAIL",
            (unsigned) x_pos.u16_row, (unsigned) x_pos.u16_col,
            pc_term_status_name(x_pos.err));
+}
+
+static void v_harness_print_entry_test_layout(void)
+{
+    static const struct
+    {
+        uint16_t u16_row;
+        uint16_t u16_col;
+        const char *pc_label;
+    }
+    x_labels[] =
+    {
+        { 3u,  1u, "Label 1:" },
+        { 3u, 30u, "Label 2:" },
+        { 3u, 60u, "Label 3:" },
+    };
+    term_size_t x_size = { TERM_DEFAULT_ROWS, TERM_DEFAULT_COLS, TERM_OK };
+    uint16_t    u16_title_col;
+    const char *pc_title = "--- Entry test ---";
+    uint16_t    u16_i;
+
+    (void) b_term_get_size(&x_size, 200u);
+    u16_title_col = (uint16_t)((x_size.u16_cols - 17u) / 2u + 1u);
+
+    v_term_clear_screen();
+    v_term_cursor_move(1u, u16_title_col);
+    (void) printf("%s\r\n", pc_title);
+
+    for (u16_i = 0u; u16_i < (uint16_t) (sizeof(x_labels) / sizeof(x_labels[0])); u16_i++)
+    {
+        v_term_cursor_move(x_labels[u16_i].u16_row, x_labels[u16_i].u16_col);
+        (void) fputs(x_labels[u16_i].pc_label, stdout);
+    }
+
+    (void) fflush(stdout);
+}
+
+void v_test_harness_line_huil(void)
+{
+    static uint8_t s_au8_hist[256];
+    char           ac_line[HARNESS_LINE_HUIL_MAX];
+    term_line_edit_t x_edit = {0};
+    term_line_t    x_rc;
+
+    printf("\r\nLine editor (HuIL). Editor prints prompt via pc_prompt.\r\n"
+           "Up/Down = history, Ctrl-X/U/K = kill, ESC = cancel session.\r\n\r\n");
+
+    for (;;)
+    {
+        ac_line[0] = '\0';
+        x_edit.pc_line         = ac_line;
+        x_edit.u16_max_len     = (uint16_t) sizeof(ac_line);
+        x_edit.u16_field_width = 0u;
+        x_edit.pu8_hist        = s_au8_hist;
+        x_edit.u16_hist_size   = (uint16_t) sizeof(s_au8_hist);
+        x_edit.pc_prompt       = "line> ";
+
+        x_rc = x_term_getline_editor(&x_edit);
+        printf("  rc=%s line=\"%s\"\r\n", pc_term_line_name(x_rc), ac_line);
+
+        if (x_rc == TERM_LINE_ESCAPE)
+        {
+            printf("(ESCAPE) exit.\r\n");
+            break;
+        }
+    }
+}
+
+void v_test_harness_line_fields_huil(void)
+{
+    static const struct
+    {
+        uint16_t u16_row;
+        uint16_t u16_col;
+    }
+    x_fields[] =
+    {
+        { 3u,  9u },  /* after "Label 1:" at SOL */
+        { 3u, 38u },  /* after "Label 2:" at col 30 */
+        { 3u, 68u },  /* after "Label 3:" at col 60 */
+    };
+    static uint8_t s_au8_hist[HARNESS_FIELD_HIST_SIZE];
+    static char    aa_field_line[3][HARNESS_FIELD_WIDTH + 1u];
+    term_line_edit_t x_edit = {0};
+    term_line_t    x_rc;
+    uint16_t       u16_field;
+    const uint16_t u16_field_count = (uint16_t) (sizeof(x_fields) / sizeof(x_fields[0]));
+
+    printf("\r\nBounded field entry (HuIL). Three inline labels on row 3.\r\n"
+           "Enter / Tab = next field, Shift-Tab = prev, ESC = cancel.\r\n\r\n");
+
+    v_harness_print_entry_test_layout();
+    u16_field = 0u;
+
+    for (;;)
+    {
+        v_term_cursor_move(x_fields[u16_field].u16_row, x_fields[u16_field].u16_col);
+        (void) fflush(stdout);
+
+        x_edit.pc_line         = aa_field_line[u16_field];
+        x_edit.u16_max_len     = (uint16_t) (HARNESS_FIELD_WIDTH + 1u);
+        x_edit.u16_field_width = HARNESS_FIELD_WIDTH;
+        x_edit.pu8_hist        = s_au8_hist;
+        x_edit.u16_hist_size   = (uint16_t) sizeof(s_au8_hist);
+        x_edit.pc_prompt       = NULL;
+
+        x_rc = x_term_getline_editor(&x_edit);
+
+        switch (x_rc)
+        {
+            case TERM_LINE_ESCAPE:
+            case TERM_LINE_CTRLC:
+                printf("\r\n(%s) exit.\r\n", pc_term_line_name(x_rc));
+                return;
+
+            case TERM_LINE_ENTER:
+            case TERM_LINE_TAB:
+                u16_field = (uint16_t) ((u16_field + 1u) % u16_field_count);
+                break;
+
+            case TERM_LINE_SHIFT_TAB:
+                u16_field = (u16_field == 0u)
+                            ? (uint16_t) (u16_field_count - 1u)
+                            : (uint16_t) (u16_field - 1u);
+                break;
+
+            default:
+                break;
+        }
+    }
 }
 
 #endif /* TEST_HARNESS_ENABLED */

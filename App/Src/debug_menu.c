@@ -1314,6 +1314,18 @@ static const menu_item_t x_term_tests_submenu[] =
         .pfn_function = v_test_harness_size_huil
     },
     {
+        .x_type = MENU_ITEM_FUNCTION,
+        .c_key = 'l',
+        .p_c_text = "Line editor (live, with history)",
+        .pfn_function = v_test_harness_line_huil
+    },
+    {
+        .x_type = MENU_ITEM_FUNCTION,
+        .c_key = 'f',
+        .p_c_text = "Bounded field entry (3 inline labels)",
+        .pfn_function = v_test_harness_line_fields_huil
+    },
+    {
         .x_type = MENU_ITEM_RETURN_TO_PREVIOUS_MENU,
         .c_key = 0x1B,
         .p_c_text = NULL

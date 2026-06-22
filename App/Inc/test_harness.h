@@ -71,3 +71,17 @@ extern void v_test_harness_size_huil(void);
  *        Wired to the debug-menu term-submenu '[e]' entry.
  */
 extern void v_test_harness_rawkey_huil(void);
+
+/**
+ * @brief Interactive (HuIL) line editor: x_term_getline_editor with pc_prompt and a
+ *        session-persistent history pool. ESC (cancel) exits the loop.
+ *        Wired to the debug-menu term-submenu '[l]' entry.
+ */
+extern void v_test_harness_line_huil(void);
+
+/**
+ * @brief Interactive bounded-field entry test: three inline labels on one row,
+ *        each edited with u16_field_width = 21. ESC cancels.
+ *        Wired to the debug-menu term-submenu '[f]' entry.
+ */
+extern void v_test_harness_line_fields_huil(void);
