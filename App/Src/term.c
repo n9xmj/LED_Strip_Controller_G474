@@ -1124,13 +1124,20 @@ static void v_line_emit_newline(void)
     (void) putchar('\n');
 }
 
-/* Bounded partial suffix repaint; unbounded falls back to full canvas fill. */
-static void v_line_repaint_suffix(term_line_state_t *px_st, bool b_cursor_left_first)
+/* Bounded partial suffix repaint starting at buffer index u16_from; unbounded falls
+ * back to full canvas fill. u16_from must be the FIRST buffer cell whose glyph changed:
+ *   - insert            -> the inserted char (cursor-1, since insert advances cursor)
+ *   - delete / backspace -> the cursor (the suffix shifted into place there)
+ * Starting past the changed cell strands the stale glyph on screen (the bounded-mode
+ * insert regression: typed '*' left the old char behind and pushed the suffix right). */
+static void v_line_repaint_suffix(term_line_state_t *px_st, uint16_t u16_from)
 {
     uint16_t u16_buf;
     uint16_t u16_col;
     uint16_t u16_end_col;
     uint16_t u16_i;
+    uint16_t u16_vis_end;
+    uint16_t u16_stop;
 
     if (b_line_view_sync(px_st) || !px_st->b_bounded_field)
     {
@@ -1138,28 +1145,27 @@ static void v_line_repaint_suffix(term_line_state_t *px_st, bool b_cursor_left_f
         return;
     }
 
-    if (b_cursor_left_first)
-    {
-        v_term_cursor_left(1u);
-    }
-
-    u16_buf = px_st->u16_cursor;
+    u16_buf = u16_from;
     if (u16_buf < px_st->u16_view_offset)
     {
         u16_buf = px_st->u16_view_offset;
     }
 
+    /* Clamp the reprint to the visible window — a scrolled line is longer than the
+     * field, so the tail must never spill past the right edge into the next field. */
+    u16_vis_end = (uint16_t) (px_st->u16_view_offset + px_st->u16_canvas_cells);
+    u16_stop    = (px_st->u16_len < u16_vis_end) ? px_st->u16_len : u16_vis_end;
+
     u16_col = (uint16_t) (px_st->u16_origin_col + (u16_buf - px_st->u16_view_offset));
     v_term_cursor_move(px_st->u16_origin_row, u16_col);
 
-    for (u16_i = u16_buf; u16_i < px_st->u16_len; u16_i++)
+    for (u16_i = u16_buf; u16_i < u16_stop; u16_i++)
     {
         (void) putchar(px_st->pc_line[u16_i]);
     }
 
     u16_end_col = (uint16_t) (px_st->u16_origin_col + px_st->u16_canvas_cells);
-    u16_col     = (uint16_t) (px_st->u16_origin_col
-                              + (px_st->u16_len - px_st->u16_view_offset));
+    u16_col     = (uint16_t) (px_st->u16_origin_col + (u16_stop - px_st->u16_view_offset));
     while (u16_col < u16_end_col)
     {
         (void) putchar(' ');
@@ -1221,7 +1227,8 @@ static void v_line_insert_char(term_line_state_t *px_st, char c_ch)
     }
     else
     {
-        v_line_repaint_suffix(px_st, false);
+        /* Inserted char sits at cursor-1 (insert advanced the cursor); repaint from there. */
+        v_line_repaint_suffix(px_st, (uint16_t) (px_st->u16_cursor - 1u));
     }
 }
 
@@ -1269,7 +1276,7 @@ static void v_line_backspace(term_line_state_t *px_st)
     }
     else
     {
-        v_line_repaint_suffix(px_st, true);
+        v_line_repaint_suffix(px_st, px_st->u16_cursor);
     }
 }
 
@@ -1296,7 +1303,7 @@ static void v_line_delete_forward(term_line_state_t *px_st)
     }
     else
     {
-        v_line_repaint_suffix(px_st, false);
+        v_line_repaint_suffix(px_st, px_st->u16_cursor);
     }
 }
 
