@@ -78,5 +78,12 @@
     "send": "1B5B481B5B430B0D",
     "expect_rc": "0",
     "expect_line": "h"
+  },
+  "field_overwrite_inplace": {
+    "desc": "W12: preload 21-char full field, Home, Insert(OVR), type ABC over first 3, Enter -> length unchanged",
+    "preload": "012345678901234567890",
+    "send": "1B5B481B5B327E4142430D",
+    "expect_rc": "0",
+    "expect_line": "ABC345678901234567890"
   }
 }

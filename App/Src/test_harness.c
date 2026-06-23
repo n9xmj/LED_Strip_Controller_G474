@@ -830,7 +830,7 @@ void v_test_harness_line_huil(void)
     term_line_t    x_rc;
 
     printf("\r\nLine editor (HuIL). Editor prints prompt via pc_prompt.\r\n"
-           "Up/Down = history, Ctrl-X/U/K = kill, ESC = cancel session.\r\n\r\n");
+           "Up/Down = history, Ctrl-X/U/K = kill, Insert = INS/OVR, ESC = cancel.\r\n\r\n");
 
     for (;;)
     {
@@ -841,6 +841,7 @@ void v_test_harness_line_huil(void)
         x_edit.pu8_hist        = s_au8_hist;
         x_edit.u16_hist_size   = (uint16_t) sizeof(s_au8_hist);
         x_edit.pc_prompt       = "line> ";
+        x_edit.b_show_mode_cursor = true;   /* W12: show INS/OVR cursor cue. */
 
         x_rc = x_term_getline_editor(&x_edit);
         printf("  rc=%s line=\"%s\"\r\n", pc_term_line_name(x_rc), ac_line);
@@ -890,6 +891,7 @@ void v_test_harness_line_fields_huil(void)
         x_edit.pu8_hist        = s_au8_hist;
         x_edit.u16_hist_size   = (uint16_t) sizeof(s_au8_hist);
         x_edit.pc_prompt       = NULL;
+        x_edit.b_show_mode_cursor = true;   /* W12: show INS/OVR cursor cue. */
 
         x_rc = x_term_getline_editor(&x_edit);
 

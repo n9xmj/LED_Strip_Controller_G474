@@ -46,6 +46,13 @@
 #define ANSI_HIDE_CURSOR            CSI_S "?25l"
 #define ANSI_SHOW_CURSOR            CSI_S "?25h"
 
+// DECSCUSR cursor shape (CSI Ps SP q): 0/1 blink block, 2 steady block,
+// 3 blink underline, 4 steady underline, 5 blink bar, 6 steady bar.
+#define ANSI_CURSOR_STYLE_FMT       CSI_S "%u q"
+#define ANSI_CURSOR_STYLE_DEFAULT   CSI_S "0 q"     // restore terminal default shape
+#define ANSI_CURSOR_STEADY_BLOCK    CSI_S "2 q"     // overwrite-mode hint
+#define ANSI_CURSOR_STEADY_BAR      CSI_S "6 q"     // insert-mode hint (I-beam)
+
 #define ANSI_RESET                  ESC_S "c"       // Terminal full reset
 
 // ANSI display editing sequences

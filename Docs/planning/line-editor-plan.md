@@ -14,8 +14,10 @@ there as wish-list item **W1**; promoted to its own board here.
 **Home:** the `term.*` module (`App/Src/term.c` / `App/Inc/term.h`), alongside the
 key reader and the size/cursor queries.
 
-**Status:** v1 **SHIPPED** on G474 bench (2026-06-21) · canvas rework + **W16** viewport **SHIPPED** (2026-06-22).
-Run te
+**Status:** v1 **SHIPPED** on G474 bench (2026-06-21) · canvas rework + **W16** viewport +
+unbounded scroll-safe repaint fix **SHIPPED** (2026-06-22) · bounded mid-line insert repaint fix
+**SHIPPED** (2026-06-22) · **W12** insert/overwrite toggle **SHIPPED** (2026-06-22).
+
 **Planning model:** [`decision-log-model.md`](decision-log-model.md). Not PLAY work;
 no Must-Ship-Gap fence — just a Big Board + wish list. **ID numbering continues the
 sibling plan's sequence** (it ended at D12 / S6 / I4 / T3 / Q3) so the two boards
@@ -91,11 +93,18 @@ term_line_t x_rc = x_term_getline_editor(&x_edit);
 | **T4** | 🟢 | **Test** = harness `E` op + `scripts/term_golden/lineedit.json` + HuIL `[l]` under `<term>` submenu |
 | **Q4** | 🟢 | **Placement / naming** = `term.c` / `x_term_getline_editor` returning `term_line_t` |
 | **Q5** | 🟢 | **Call shape** = `term_line_edit_t` options struct (zero-init defaults); includes `pc_prompt`, `u16_field_width`; single `px_edit` arg |
+| **D18** | 🟢 | **W12 overwrite mechanics** = `EXT_KEY_INSERT` (`ESC[2~`) toggles a **session-local** insert⇄overwrite flag; in overwrite a printable **replaces** the char at the cursor and advances (no suffix shift, `u16_len` unchanged); at EOL overwrite falls back to append/insert. Nav / kill / BS / DEL unchanged — BS & DEL still **collapse** (**D16**), they do not "replace with space" |
+| **S12** | 🟢 | **W12 overwrite bounds/length** = mid-line overwrite never changes `u16_len`; only EOL append grows it (still clamped to `u16_max_len-1`); bounded fixed-width fields (**W16**) become editable **in place**; Space (**S10**) overwrites like any other printable when in overwrite |
+| **I8** | 🟢 | **W12 cursor-shape hint** = **RESOLVED: include, opt-in.** `DECSCUSR` (`CSI n q`) steady-bar = INS / steady-block = OVR, via a new `v_term_cursor_style()` + `ANSI.h` macros, **gated behind a new `term_line_edit_t` opt-in flag** (default off → no shape emits, fully back-compatible). When enabled, the default shape (`CSI 0 q`) **must be restored on every exit path** (ENTER/ESC/Ctrl-C/error) — the same restore discipline that rejected `CSI 4h` in **D13** |
+| **Q6** | 🟢 | **W12 default-mode field** = **RESOLVED: option B.** Always start in **insert**; the only way into overwrite is the live `Insert`-key toggle (resets to insert each call). **No** `b_start_overwrite` member added — the sole new `term_line_edit_t` field is the **I8** cursor-cue opt-in |
+| **T5** | 🟢 | **W12 test** = harness Insert byte `1B5B327E` toggles mode; golden vectors (overwrite-replace mid-line, EOL-extend, toggle round-trip, bounded in-place overwrite) added to `lineedit.json` + `lineedit_field.json`; HuIL via `[l]` / `[f]` |
 
 Status: 🔴 open · 🟡 leaning · 🟢 resolved · 🔵 deferred.
 
-**Open rows needing an author call:** none — board locked for v1 implementation
-(2026-06-21).
+**W12 fully resolved (2026-06-22):** **I8** → include cursor-shape cue, opt-in via a
+new `term_line_edit_t` flag, default off, restore on every exit. **Q6** → option B
+(always start insert; live toggle only, no default-mode field). **D18 / S12 / T5** green.
+v1 board (D13–Q5) remains locked/shipped. Ready to implement.
 
 ---
 
@@ -115,8 +124,8 @@ Status: 🔴 open · 🟡 leaning · 🟢 resolved · 🔵 deferred.
 | ESC (bare) | `0x1B` | cancel → `TERM_LINE_ESCAPE` |
 | Ctrl-C | `0x03` | abort → `TERM_LINE_CTRLC` |
 | Space | `0x20` | insert `' '` at cursor — mid-line shifts suffix (**S10**) |
-| printable | `0x21..0x7E` | insert at cursor (always insert mode in v1; overwrite → **W12**) |
-| Insert | `EXT_KEY_INSERT` (`ESC[2~`) | ignored in v1 — toggle insert/overwrite deferred to **W12** |
+| printable | `0x21..0x7E` | insert at cursor (v1 default); in **overwrite** mode replace char at cursor + advance (**W12** / **D18**) |
+| Insert | `EXT_KEY_INSERT` (`ESC[2~`) | v1: ignored. **W12** / **D18**: toggle insert ⇄ overwrite (session-local, resets to default each call) |
 | anything else | — | ignored in v1 |
 
 **ESC disambiguation is free:** the reader only returns a bare `0x1B` when nothing
@@ -372,6 +381,67 @@ function signature. `TERM_LINE_ERROR` if `px_edit` is NULL, `pc_line` is NULL, o
 
 ---
 
+## W12 — insert/overwrite toggle *(planning — opened 2026-06-22)*
+
+Promotes wish-list **W12** to a real design. Goal: a classic INS/OVR toggle like a
+PC text editor, scoped to the single-line editor. Touches only the printable-insert
+path and the (currently ignored) Insert key — nav/kill/history stay as-is.
+
+**Grounding (current code, `App/Src/term.c`):**
+- `term_line_state_t` holds `u16_cursor` / `u16_len`; **no** mode flag yet — W12 adds one (`b_overwrite`).
+- `v_line_insert_char()` already splits **append** (`cursor == len`) vs **mid-line memmove-insert**. Overwrite reuses the append branch verbatim and swaps the mid-line branch for a single-cell store.
+- The key-dispatch `switch` decodes `EXT_KEY_INSERT` (intro table line ~72) but the loop ignores it; W12 wires it to flip the flag.
+- Redraw is already mode-agnostic: `v_line_refresh_unbounded()` (unbounded) and the bounded suffix/canvas painters repaint from the buffer, so overwrite just feeds them a mutated buffer + cursor.
+
+### D18 — overwrite mechanics *(leaning)*
+`EXT_KEY_INSERT` toggles `x_st.b_overwrite` (session-local, always **starts false = insert** per **Q6** option B).
+New `v_line_overwrite_char()` (or a branch in `v_line_insert_char`):
+- **cursor < len:** `pc_line[cursor] = c; cursor++;` — `u16_len` unchanged, no memmove, no suffix shift.
+- **cursor == len (EOL):** identical to insert-append (extends the line, still clamped to `u16_max_len-1`).
+- Then redraw via the existing path (`v_line_redraw`) so unbounded scroll + bounded `u16_view_offset` (**W16**) keep working. *Cheap-path option:* mid-line overwrite is just `putchar(c)` over the current cell (terminal auto-advances) — can specialise later if flicker shows; default to the shared redraw for correctness first.
+- **BS / DEL stay collapsing (D16).** We do **not** implement DOS-style "BS replaces with space + moves left." *(Minor confirm point — author can override.)*
+
+### S12 — overwrite bounds & length *(leaning)*
+Mid-line overwrite holds `u16_len` constant; the only growth is EOL append (clamped to
+`u16_max_len-1`, same limit as insert). This makes **bounded fixed-width fields (W16)**
+editable in place: park the cursor on a digit, type to replace it, no length churn — ideal
+for `Tempo:`/`Volume:` style status-line fields. **Space (S10)** overwrites like any printable.
+
+### I8 — cursor-shape hint *(SHIPPED — include, opt-in)*
+Emit `DECSCUSR` (`CSI Ps SP q`, space intermediate required) on toggle: `CSI 6 SP q` steady bar =
+INS, `CSI 2 SP q` steady block = OVR, through the new public `v_term_cursor_style()` primitive
+(**I7**/**W14** family) + `ANSI.h` macros. **Gated behind the `term_line_edit_t.b_show_mode_cursor`
+opt-in flag** (zero-init → off → no shape emits at all, fully back-compatible — every existing
+caller is untouched). When enabled:
+- Set the shape to match the current mode on session open (start = INS = bar) and on every toggle.
+- **Restore the default shape (`CSI 0 SP q`) on *every* exit path** — ENTER / TAB / ESC / Ctrl-C —
+  via a single restore in the `done:` path so there's exactly one place to get right (the D13
+  fragility lesson). Skip both the set and the restore when the flag is off.
+- **Tera Term gotcha (verified 2026-06-22):** DECSCUSR is gated behind *Setup → Additional
+  settings → Control Sequence → "Cursor control sequence"*, which ships **OFF**. With it off the
+  cue is silently dropped (mechanics still work); with it on, bar↔block tracks INS/OVR as expected.
+  HuIL `[l]`/`[f]` enable the flag; the golden-vector harness ops leave it off (no DECSCUSR in
+  captured output).
+
+### Q6 — default-mode field *(RESOLVED — option B)*
+**No `b_start_overwrite` field.** The editor always starts in **insert**; the only path into
+overwrite is the live `Insert`-key toggle, which resets to insert on each `x_term_getline_editor()`
+call. The sole new `term_line_edit_t` member from W12 is the **I8** cursor-cue opt-in
+(`b_show_mode_cursor`). Keeps the common case dead simple; a caller wanting OVR-by-default can
+revisit later if a real need shows up.
+
+### T5 — test plan *(leaning)*
+Extend **T4**:
+- Harness `E`/`B`: Insert toggle byte is `1B 5B 32 7E` (`ESC[2~`). Scripts emit it to flip mode mid-burst.
+- Goldens — add to `scripts/term_golden/lineedit.json` (unbounded) and `lineedit_field.json` (bounded):
+  - overwrite replace mid-line (e.g. `abc` → Home → Ins → `XY` ⇒ `XYc`),
+  - overwrite at EOL extends (`ab` → End → Ins → `c` ⇒ `abc`),
+  - toggle round-trip (Ins on, type, Ins off, insert) leaves correct final line,
+  - bounded in-place overwrite of a preloaded fixed-width field (length unchanged).
+- HuIL: exercise via `[l]` / `[f]` — watch the I8 cursor cue (if adopted) and confirm restore on exit.
+
+---
+
 ## Wish list (v2+ / out-of-scope companion)
 
 | ID | Subject |
@@ -383,7 +453,7 @@ function signature. `TERM_LINE_ERROR` if `px_edit` is NULL, `pc_line` is NULL, o
 | **W9** | **Kill-ring / yank** (`Ctrl-K`/`Ctrl-U`/`Ctrl-Y`) — readline-style cut buffer (builds on D17 option B) |
 | **W10** | **Reverse-incremental history search** (`Ctrl-R`) over the S7 pool |
 | **W11** | **Completion hook** — caller-supplied callback on Tab for command/arg completion |
-| **W12** | **Insert/overwrite toggle** *(stretch — author wants eventually)* — `EXT_KEY_INSERT` toggles firmware insert vs overwrite; optional cursor-shape hint; overwrite = replace at cursor + `CUF(1)` |
+| **W12** | **Insert/overwrite toggle** — **SHIPPED 2026-06-22** (Big Board **D18 / S12 / I8 / Q6 / T5** all 🟢). Live `Insert` toggle, in-place overwrite, EOL-append fallback; opt-in INS/OVR DECSCUSR cursor cue (`b_show_mode_cursor`); bench-verified 15/15 + 13/13 |
 | **W13** | Retire legacy `i_getline` once this lands (part of the **W5** migration sweep) |
 | **W14** | **Complete the public `v_term_*` primitive set** — wrap remaining `ANSI.h` sequences (colors, attributes, scroll/region, line insert/delete, RGB, cursor shape, modes, …) even when no higher-level `term.*` function uses them yet; API users compose freely |
 
@@ -406,3 +476,16 @@ function signature. `TERM_LINE_ERROR` if `px_edit` is NULL, `pc_line` is NULL, o
   horizontal scroll; entry limit decoupled from display width; cursor starts at EOL.
 - **2026-06-21** — **D14/D15/S7/I5/T4/Q4** 🟢. **Q5** 🟢 `term_line_edit_t` options struct
   (author ~>4-param rule). v1 board locked; PLAY recall+mid-line edit called out under **S10**.
+- **2026-06-22** — **Unbounded repaint fix shipped** (scroll-safe relative refresh; verified on
+  bench at 120x30 — bottom-of-screen entry, wrapped lines, mid-line DEL/BS, deep history recall).
+- **2026-06-22** — **W12 promoted to planning** (insert/overwrite toggle): **D18** (overwrite
+  mechanics) 🟡, **S12** (bounds/length) 🟡, **T5** (tests) 🟡; **I8** (cursor-shape hint) 🔴 and
+  **Q6** (default-mode struct field) 🔴 await author calls. Grounded in current `term.c`
+  (`v_line_insert_char` append/insert split, ignored `EXT_KEY_INSERT`, mode-agnostic redraw).
+- **2026-06-22** — **Bounded mid-line insert repaint fix shipped:** `v_line_repaint_suffix`
+  now takes an explicit start index (insert = cursor-1, del/BS = cursor) and clamps the reprint
+  to the viewport, fixing stranded glyphs and tail spill into the next field.
+- **2026-06-22** — **W12 SHIPPED:** **I8** → opt-in DECSCUSR cue (`b_show_mode_cursor`, bar=INS /
+  block=OVR, restore on all exits; needs Tera Term "Cursor control sequence" enabled). **Q6** →
+  option B (always start insert, live toggle only). **D18/S12/T5** 🟢. Bench 15/15 + 13/13;
+  HuIL-verified on bench (mechanics + cue).

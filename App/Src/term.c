@@ -481,6 +481,11 @@ void v_term_cursor_visible(bool b_on)
     (void) fputs(b_on ? ANSI_SHOW_CURSOR : ANSI_HIDE_CURSOR, stdout);
 }
 
+void v_term_cursor_style(uint8_t u8_style)
+{
+    (void) printf(ANSI_CURSOR_STYLE_FMT, (unsigned) u8_style);
+}
+
 void v_term_save_cursor(void)
 {
     (void) fputs(ANSI_SAVE_CURSOR, stdout);
@@ -770,8 +775,15 @@ typedef struct
     uint16_t  u16_view_offset;      /* bounded: buffer index at left canvas edge.  */
     uint16_t  u16_prev_row_off;     /* unbounded: cursor row offset below start row. */
     bool      b_bounded_field;
+    bool      b_overwrite;          /* W12: false = insert, true = overwrite. */
+    bool      b_show_mode_cursor;   /* W12: emit DECSCUSR INS/OVR cue when set. */
 }
 term_line_state_t;
+
+/* DECSCUSR shape codes for the INS/OVR cursor cue (W12 / I8). */
+#define LINE_CURSOR_SHAPE_INSERT    6u  /* steady bar (I-beam). */
+#define LINE_CURSOR_SHAPE_OVERWRITE 2u  /* steady block.        */
+#define LINE_CURSOR_SHAPE_DEFAULT   0u  /* terminal default.    */
 
 static uint16_t u16_line_bounded_strlen(const char *pc_s, uint16_t u16_max)
 {
@@ -1095,6 +1107,28 @@ static void v_line_redraw(term_line_state_t *px_st)
     }
 }
 
+/* Emit the DECSCUSR INS/OVR cue for the current mode (no-op unless opted in). */
+static void v_line_mode_cursor_update(const term_line_state_t *px_st)
+{
+    if (px_st->b_show_mode_cursor)
+    {
+        v_term_cursor_style(px_st->b_overwrite
+                            ? LINE_CURSOR_SHAPE_OVERWRITE
+                            : LINE_CURSOR_SHAPE_INSERT);
+    }
+}
+
+/* Restore the terminal's default cursor shape — only if we ever changed it.
+ * Called on EVERY editor exit path (ENTER/TAB/ESC/Ctrl-C) so the shape never
+ * leaks back to the caller (the D13 restore-discipline lesson). */
+static void v_line_mode_cursor_restore(const term_line_state_t *px_st)
+{
+    if (px_st->b_show_mode_cursor)
+    {
+        v_term_cursor_style(LINE_CURSOR_SHAPE_DEFAULT);
+    }
+}
+
 static void v_line_session_open(term_line_state_t *px_st)
 {
     px_st->u16_cursor = px_st->u16_len;
@@ -1180,6 +1214,30 @@ static void v_line_insert_char(term_line_state_t *px_st, char c_ch)
     uint16_t u16_tail;
     uint16_t u16_col;
     bool     b_off_changed;
+
+    /* W12 overwrite: replace the char under the cursor in place and advance — no
+     * length change, no suffix shift (S12). At EOL there's nothing to overwrite, so
+     * fall through to the normal append path (typing past the end still grows). */
+    if (px_st->b_overwrite && (px_st->u16_cursor < px_st->u16_len))
+    {
+        px_st->pc_line[px_st->u16_cursor] = c_ch;
+        px_st->u16_cursor++;
+
+        if (!px_st->b_bounded_field)
+        {
+            v_line_refresh_unbounded(px_st);
+        }
+        else if (b_line_view_sync(px_st))
+        {
+            v_line_canvas_repaint_full(px_st);
+        }
+        else
+        {
+            /* One changed cell at cursor-1; repaint from there (viewport-clamped). */
+            v_line_repaint_suffix(px_st, (uint16_t) (px_st->u16_cursor - 1u));
+        }
+        return;
+    }
 
     if (px_st->u16_len >= u16_line_edit_limit(px_st))
     {
@@ -1722,6 +1780,8 @@ term_line_t x_term_getline_editor(term_line_edit_t *px_edit)
     x_st.u16_canvas_cells = 0u;
     x_st.u16_view_offset  = 0u;
     x_st.b_bounded_field  = false;
+    x_st.b_overwrite        = false;   /* Q6 opt B: always start in insert mode. */
+    x_st.b_show_mode_cursor = px_edit->b_show_mode_cursor;
     x_st.u16_origin_row   = 1u;
     x_st.u16_origin_col   = 1u;
     x_st.u16_prompt_col   = 0u;
@@ -1775,6 +1835,8 @@ term_line_t x_term_getline_editor(term_line_edit_t *px_edit)
     }
 
     v_line_session_open(&x_st);
+    v_line_mode_cursor_update(&x_st);   /* initial INS cue (no-op unless opted in). */
+    v_line_flush_stdout();
 
     for (;;)
     {
@@ -1794,6 +1856,11 @@ term_line_t x_term_getline_editor(term_line_edit_t *px_edit)
             case EXT_KEY_UP:     v_line_history_up(&x_st);  break;
             case EXT_KEY_DOWN:   v_line_history_down(&x_st); break;
             case EXT_KEY_DELETE: v_line_delete_forward(&x_st); break;
+            case EXT_KEY_INSERT:
+                x_st.b_overwrite = !x_st.b_overwrite;   /* W12 INS<->OVR toggle. */
+                v_line_mode_cursor_update(&x_st);
+                v_line_flush_stdout();
+                break;
             default:
                 if (i16_key == 0x08)
                 {
@@ -1849,6 +1916,7 @@ term_line_t x_term_getline_editor(term_line_edit_t *px_edit)
     }
 
 done:
+    v_line_mode_cursor_restore(&x_st);   /* restore default cursor shape on all exits. */
     if (!x_st.b_bounded_field)
     {
         if (x_st.u16_cursor != x_st.u16_len)
@@ -1858,6 +1926,7 @@ done:
         }
         v_line_emit_newline();
     }
+    v_line_flush_stdout();
     if (b_line_hist_on_accept(x_rc) && (x_st.pu8_hist != NULL) && (x_st.u16_hist_size >= 2u))
     {
         v_hist_append(x_st.pu8_hist, x_st.u16_hist_size, x_st.pc_line);

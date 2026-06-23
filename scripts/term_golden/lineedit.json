@@ -72,5 +72,23 @@
     "send": "68656C6C6F1B5B481B5B430B0D",
     "expect_rc": "0",
     "expect_line": "h"
+  },
+  "overwrite_mid_line": {
+    "desc": "W12: abc + Home + Insert(toggle OVR) + XY + Enter -> XYc (replace, no grow)",
+    "send": "6162631B5B481B5B327E58590D",
+    "expect_rc": "0",
+    "expect_line": "XYc"
+  },
+  "overwrite_eol_extend": {
+    "desc": "W12: ab + Insert(OVR) + c at EOL + Enter -> abc (overwrite falls back to append)",
+    "send": "61621B5B327E630D",
+    "expect_rc": "0",
+    "expect_line": "abc"
+  },
+  "overwrite_toggle_roundtrip": {
+    "desc": "W12: abcd + Home + Ins(OVR) X + Ins(INS) Y + Enter -> XYbcd (overwrite then insert)",
+    "send": "616263641B5B481B5B327E581B5B327E590D",
+    "expect_rc": "0",
+    "expect_line": "XYbcd"
   }
 }

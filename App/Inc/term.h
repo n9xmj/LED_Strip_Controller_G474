@@ -217,6 +217,9 @@ extern void v_term_cursor_right(uint16_t u16_count);
 extern void v_term_cursor_move(uint16_t u16_row, uint16_t u16_col);
 extern void v_term_cursor_column(uint16_t u16_col);
 extern void v_term_cursor_visible(bool b_on);
+/** Set cursor shape via DECSCUSR (CSI Ps SP q). 0 = terminal default, 2 = steady
+ *  block, 6 = steady bar. Used by the line editor's INS/OVR cue (W12). */
+extern void v_term_cursor_style(uint8_t u8_style);
 extern void v_term_save_cursor(void);
 extern void v_term_restore_cursor(void);
 extern void v_term_delete_chars(uint16_t u16_count);
@@ -270,6 +273,10 @@ typedef struct
     uint16_t  u16_hist_size;    /**< sizeof pool when @p pu8_hist != NULL.     */
     const char *pc_prompt;      /**< optional prompt; NULL = none.               */
     uint16_t  u16_field_width;  /**< 0=full line; else bounded field width.      */
+    bool      b_show_mode_cursor; /**< W12: opt-in INS/OVR cursor-shape cue via
+                                   *  DECSCUSR. 0 (default) = no shape emits;
+                                   *  when set, bar=insert / block=overwrite and
+                                   *  the default shape is restored on every exit. */
 }
 term_line_edit_t;
 
