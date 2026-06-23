@@ -133,6 +133,9 @@ Scripts (`flash.ps1`, `smoke-test.ps1`, `play_bench.py`, …) auto-resolve SN/po
 that file — **don't pass `--stlink-sn` / `--port` / `--baud` unless deliberately overriding.**
 Changing boards / machines / MCU = edit that one JSON. See [`BENCH.md`](BENCH.md) for the full
 explanation. (Firmware-side: debug console is always USART2 / ST-Link VCP at 921600.)
+The **`/bench`** skill (both archives) reports the resolved config + connected ST-Links/COM
+ports with cross-checks, and applies a terse freeform change (e.g. `/bench port COM1, 921600`)
+to the right config file.
 
 ### Other Key Details
 
@@ -142,13 +145,25 @@ Cooperative line editor on `i16_term_get_key()`. Options in `term_line_edit_t`:
 **`pc_line`** (in/out + optional default on entry — cursor starts at end),
 **`u16_max_len`**, history pool, **`pc_prompt`**, **`u16_field_width`**
 (`0` = unbounded canvas `N=max_len-1`, scroll-up OK; non-zero = single-row bounded
-viewport, EOL-clamped, entry still up to `max_len-1` with horizontal scroll).
+viewport, EOL-clamped, entry still up to `max_len-1` with horizontal scroll),
+**`b_show_mode_cursor`** (W12 opt-in INS/OVR cursor cue; default off).
 
 **Canvas init (both modes):** prompt → per-cell paint (`CUP` + char for each of `N`
 cells; unbounded must not stream spaces — wrap uses `u16_term_cols`) → `CUP` to
 cell 0 → `DECSC`. Query terminal size **before** CPR origin. Bounded: suffix
 repaint + space-pad; no CEL (protects inline neighbors).
 Tab / Shift-Tab accept in bounded mode. HuIL: `<term>` → **`l`** / **`f`**.
+
+**Bounded suffix repaint invariant:** `v_line_repaint_suffix()` takes the *first changed
+buffer index* — `cursor-1` for insert (insert advances the cursor), `cursor` for
+delete/backspace — and **clamps the reprint to the viewport** (`view_offset+canvas_cells`).
+Start past the changed cell → stranded glyph; don't clamp → tail spills into the next field.
+
+**W12 insert/overwrite:** `Insert` toggles INS⇄OVR (session-local, always starts insert).
+Overwrite replaces the char under the cursor in place (no length change); at EOL it appends.
+`b_show_mode_cursor` emits a DECSCUSR cue (bar=INS / block=OVR), restored on every exit path
+— needs Tera Term *Setup → Additional settings → Control Sequence → "Cursor control sequence"*
+(ships off). Golden vectors: `scripts/term_golden/lineedit.json` + `lineedit_field.json`.
 
 See [`Docs/planning/line-editor-plan.md`](Docs/planning/line-editor-plan.md) and
 [`.grok/memory/session-handoff-2026-06-21-line-editor.md`](.grok/memory/session-handoff-2026-06-21-line-editor.md).
