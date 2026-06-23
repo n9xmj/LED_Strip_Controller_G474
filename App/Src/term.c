@@ -768,6 +768,7 @@ typedef struct
     uint16_t  u16_field_width;      /* bounded display width (1 row, EOL clamp). */
     uint16_t  u16_canvas_cells;     /* reserved on-screen cells N at session open.  */
     uint16_t  u16_view_offset;      /* bounded: buffer index at left canvas edge.  */
+    uint16_t  u16_prev_row_off;     /* unbounded: cursor row offset below start row. */
     bool      b_bounded_field;
 }
 term_line_state_t;
@@ -949,50 +950,30 @@ static bool b_line_view_sync(term_line_state_t *px_st)
     return (u16_new != u16_old);
 }
 
-/* Inverse of v_line_canvas_cell_to_screen: origin row when cursor is at @p u16_cell. */
-static uint16_t u16_line_origin_row_from_cell(const term_line_state_t *px_st, uint16_t u16_cell,
-                                              uint16_t u16_end_row)
+/* Paint one canvas cell at absolute screen coordinates (matches cursor mapping). */
+static void v_line_canvas_put_cell(const term_line_state_t *px_st, uint16_t u16_cell, char c_ch)
 {
-    uint16_t u16_first;
-    uint16_t u16_q;
-
-    if ((px_st->u16_term_cols == 0u) || (px_st->u16_origin_col == 0u)
-        || (px_st->u16_origin_col > px_st->u16_term_cols))
-    {
-        return u16_end_row;
-    }
-
-    u16_first = (uint16_t) (px_st->u16_term_cols - px_st->u16_origin_col + 1u);
-    if (u16_cell <= u16_first)
-    {
-        return u16_end_row;
-    }
-
-    u16_q = (uint16_t) ((u16_cell - u16_first) / px_st->u16_term_cols);
-    if (u16_end_row <= u16_q)
-    {
-        return 1u;
-    }
-
-    return (uint16_t) (u16_end_row - 1u - u16_q);
-}
-
-/* After canvas fill the terminal cursor sits at canvas cell N; re-pin DECSC at cell 0. */
-static void v_line_pin_origin_after_fill(term_line_state_t *px_st)
-{
-    uint16_t u16_end_row;
-    uint16_t u16_end_col;
+    uint16_t u16_row;
+    uint16_t u16_col;
 
     if (px_st->b_bounded_field)
     {
-        v_line_goto_origin(px_st);
-        v_term_save_cursor();
-        return;
+        u16_col = (uint16_t) (px_st->u16_origin_col
+                              + (u16_cell - px_st->u16_view_offset));
+        v_term_cursor_move(px_st->u16_origin_row, u16_col);
+    }
+    else
+    {
+        v_line_canvas_cell_to_screen(px_st, u16_cell, &u16_row, &u16_col);
+        v_term_cursor_move(u16_row, u16_col);
     }
 
-    v_line_canvas_cell_to_screen(px_st, px_st->u16_canvas_cells, &u16_end_row, &u16_end_col);
-    px_st->u16_origin_row = u16_line_origin_row_from_cell(px_st, px_st->u16_canvas_cells,
-                                                          u16_end_row);
+    (void) putchar(c_ch);
+}
+
+/* Re-pin DECSC at canvas cell 0 after fill (absolute CUP; no CUB/DECRC). */
+static void v_line_pin_origin_after_fill(term_line_state_t *px_st)
+{
     v_line_goto_origin(px_st);
     v_term_save_cursor();
 }
@@ -1025,11 +1006,11 @@ static void v_line_canvas_fill(term_line_state_t *px_st)
         {
             if (u16_i < px_st->u16_len)
             {
-                (void) putchar(px_st->pc_line[u16_i]);
+                v_line_canvas_put_cell(px_st, u16_i, px_st->pc_line[u16_i]);
             }
             else
             {
-                (void) putchar(' ');
+                v_line_canvas_put_cell(px_st, u16_i, ' ');
             }
         }
     }
@@ -1042,23 +1023,98 @@ static void v_line_canvas_repaint_full(term_line_state_t *px_st)
     v_line_cursor_goto_screen(px_st);
 }
 
-static void v_line_session_open(term_line_state_t *px_st)
+/* Unbounded full refresh — scroll-safe. Reprints prompt + buffer from the start
+ * column using relative row moves (so the prompt survives scrolling and shrink
+ * edits never strand stale glyphs). No reserved canvas, no absolute row CUP. */
+static void v_line_refresh_unbounded(term_line_state_t *px_st)
 {
+    uint16_t u16_cols = px_st->u16_term_cols;
+    uint16_t u16_base;          /* 0-based start column of the prompt */
+    uint16_t u16_total;         /* prompt_len + len  (cells consumed) */
+    uint16_t u16_before;        /* prompt_len + cursor (cells before edit point) */
+    uint16_t u16_end_row;       /* row offset of the post-content cursor */
+    uint16_t u16_cur_row;       /* row offset of the edit cursor */
+    uint16_t u16_cur_col;       /* 1-based column of the edit cursor */
+    uint16_t u16_i;
+
+    if (u16_cols == 0u)
+    {
+        u16_cols = TERM_DEFAULT_COLS;
+    }
+
+    u16_base   = (px_st->u16_prompt_col > 0u) ? (uint16_t) (px_st->u16_prompt_col - 1u) : 0u;
+    u16_total  = (uint16_t) (px_st->u16_prompt_len + px_st->u16_len);
+    u16_before = (uint16_t) (px_st->u16_prompt_len + px_st->u16_cursor);
+
+    if (px_st->u16_prev_row_off > 0u)
+    {
+        v_term_cursor_up(px_st->u16_prev_row_off);
+    }
+    v_term_cursor_column(px_st->u16_prompt_col);
+
     if (px_st->u16_prompt_len > 0u)
     {
-        v_term_cursor_move(px_st->u16_origin_row, px_st->u16_prompt_col);
         (void) fputs(px_st->pc_prompt, stdout);
     }
-
-    v_line_goto_origin(px_st);
-    if (!px_st->b_bounded_field)
+    for (u16_i = 0u; u16_i < px_st->u16_len; u16_i++)
     {
-        v_term_clear_eol();
+        (void) putchar(px_st->pc_line[u16_i]);
     }
 
+    (void) fputs(ANSI_CLEAR_EOS, stdout);
+
+    u16_end_row = (uint16_t) ((u16_base + u16_total) / u16_cols);
+    if ((u16_total > 0u) && (((u16_base + u16_total) % u16_cols) == 0u))
+    {
+        (void) putchar('\r');
+        (void) putchar('\n');
+    }
+
+    u16_cur_row = (uint16_t) ((u16_base + u16_before) / u16_cols);
+    u16_cur_col = (uint16_t) (((u16_base + u16_before) % u16_cols) + 1u);
+
+    if (u16_end_row > u16_cur_row)
+    {
+        v_term_cursor_up((uint16_t) (u16_end_row - u16_cur_row));
+    }
+    v_term_cursor_column(u16_cur_col);
+
+    px_st->u16_prev_row_off = u16_cur_row;
+}
+
+/* Dispatch a redraw to the bounded canvas painter or the unbounded refresh. */
+static void v_line_redraw(term_line_state_t *px_st)
+{
+    if (px_st->b_bounded_field)
+    {
+        v_line_canvas_repaint_full(px_st);
+    }
+    else
+    {
+        v_line_refresh_unbounded(px_st);
+    }
+}
+
+static void v_line_session_open(term_line_state_t *px_st)
+{
     px_st->u16_cursor = px_st->u16_len;
-    (void) b_line_view_sync(px_st);
-    v_line_canvas_repaint_full(px_st);
+
+    if (px_st->b_bounded_field)
+    {
+        if (px_st->u16_prompt_len > 0u)
+        {
+            v_term_cursor_move(px_st->u16_origin_row, px_st->u16_prompt_col);
+            (void) fputs(px_st->pc_prompt, stdout);
+        }
+        (void) b_line_view_sync(px_st);
+        v_line_canvas_repaint_full(px_st);
+    }
+    else
+    {
+        px_st->u16_prev_row_off = 0u;
+        v_line_refresh_unbounded(px_st);
+    }
+
     v_line_flush_stdout();
 }
 
@@ -1116,7 +1172,6 @@ static void v_line_repaint_suffix(term_line_state_t *px_st, bool b_cursor_left_f
 static void v_line_insert_char(term_line_state_t *px_st, char c_ch)
 {
     uint16_t u16_tail;
-    uint16_t u16_row;
     uint16_t u16_col;
     bool     b_off_changed;
 
@@ -1142,6 +1197,12 @@ static void v_line_insert_char(term_line_state_t *px_st, char c_ch)
         px_st->u16_cursor++;
     }
 
+    if (!px_st->b_bounded_field)
+    {
+        v_line_refresh_unbounded(px_st);
+        return;
+    }
+
     b_off_changed = b_line_view_sync(px_st);
     if (b_off_changed)
     {
@@ -1149,33 +1210,18 @@ static void v_line_insert_char(term_line_state_t *px_st, char c_ch)
         return;
     }
 
-    if (px_st->b_bounded_field)
+    if ((px_st->u16_cursor == px_st->u16_len)
+        && ((px_st->u16_len - px_st->u16_view_offset) <= px_st->u16_canvas_cells))
     {
-        if ((px_st->u16_cursor == px_st->u16_len)
-            && ((px_st->u16_len - px_st->u16_view_offset) <= px_st->u16_canvas_cells))
-        {
-            u16_col = (uint16_t) (px_st->u16_origin_col
-                                  + (px_st->u16_len - 1u - px_st->u16_view_offset));
-            v_term_cursor_move(px_st->u16_origin_row, u16_col);
-            (void) putchar(c_ch);
-            v_line_cursor_goto_screen(px_st);
-        }
-        else
-        {
-            v_line_repaint_suffix(px_st, false);
-        }
-    }
-    else if (px_st->u16_cursor == px_st->u16_len)
-    {
-        v_line_canvas_cell_to_screen(px_st, (uint16_t) (px_st->u16_len - 1u),
-                                     &u16_row, &u16_col);
-        v_term_cursor_move(u16_row, u16_col);
+        u16_col = (uint16_t) (px_st->u16_origin_col
+                              + (px_st->u16_len - 1u - px_st->u16_view_offset));
+        v_term_cursor_move(px_st->u16_origin_row, u16_col);
         (void) putchar(c_ch);
         v_line_cursor_goto_screen(px_st);
     }
     else
     {
-        v_line_canvas_repaint_full(px_st);
+        v_line_repaint_suffix(px_st, false);
     }
 }
 
@@ -1205,26 +1251,25 @@ static void v_line_backspace(term_line_state_t *px_st)
         px_st->pc_line[px_st->u16_len] = '\0';
     }
 
+    if (!px_st->b_bounded_field)
+    {
+        v_line_refresh_unbounded(px_st);
+        return;
+    }
+
     if (b_line_view_sync(px_st))
     {
         v_line_canvas_repaint_full(px_st);
         return;
     }
 
-    if (px_st->b_bounded_field)
+    if (px_st->u16_cursor == px_st->u16_len)
     {
-        if (px_st->u16_cursor == px_st->u16_len)
-        {
-            (void) fputs("\b \b", stdout);
-        }
-        else
-        {
-            v_line_repaint_suffix(px_st, true);
-        }
+        (void) fputs("\b \b", stdout);
     }
     else
     {
-        v_line_canvas_repaint_full(px_st);
+        v_line_repaint_suffix(px_st, true);
     }
 }
 
@@ -1241,17 +1286,17 @@ static void v_line_delete_forward(term_line_state_t *px_st)
     px_st->u16_len--;
     px_st->pc_line[px_st->u16_len] = '\0';
 
-    if (b_line_view_sync(px_st))
+    if (!px_st->b_bounded_field)
+    {
+        v_line_refresh_unbounded(px_st);
+    }
+    else if (b_line_view_sync(px_st))
     {
         v_line_canvas_repaint_full(px_st);
-    }
-    else if (px_st->b_bounded_field)
-    {
-        v_line_repaint_suffix(px_st, false);
     }
     else
     {
-        v_line_canvas_repaint_full(px_st);
+        v_line_repaint_suffix(px_st, false);
     }
 }
 
@@ -1261,7 +1306,7 @@ static void v_line_clear_all(term_line_state_t *px_st)
     px_st->u16_cursor       = 0u;
     px_st->u16_view_offset = 0u;
     px_st->pc_line[0]      = '\0';
-    v_line_canvas_repaint_full(px_st);
+    v_line_redraw(px_st);
 }
 
 static void v_line_kill_to_end(term_line_state_t *px_st)
@@ -1269,7 +1314,7 @@ static void v_line_kill_to_end(term_line_state_t *px_st)
     px_st->pc_line[px_st->u16_cursor] = '\0';
     px_st->u16_len                    = px_st->u16_cursor;
     (void) b_line_view_sync(px_st);
-    v_line_canvas_repaint_full(px_st);
+    v_line_redraw(px_st);
 }
 
 static void v_line_kill_to_start(term_line_state_t *px_st)
@@ -1286,7 +1331,7 @@ static void v_line_kill_to_start(term_line_state_t *px_st)
     px_st->u16_len    = u16_tail;
     px_st->u16_cursor = 0u;
     (void) b_line_view_sync(px_st);
-    v_line_canvas_repaint_full(px_st);
+    v_line_redraw(px_st);
 }
 
 static void v_line_cursor_left(term_line_state_t *px_st)
@@ -1297,17 +1342,17 @@ static void v_line_cursor_left(term_line_state_t *px_st)
     }
 
     px_st->u16_cursor--;
-    if (b_line_view_sync(px_st))
+    if (!px_st->b_bounded_field)
+    {
+        v_line_refresh_unbounded(px_st);
+    }
+    else if (b_line_view_sync(px_st))
     {
         v_line_canvas_repaint_full(px_st);
     }
-    else if (px_st->b_bounded_field)
-    {
-        v_term_cursor_left(1u);
-    }
     else
     {
-        v_line_cursor_goto_screen(px_st);
+        v_term_cursor_left(1u);
     }
 }
 
@@ -1319,17 +1364,17 @@ static void v_line_cursor_right(term_line_state_t *px_st)
     }
 
     px_st->u16_cursor++;
-    if (b_line_view_sync(px_st))
+    if (!px_st->b_bounded_field)
+    {
+        v_line_refresh_unbounded(px_st);
+    }
+    else if (b_line_view_sync(px_st))
     {
         v_line_canvas_repaint_full(px_st);
     }
-    else if (px_st->b_bounded_field)
-    {
-        v_term_cursor_right(1u);
-    }
     else
     {
-        v_line_cursor_goto_screen(px_st);
+        v_term_cursor_right(1u);
     }
 }
 
@@ -1341,13 +1386,13 @@ static void v_line_cursor_home(term_line_state_t *px_st)
     }
 
     px_st->u16_cursor = 0u;
-    if (b_line_view_sync(px_st))
+    if (!px_st->b_bounded_field)
+    {
+        v_line_refresh_unbounded(px_st);
+    }
+    else if (b_line_view_sync(px_st))
     {
         v_line_canvas_repaint_full(px_st);
-    }
-    else if (px_st->b_bounded_field)
-    {
-        v_line_cursor_goto_screen(px_st);
     }
     else
     {
@@ -1363,7 +1408,11 @@ static void v_line_cursor_end(term_line_state_t *px_st)
     }
 
     px_st->u16_cursor = px_st->u16_len;
-    if (b_line_view_sync(px_st))
+    if (!px_st->b_bounded_field)
+    {
+        v_line_refresh_unbounded(px_st);
+    }
+    else if (b_line_view_sync(px_st))
     {
         v_line_canvas_repaint_full(px_st);
     }
@@ -1505,7 +1554,7 @@ static void v_line_load_text(term_line_state_t *px_st, const char *pc_text)
     px_st->u16_len        = u16_n;
     px_st->u16_cursor     = u16_n;
     (void) b_line_view_sync(px_st);
-    v_line_canvas_repaint_full(px_st);
+    v_line_redraw(px_st);
 }
 
 static void v_line_stash_scratch(term_line_state_t *px_st)
@@ -1795,6 +1844,11 @@ term_line_t x_term_getline_editor(term_line_edit_t *px_edit)
 done:
     if (!x_st.b_bounded_field)
     {
+        if (x_st.u16_cursor != x_st.u16_len)
+        {
+            x_st.u16_cursor = x_st.u16_len;
+            v_line_refresh_unbounded(&x_st);
+        }
         v_line_emit_newline();
     }
     if (b_line_hist_on_accept(x_rc) && (x_st.pu8_hist != NULL) && (x_st.u16_hist_size >= 2u))
