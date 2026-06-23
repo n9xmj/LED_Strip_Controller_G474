@@ -5,24 +5,16 @@ description: Flash LED_Strip_Controller_G474 Debug/Release ELF via STM32_Program
 
 # flash
 
-## Bench hardware (required on multi-ST-Link benches)
+## Bench hardware (multi-ST-Link benches)
 
-**Source of truth:** [`scripts/bench.defaults.json`](scripts/bench.defaults.json)
+**Source of truth:** [`scripts/bench.defaults.json`](scripts/bench.defaults.json) (see [`BENCH.md`](BENCH.md);
+current values: `python scripts/discover.py --show-bench`). **Never hardcode the SN here.**
 
-| Key | This bench |
-|-----|------------|
-| `stlink_sn` | `003C00193137510C39383538` |
-| `com_port` | `COM9` |
-
-When `--stlink-sn` is omitted, `scripts/discover.py` reads `bench.defaults.json`. Without it and with multiple probes connected, flash picks the **wrong** ST-Link (0.00 V / no target).
+`scripts/flash.ps1` reads `bench.defaults.json` via `discover.py` when `--stlink-sn` is omitted,
+so on this bench you just run the command below. Only pass `--stlink-sn` to deliberately target a
+*different* probe than the bench default.
 
 ## Command
-
-```powershell
-powershell -NoProfile -ExecutionPolicy Bypass -File .\scripts\flash.ps1 --stlink-sn 003C00193137510C39383538
-```
-
-Or rely on bench defaults (after `bench.defaults.json` exists):
 
 ```powershell
 powershell -NoProfile -ExecutionPolicy Bypass -File .\scripts\flash.ps1

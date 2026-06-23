@@ -1,26 +1,26 @@
 ---
 name: smoke
-description: Smoke-test LED_Strip_Controller_G474 — capture startup banner on COM9 after ST-Link reset, or probe live board with ESC+@ identify. Use after flash or to verify boot.
+description: Smoke-test LED_Strip_Controller_G474 — capture startup banner on the bench COM port after ST-Link reset, or probe live board with ESC+@ identify. Use after flash or to verify boot.
 ---
 
 # smoke
 
 ## Bench defaults
 
-[`scripts/bench.defaults.json`](scripts/bench.defaults.json): SN `003C00193137510C39383538`, COM `COM9`, baud `921600`.
+Port / SN / baud resolve from [`scripts/bench.defaults.json`](scripts/bench.defaults.json) — **never
+hardcode them** (see [`BENCH.md`](BENCH.md); values via `python scripts/discover.py --show-bench`).
+`smoke-test.ps1` reads the file when the flags are omitted, so the commands below need no port/SN/baud.
 
 ## Reset-driven smoke (after flash)
 
 ```powershell
-powershell -NoProfile -ExecutionPolicy Bypass -File .\scripts\smoke-test.ps1 --port COM9 --stlink-sn 003C00193137510C39383538 --baud 921600
+powershell -NoProfile -ExecutionPolicy Bypass -File .\scripts\smoke-test.ps1
 ```
-
-Omitting `--port` / `--stlink-sn` is OK when `bench.defaults.json` is present.
 
 ## Live-board probe (no reset)
 
 ```powershell
-powershell -NoProfile -ExecutionPolicy Bypass -File .\scripts\smoke-test.ps1 --port COM9 --identify --baud 921600
+powershell -NoProfile -ExecutionPolicy Bypass -File .\scripts\smoke-test.ps1 --identify
 ```
 
 Sends 3× ESC then `@` to reprint the bordered startup banner.

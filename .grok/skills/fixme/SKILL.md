@@ -7,7 +7,7 @@ argument-hint: ""
 
 # Fixme Skill
 
-**Bench defaults:** COM9 / 003C00193137510C39383538 (used if re-building is needed).
+**Bench defaults:** resolved from [`scripts/bench.defaults.json`](scripts/bench.defaults.json) — never hardcode; scripts auto-resolve if re-building is needed. Values: `python scripts/discover.py --show-bench`.
 
 When invoked as `/fixme`:
 

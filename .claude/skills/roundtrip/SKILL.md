@@ -15,14 +15,14 @@ Composite: **clean build + bump → flash → smoke**. Bench: [`scripts/bench.de
    ```
    Abort if errors or warnings > 0.
 
-2. **Flash** (bench ST-Link)
+2. **Flash** (bench ST-Link — resolved from `bench.defaults.json`)
    ```powershell
-   powershell -NoProfile -ExecutionPolicy Bypass -File .\scripts\flash.ps1 --stlink-sn 003C00193137510C39383538
+   powershell -NoProfile -ExecutionPolicy Bypass -File .\scripts\flash.ps1
    ```
 
-3. **Smoke**
+3. **Smoke** (port/baud resolved from `bench.defaults.json`)
    ```powershell
-   powershell -NoProfile -ExecutionPolicy Bypass -File .\scripts\smoke-test.ps1 --port COM9 --stlink-sn 003C00193137510C39383538 --baud 921600
+   powershell -NoProfile -ExecutionPolicy Bypass -File .\scripts\smoke-test.ps1
    ```
    Echo captured banner from log file.
 

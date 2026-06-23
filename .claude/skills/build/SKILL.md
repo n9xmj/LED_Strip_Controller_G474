@@ -7,13 +7,9 @@ description: Incremental Debug build for LED_Strip_Controller_G474 via headless 
 
 ## Bench hardware
 
-Read **`scripts/bench.defaults.json`** (optional local override: `scripts/bench.defaults.local.json`, gitignored).
-
-| Key | This bench |
-|-----|------------|
-| `stlink_sn` | `003C00193137510C39383538` |
-| `com_port` | `COM9` |
-| `baud` | `921600` |
+Build doesn't need a probe/port. Bench identifiers (when a later step needs them) live only in
+**`scripts/bench.defaults.json`** — never hardcode them. See [`BENCH.md`](BENCH.md); current
+values via `python scripts/discover.py --show-bench`.
 
 ## Command
 

@@ -2,7 +2,8 @@
 """
 play_melody.py - Host-side Python driver for the G474 note player mini-synth.
 
-Connects to the board's debug serial port (default COM9 @ 921600).
+Connects to the board's debug serial port. Defaults come from the bench
+single source of truth (scripts/bench.defaults.json); override with --port/--baud.
 Enters the interactive note player ('p' from main menu) and plays
 pre-defined or custom melodies by sending the same key characters
 you would type by hand (1-8 for C major whole tones, space for rest,
@@ -13,7 +14,8 @@ using the CORDIC synth engine over the existing debug link.
 No MIDI required for basic use (though UART MIDI input is also planned).
 
 Usage examples:
-    python tools/play_melody.py --port COM9 --melody star_wars
+    python tools/play_melody.py --melody star_wars            # uses bench default port
+    python tools/play_melody.py --port COM7 --melody star_wars # explicit override
     python tools/play_melody.py --list
     python tools/play_melody.py --custom "555 3 6 5 3 6 5" --tempo 0.8
 
@@ -34,11 +36,35 @@ import serial
 import time
 import argparse
 import sys
+import os
+import json
 import re
 
-# Default bench settings (match project smoke/flash etc.)
-DEFAULT_PORT = "COM9"
-DEFAULT_BAUD = 921600
+
+def _load_bench_defaults():
+    """Read scripts/bench.defaults.json (+ optional local override) — the bench SoT.
+
+    Never hardcode the port/baud here; the JSON is the single source of truth (see BENCH.md).
+    """
+    scripts_dir = os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "scripts")
+    merged = {}
+    for name in ("bench.defaults.json", "bench.defaults.local.json"):
+        path = os.path.join(scripts_dir, name)
+        if not os.path.isfile(path):
+            continue
+        try:
+            with open(path, "r", encoding="utf-8") as fh:
+                data = json.load(fh)
+            if isinstance(data, dict):
+                merged.update(data)
+        except (OSError, json.JSONDecodeError):
+            pass
+    return merged
+
+
+_BENCH = _load_bench_defaults()
+DEFAULT_PORT = _BENCH.get("com_port")          # None if unset → --port becomes required
+DEFAULT_BAUD = int(_BENCH.get("baud") or 921600)
 
 # Note-player key mapping (C major whole tones via 1-8 as per user)
 # 1=C, 2=D, 3=E, 4=F, 5=G, 6=A, 7=B, 8=C (next octave)
@@ -221,8 +247,8 @@ def main():
     parser = argparse.ArgumentParser(
         description="Drive the G474 interactive note player (mini-synth) over serial."
     )
-    parser.add_argument("--port", default=DEFAULT_PORT,
-                        help=f"Serial port (default {DEFAULT_PORT})")
+    parser.add_argument("--port", default=DEFAULT_PORT, required=(DEFAULT_PORT is None),
+                        help=f"Serial port (default from scripts/bench.defaults.json: {DEFAULT_PORT or 'unset — required'})")
     parser.add_argument("--baud", type=int, default=DEFAULT_BAUD,
                         help=f"Baud rate (default {DEFAULT_BAUD})")
     parser.add_argument("--melody", choices=sorted(MELODIES.keys()),

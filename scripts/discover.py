@@ -19,6 +19,9 @@ Outputs:
   - Description
   **plus accessibility report** (free / in-use by another app like TeraTerm / error)
 
+Show the resolved bench config (the one human/agent-readable view of the source of truth):
+  python scripts/discover.py --show-bench
+
 Supports auto-selection helpers (used by wrappers):
   python scripts/discover.py --default-stlink
   python scripts/discover.py --default-port
@@ -112,9 +115,17 @@ def check_stlink_access(sn: str, programmer_cli: Optional[str]) -> Dict:
                     "status": "in-use",
                     "message": "ST-Link appears locked/in-use by another application (e.g. open STM32CubeIDE debug session, ST-Link Utility, or another programmer instance)"
                 }
-            # Generic failure
-            short = (result.stdout or result.stderr or "").strip()[:300]
-            return {"accessible": False, "status": "error", "message": short or f"Connect attempt failed (rc={result.returncode})"}
+            # Generic failure. Pull out meaningful line(s) — skip the banner / dashes / version.
+            raw = (result.stdout or "") + (result.stderr or "")
+            meaningful = []
+            for ln in raw.splitlines():
+                t = ln.strip()
+                if not t or set(t) <= set("-=") or "STM32CubeProgrammer" in t:
+                    continue
+                if re.search(r"error|no st-link|no stm32|not connect|fail|target", t, re.IGNORECASE):
+                    meaningful.append(t)
+            msg = "; ".join(meaningful[:3]) if meaningful else f"Connect attempt failed (rc={result.returncode}) — likely no powered target on this probe"
+            return {"accessible": False, "status": "error", "message": msg[:300]}
     except subprocess.TimeoutExpired:
         return {"accessible": False, "status": "error", "message": "Connect attempt timed out (device may be slow or unresponsive)"}
     except Exception as e:
@@ -129,19 +140,47 @@ def get_stlink_list(programmer_cli: Optional[str]) -> List[Dict]:
     if not programmer_cli:
         return stlinks
 
-    # Try to get probe list by invoking with a connect (it often prints available SNs)
+    # List ALL connected ST-Link probes. Use "-l st-link" (enumerate), NOT "-c" (connect):
+    # a connect only ever talks to a single probe, so on a multi-probe bench it would hide
+    # every probe but one. "-l st-link" prints a "ST-Link Probe N :" block per probe with
+    # SN / FW / Board Name.
     try:
-        # Many versions print connected probes when you run -c port=SWD
-        cmd = [programmer_cli, "-c", "port=SWD", "--verbose", "0"]
-        result = subprocess.run(cmd, capture_output=True, text=True, timeout=8, shell=False)
+        cmd = [programmer_cli, "-l", "st-link"]
+        result = subprocess.run(cmd, capture_output=True, text=True, timeout=10, shell=False)
         output = (result.stdout or "") + (result.stderr or "")
-        # Look for lines like "ST-LINK SN   : 066AFF1234567890" or similar
+        cur: Dict = {}
+
+        def _flush(entry: Dict) -> None:
+            sn = entry.get("serial")
+            if sn and not any(s["serial"] == sn for s in stlinks):
+                board = entry.get("board", "")
+                fw = entry.get("fw", "")
+                bits = [b for b in (board, (f"FW {fw}" if fw else "")) if b]
+                stlinks.append({
+                    "serial": sn,
+                    "board": board,
+                    "fw": fw,
+                    "description": "  ".join(bits) or sn,
+                })
+
         for line in output.splitlines():
-            m = re.search(r"ST-LINK.*SN\s*[:=]?\s*([0-9A-Fa-f]{12,})", line)
+            if re.search(r"ST-Link\s+Probe\s+\d+", line, re.IGNORECASE):
+                _flush(cur)
+                cur = {}
+                continue
+            m = re.search(r"ST-LINK\s*SN\s*[:=]?\s*([0-9A-Fa-f]{12,})", line)
             if m:
-                sn = m.group(1).upper()
-                if not any(s["serial"] == sn for s in stlinks):
-                    stlinks.append({"serial": sn, "description": line.strip()})
+                cur["serial"] = m.group(1).upper()
+                continue
+            m = re.search(r"ST-LINK\s*FW\s*[:=]?\s*(\S+)", line)
+            if m:
+                cur["fw"] = m.group(1).strip()
+                continue
+            m = re.search(r"Board\s*Name\s*[:=]?\s*(.+)", line)
+            if m:
+                cur["board"] = m.group(1).strip()
+                continue
+        _flush(cur)
     except Exception:
         pass
 
@@ -259,6 +298,30 @@ def load_bench_defaults() -> Dict:
     return merged
 
 
+def bench_source_files() -> List[str]:
+    """Return the bench.defaults*.json files that actually exist, in load order."""
+    script_dir = os.path.dirname(os.path.abspath(__file__))
+    found = []
+    for name in ("bench.defaults.json", "bench.defaults.local.json"):
+        if os.path.isfile(os.path.join(script_dir, name)):
+            found.append(name)
+    return found
+
+
+def print_bench_defaults(bench: Dict, stlinks: Optional[List[Dict]] = None) -> None:
+    """Print the resolved bench config. Single human/agent-readable view of the SoT."""
+    sources = bench_source_files()
+    src_note = " + ".join("scripts/" + s for s in sources) if sources else "(no bench.defaults.json found)"
+    print(f"=== Bench config (source: {src_note}) ===")
+    print(f"  ST-Link SN: {bench.get('stlink_sn') or '(not set)'}")
+    print(f"  COM port:   {bench.get('com_port') or '(not set)'}")
+    print(f"  Baud:       {bench.get('baud') or '(not set)'}")
+    if "bench.defaults.local.json" in sources:
+        print("  (local override active — values above already reflect bench.defaults.local.json)")
+    if stlinks is not None and len(stlinks) > 1 and bench.get("stlink_sn"):
+        print("  (Multi-probe bench - scripts use the SN above when --stlink-sn omitted.)")
+
+
 def find_default_stlink(stlinks: List[Dict], bench: Optional[Dict] = None) -> Optional[str]:
     bench = bench or load_bench_defaults()
     preferred = str(bench.get("stlink_sn") or "").strip().upper()
@@ -295,11 +358,20 @@ def main():
     parser.add_argument("--list", action="store_true", help="List all ST-Links and COM ports (with friendly names, manufacturer, accessibility)")
     parser.add_argument("--default-stlink", action="store_true", help="Print best auto-selected ST-Link SN (or empty)")
     parser.add_argument("--default-port", action="store_true", help="Print best auto-selected COM port (or empty)")
-    parser.add_argument("--json", action="store_true", help="Output machine-readable JSON (with --list)")
+    parser.add_argument("--show-bench", action="store_true", help="Print resolved bench config (SN/port/baud) from bench.defaults.json. The single human/agent-readable view of the source of truth.")
+    parser.add_argument("--json", action="store_true", help="Output machine-readable JSON (with --list or --show-bench)")
     args = parser.parse_args()
 
     programmer = find_programmer_cli()
     bench = load_bench_defaults()
+
+    if args.show_bench:
+        if args.json:
+            print(json.dumps({"bench_defaults": bench, "sources": bench_source_files()}, indent=2))
+            return
+        print_bench_defaults(bench)
+        return
+
     stlinks = get_stlink_list(programmer)
     ports = get_com_ports()
 
@@ -308,15 +380,7 @@ def main():
         if args.json:
             print(json.dumps(data, indent=2))
             return
-        print("=== Bench defaults (scripts/bench.defaults.json) ===")
-        sn = bench.get("stlink_sn") or "(not set)"
-        com = bench.get("com_port") or "(not set)"
-        baud = bench.get("baud") or "(not set)"
-        print(f"  ST-Link SN: {sn}")
-        print(f"  COM port:   {com}")
-        print(f"  Baud:       {baud}")
-        if len(stlinks) > 1 and bench.get("stlink_sn"):
-            print("  (Multi-probe bench — scripts use the SN above when --stlink-sn omitted.)")
+        print_bench_defaults(bench, stlinks)
         print("")
         print("=== ST-Links ===")
         if not stlinks:

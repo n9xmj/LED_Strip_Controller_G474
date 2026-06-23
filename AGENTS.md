@@ -118,8 +118,23 @@ Working end-to-end on the bench (mic → DMA → job queue → main-context hand
 - Add FreeRTOS only when a feature genuinely needs real concurrency (e.g. continuous audio capture + LED animation).
 - Driver code must stay clean; RTOS glue lives in application layer or thin adapters in `App/`.
 
+### Bench configuration (single source of truth — never hardcode)
+Bench identifiers — **ST-Link SN, host COM port, baud** — live in **exactly one place**:
+[`scripts/bench.defaults.json`](scripts/bench.defaults.json) (plus an optional gitignored
+`scripts/bench.defaults.local.json` override). **Never** copy the literal values into code,
+docs, skills, memory, planning notes, or commit messages — duplication is what turned a board
+swap into a multi-dozen-file edit. Reference the file by path, or get the live values with:
+
+```
+python scripts/discover.py --show-bench
+```
+
+Scripts (`flash.ps1`, `smoke-test.ps1`, `play_bench.py`, …) auto-resolve SN/port/baud from
+that file — **don't pass `--stlink-sn` / `--port` / `--baud` unless deliberately overriding.**
+Changing boards / machines / MCU = edit that one JSON. See [`BENCH.md`](BENCH.md) for the full
+explanation. (Firmware-side: debug console is always USART2 / ST-Link VCP at 921600.)
+
 ### Other Key Details
-- Debug console is always USART2 (ST-Link VCP); firmware-side baud is 921600. The host-side COM port + baud for this bench come from `scripts/bench.defaults.json` (`COM9` / `921600` now — project-specific, subject to change).
 
 ### Terminal line editor (`App/term.*` — `x_term_getline_editor`)
 
@@ -129,8 +144,10 @@ Cooperative line editor on `i16_term_get_key()`. Options in `term_line_edit_t`:
 (`0` = unbounded canvas `N=max_len-1`, scroll-up OK; non-zero = single-row bounded
 viewport, EOL-clamped, entry still up to `max_len-1` with horizontal scroll).
 
-**Canvas init (both modes):** prompt → `N` spaces → CEL if unbounded → `CUB(N)` →
-`DECSC`. Bounded: suffix repaint + space-pad; no CEL (protects inline neighbors).
+**Canvas init (both modes):** prompt → per-cell paint (`CUP` + char for each of `N`
+cells; unbounded must not stream spaces — wrap uses `u16_term_cols`) → `CUP` to
+cell 0 → `DECSC`. Query terminal size **before** CPR origin. Bounded: suffix
+repaint + space-pad; no CEL (protects inline neighbors).
 Tab / Shift-Tab accept in bounded mode. HuIL: `<term>` → **`l`** / **`f`**.
 
 See [`Docs/planning/line-editor-plan.md`](Docs/planning/line-editor-plan.md) and
@@ -162,7 +179,7 @@ Also indexed in [`.grok/memory/MEMORY.md`](.grok/memory/MEMORY.md). **Read on de
 ## Sources of Truth
 
 - **Automation (build / flash / smoke / probe / discover)**: `SCRIPTS.md` (general, bench-agnostic patterns and flags).  
-  **Bench ST-Link SN + COM port + baud:** [`scripts/bench.defaults.json`](scripts/bench.defaults.json) — the **single source of truth** for host-side bench values (currently `COM9` / `921600`). These are **project- / bench-specific, not global** and **subject to change** if the bench migrates; the **user** updates this file (or a gitignored `scripts/bench.defaults.local.json`) and scripts/skills follow. Inline COM9/921600 mentions in skill docs just mirror it.
+  **Bench ST-Link SN + COM port + baud:** [`scripts/bench.defaults.json`](scripts/bench.defaults.json) — the **single source of truth** for host-side bench values (see [`BENCH.md`](BENCH.md) and the *Bench configuration* section above). These are **project- / bench-specific, not global**; the **user** updates that one file (or a gitignored `scripts/bench.defaults.local.json`) and scripts/skills follow automatically. **No doc, skill, or memory should contain the literal values** — point at the file or run `python scripts/discover.py --show-bench`.
 - **Project goals, status, hardware layout, roadmap**: `Docs/PROJECT.md`
 - **Versioning**: `App/Inc/platform.h` (`PROJECT_NAME`, `TARGET_MCU`, `FIRMWARE_VERSION`, `BUILD_NUMBER`). Scripts and skills report these.
 - **Agent skills (build / flash / smoke / roundtrip / docs):** two parallel archives, same intent, both thin wrappers over `scripts/` + `bench.defaults.json`:

@@ -3468,9 +3468,9 @@ Runner **opens COM first**, then (optionally) ST-Link reset — same discipline 
 **Usage (target):**
 
 ```text
-python scripts/play_scenarios.py --port COM9
-python scripts/play_scenarios.py --port COM9 --scenario P1 --reset
-python scripts/play_scenarios.py --port COM9 --tier smoke_plus --stlink-sn SN
+python scripts/play_scenarios.py                          # port/SN from bench.defaults.json
+python scripts/play_scenarios.py --scenario P1 --reset
+python scripts/play_scenarios.py --tier smoke_plus --port <port> --stlink-sn <SN>   # explicit override
 ```
 
 **Scenarios (initial roster — maps to **T3** tiers):**

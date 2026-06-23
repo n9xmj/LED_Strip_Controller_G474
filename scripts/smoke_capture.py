@@ -48,7 +48,7 @@ def main():
         epilog="Use --stlink-sn + --reset for a true STLink-driven reset while listening. "
                "Use --send-cr for this project's fast menu-reprint trigger (no probe needed)."
     )
-    p.add_argument("--port", required=True, help="COM port or serial device (e.g. COM9 or /dev/ttyACM0)")
+    p.add_argument("--port", required=True, help="COM port or serial device (e.g. COM3 or /dev/ttyACM0)")
     p.add_argument("--seconds", type=int, default=8, help="Capture duration in seconds (default: 8)")
     p.add_argument("--log", required=True, help="Path to write captured output")
     p.add_argument("--baud", type=int, default=115200, help="Baud rate (default: 115200)")

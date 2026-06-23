@@ -6,7 +6,7 @@ user_invocable: true
 
 # replay — repeat last inline PLAY
 
-**Bench defaults:** [`scripts/bench.defaults.json`](scripts/bench.defaults.json) — COM9, baud 921600.
+**Bench defaults:** [`scripts/bench.defaults.json`](scripts/bench.defaults.json) — never hardcode COM/baud/SN; auto-resolved. Values: `python scripts/discover.py --show-bench`.
 
 When invoked as **`/replay`**:
 

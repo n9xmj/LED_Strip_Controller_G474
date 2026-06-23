@@ -7,7 +7,7 @@ argument-hint: "filesystem\\path\\to\\file.play"
 
 # playfile — PLAY file on hardware
 
-**Bench defaults:** [`scripts/bench.defaults.json`](scripts/bench.defaults.json) — COM9, baud 921600.
+**Bench defaults:** [`scripts/bench.defaults.json`](scripts/bench.defaults.json) — never hardcode COM/baud/SN; auto-resolved. Values: `python scripts/discover.py --show-bench`.
 
 When invoked as **`/playfile path\to\file.play`**:
 
@@ -20,7 +20,7 @@ When invoked as **`/playfile path\to\file.play`**:
 
    The runner strips `#` comments and blank lines, concatenates the remainder, and feeds it through menu **`m` → `s`** (same as manual bench entry).
 
-3. Optional cold boot: `--reset --stlink-sn 003C00193137510C39383538`.
+3. Optional cold boot: add `--reset` (the bench ST-Link SN is auto-resolved from `bench.defaults.json`; only pass `--stlink-sn` to override).
 
 4. Report PASS/FAIL, faults, and whether `PLAY ended @ off=…` appeared.
 

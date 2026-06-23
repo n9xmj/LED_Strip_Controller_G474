@@ -17,14 +17,10 @@ powershell -NoProfile -ExecutionPolicy Bypass -File .\scripts\check-env.ps1
 python scripts\discover.py --list
 ```
 
-Confirm `scripts/bench.defaults.json` lists the intended `stlink_sn` and `com_port` when multiple ST-Links are attached.
+Confirm `scripts/bench.defaults.json` lists the intended `stlink_sn` and `com_port` when multiple ST-Links are attached. To print the resolved values (never hardcode them anywhere — see [`BENCH.md`](BENCH.md)):
 
-Bench defaults for this project:
-
-| Key | Value |
-|-----|-------|
-| `stlink_sn` | `003C00193137510C39383538` |
-| `com_port` | `COM9` |
-| `baud` | `921600` |
+```powershell
+python scripts\discover.py --show-bench
+```
 
 Report missing tools and any ST-Link/COM accessibility issues before build/flash.

@@ -3,7 +3,7 @@
 **Date:** YYYY-MM-DD  
 **Status:** IN PROGRESS | DONE (archive candidate after MSG ✅)  
 **MSG:** **G<n>** · **Plan refs:** D…, S…, I… (🟢 — do not re-litigate)  
-**Bench:** COM9 @ 921600 · ST-Link SN from `scripts/bench.defaults.json`
+**Bench:** from `scripts/bench.defaults.json` (run `python scripts/discover.py --show-bench`)
 
 **Authoritative plan:** [play-v1-implementation-plan.md](play-v1-implementation-plan.md)  
 **Template:** this file — copy to `<topic>-handoff.md` for focused implementation sessions (K/G4 model).
@@ -72,7 +72,7 @@ When bench is green, post a **copy-paste block** for the parent orchestrator:
 G<n> child complete — <one-line outcome>.
 
 Shipped: <bullets — code + goldens>.
-Bench green (COM9, build #N): <test names>.
+Bench green (build #N): <test names>.
 Docs: <plan/chatbot/handoff updates>.
 Next: <next MSG row or opener>.
 ```

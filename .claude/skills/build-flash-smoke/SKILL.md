@@ -9,7 +9,8 @@ Composite skill (incremental, no build-number bump). Chains build → flash → 
 
 ## Bench
 
-[`scripts/bench.defaults.json`](scripts/bench.defaults.json) — SN `003C00193137510C39383538`, COM `COM9`.
+SN / COM / baud resolve from [`scripts/bench.defaults.json`](scripts/bench.defaults.json) — **never
+hardcode** (see [`BENCH.md`](BENCH.md); values: `python scripts/discover.py --show-bench`).
 
 ## Steps
 

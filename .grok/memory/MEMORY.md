@@ -4,6 +4,7 @@ One-line index. Each entry is a **topic deep-dive** — read its body **on deman
 is the session focus (see AGENTS.md *Session start — no assumed focus* + Topic Map). Don't
 bulk-read all bodies at session start; the always-read exception is `user_conversational_tone.md`.
 
+- **Bench config:** never hardcode SN/COM/baud. Single source of truth = [`scripts/bench.defaults.json`](../scripts/bench.defaults.json) (+ optional gitignored local override); see [`BENCH.md`](../BENCH.md). Live values: `python scripts/discover.py --show-bench`. Board swapped 2026-06-22 (old Nucleo died) — handled by editing that one file.
 - [Author Haskell gap](author_haskell_gap.md) — no FP literacy; agents must translate mokus0 Haskell / vTree into plain + embedded C when Mk 5 DSP starts
 - [Preferred conversational tone + workflow lightness](user_conversational_tone.md) — casual techno-geeky chat; pop-culture refs OK; personal hobby archival git; hedged planning language = brief pushback if bad call, else close out.
 - [Decision-log planning model](planning_decision_log_model.md) — **The Big Board** = summary table (D/S/I/T/Q, 🔴🟡🟢🔵) + detail sections; resolve in chat by label (*"green D3"*). Full doc: `Docs/planning/decision-log-model.md`. **Active plan (authoritative continuity):** `Docs/planning/play-v1-implementation-plan.md`. **Handoff:** newest `Docs/planning/play-v1-session-handoff-*.md` if one exists (via `/wrapup`). **Focused sessions:** `Docs/planning/focused-implementation-handoff-template.md`; `/cleanup-docs` after MSG ✅.

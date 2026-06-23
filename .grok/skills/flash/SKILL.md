@@ -10,9 +10,7 @@ argument-hint: ""
 **Bench defaults (source of truth):** [`scripts/bench.defaults.json`](../scripts/bench.defaults.json)  
 Local override: `scripts/bench.defaults.local.json` (gitignored). Values below match the committed file.
 
-**Bench defaults (this setup):**
-- COM port: COM9
-- ST-Link SN: 003C00193137510C39383538
+**Bench defaults:** resolved from [`scripts/bench.defaults.json`](scripts/bench.defaults.json) — never hardcode SN/COM; `flash.ps1` auto-resolves the SN when `--stlink-sn` is omitted. Values: `python scripts/discover.py --show-bench` (see [`BENCH.md`](BENCH.md)).
 
 When invoked as `/flash`:
 
@@ -21,7 +19,7 @@ When invoked as `/flash`:
    - Otherwise, default to the Debug build: `Debug\LED_Strip_Controller_G474.elf`. Fall back to Release if Debug not present and context suggests it.
 2. Run the flash command with the bench ST-Link:
    ```
-   powershell -NoProfile -ExecutionPolicy Bypass -File .\scripts\flash.ps1 --stlink-sn 003C00193137510C39383538
+   powershell -NoProfile -ExecutionPolicy Bypass -File .\scripts\flash.ps1
    ```
    (The script will use the Debug config by default unless a specific Release artifact is targeted.)
 

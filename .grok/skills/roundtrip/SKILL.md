@@ -7,7 +7,7 @@ argument-hint: ""
 
 # Roundtrip Skill
 
-**Bench defaults:** COM9 / 003C00193137510C39383538
+**Bench defaults:** resolved from [`scripts/bench.defaults.json`](scripts/bench.defaults.json) — never hardcode; scripts auto-resolve. Values: `python scripts/discover.py --show-bench` (see [`BENCH.md`](BENCH.md)).
 
 This is a multi-step skill: /build (actually clean with bump) + /flash + /smoke.
 
@@ -21,11 +21,11 @@ This is a multi-step skill: /build (actually clean with bump) + /flash + /smoke.
 
 2. **Flash step** (only if build was clean):
    - Use the artifact from the build step (Debug\LED_Strip_Controller_G474.elf).
-   - Run: `powershell -NoProfile -ExecutionPolicy Bypass -File .\scripts\flash.ps1 --stlink-sn 003C00193137510C39383538`
+   - Run: `powershell -NoProfile -ExecutionPolicy Bypass -File .\scripts\flash.ps1`
    - Report success/failure + diagnostics for ST-Link issues.
 
 3. **Smoke step** (reset-driven, only if previous steps succeeded):
-   - Run the /smoke path: `powershell -NoProfile -ExecutionPolicy Bypass -File .\scripts\smoke-test.ps1 --port COM9 --stlink-sn 003C00193137510C39383538 --baud 921600`
+   - Run the /smoke path: `powershell -NoProfile -ExecutionPolicy Bypass -File .\scripts\smoke-test.ps1`
    - After capture: extract and echo the banner from the log file exactly as described in the smoke skill.
 
 Use todo_write to track the three steps visibly.

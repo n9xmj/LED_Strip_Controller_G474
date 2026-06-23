@@ -9,7 +9,7 @@ argument-hint: "golden-test-name | list"
 
 **Registry:** [`scripts/play_golden/tests.json`](scripts/play_golden/tests.json) + companion `.play` files.
 
-**Bench defaults:** [`scripts/bench.defaults.json`](scripts/bench.defaults.json) — COM9, baud 921600.
+**Bench defaults:** [`scripts/bench.defaults.json`](scripts/bench.defaults.json) — never hardcode COM/baud/SN; auto-resolved. Values: `python scripts/discover.py --show-bench`.
 
 When invoked as **`/playtest list`** (or user asks what golden tests exist):
 

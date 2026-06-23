@@ -7,10 +7,7 @@ argument-hint: ""
 
 # Smoke / Probe Skill
 
-**Bench defaults (source of truth for this local setup):**
-- COM port: COM9
-- ST-Link SN: 003C00193137510C39383538
-- Baud: 921600
+**Bench defaults:** resolved from [`scripts/bench.defaults.json`](scripts/bench.defaults.json) — never hardcode SN/COM/baud; `smoke-test.ps1` auto-resolves when flags are omitted. Values: `python scripts/discover.py --show-bench` (see [`BENCH.md`](BENCH.md)).
 
 **Two modes:**
 
@@ -21,12 +18,12 @@ When invoked:
 
 1. For /smoke:
    ```
-   powershell -NoProfile -ExecutionPolicy Bypass -File .\scripts\smoke-test.ps1 --port COM9 --stlink-sn 003C00193137510C39383538 --baud 921600
+   powershell -NoProfile -ExecutionPolicy Bypass -File .\scripts\smoke-test.ps1
    ```
 
 2. For /probe:
    ```
-   powershell -NoProfile -ExecutionPolicy Bypass -File .\scripts\smoke-test.ps1 --port COM9 --identify --baud 921600
+   powershell -NoProfile -ExecutionPolicy Bypass -File .\scripts\smoke-test.ps1 --identify
    ```
    (This uses the COM-driven path that sends the necessary keystrokes for menu/banner without ST-Link reset.)
 

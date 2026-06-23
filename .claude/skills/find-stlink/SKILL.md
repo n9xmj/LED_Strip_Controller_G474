@@ -7,12 +7,15 @@ description: List ST-Links and COM ports for LED_Strip_Controller_G474, show ben
 
 ## Bench target (this machine)
 
-From [`scripts/bench.defaults.json`](scripts/bench.defaults.json):
+The expected SN / COM / baud live only in [`scripts/bench.defaults.json`](scripts/bench.defaults.json)
+(see [`BENCH.md`](BENCH.md)). Print them, then compare against what's actually attached:
 
-- **ST-Link SN:** `003C00193137510C39383538` (G474 board)
-- **Debug COM:** `COM9` @ 921600
+```powershell
+python scripts\discover.py --show-bench
+```
 
-The other connected probe is **not** this board — do not flash/smoke without an explicit SN on multi-probe benches.
+On a multi-probe bench, any *other* connected probe is **not** this board — `discover.py --list`
+shows which SN/port matches the bench default so you can confirm before flash/smoke.
 
 ## Discovery
 
@@ -30,12 +33,13 @@ python scripts\discover.py --list --json
 
 ## Override per machine
 
-Copy values into `scripts/bench.defaults.local.json` (gitignored):
+Drop a gitignored `scripts/bench.defaults.local.json` with the keys you want to override (its
+keys win over the committed file). Get the real SN/port from `discover.py --list`:
 
 ```json
 {
-  "stlink_sn": "003C00193137510C39383538",
-  "com_port": "COM9",
+  "stlink_sn": "<your ST-Link SN>",
+  "com_port": "<your COM port>",
   "baud": 921600
 }
 ```

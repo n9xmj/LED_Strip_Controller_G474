@@ -7,7 +7,7 @@ argument-hint: "\"PLAY source string\""
 
 # playstr — inline PLAY string on hardware
 
-**Bench defaults:** [`scripts/bench.defaults.json`](scripts/bench.defaults.json) — COM9, baud 921600.
+**Bench defaults:** [`scripts/bench.defaults.json`](scripts/bench.defaults.json) — never hardcode COM/baud/SN; auto-resolved. Values: `python scripts/discover.py --show-bench`.
 
 **Firmware path (automation):** 3× ESC → **0xDA** (harness) → **`P <hex>`** → await PLAY witnesses → **0xA5**. HuIL **S** / **m→s** uses the term line editor (≤255 chars, 1 KiB history).
 

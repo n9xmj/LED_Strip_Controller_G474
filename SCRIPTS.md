@@ -44,26 +44,26 @@ All automation lives in the `scripts/` directory at the project root.
 
 When more than one ST-Link is connected, auto-selection **cannot** guess which probe is your board. This project pins the local bench in:
 
-- **`scripts/bench.defaults.json`** — committed defaults for this workspace
-- **`scripts/bench.defaults.local.json`** — optional per-machine override (gitignored)
+- **`scripts/bench.defaults.json`** — committed defaults for this workspace (keys: `stlink_sn`, `com_port`, `baud`)
+- **`scripts/bench.defaults.local.json`** — optional per-machine override (gitignored); its keys win when present
 
-Current G474 bench values:
+**The JSON is the single source of truth.** This doc (and skills, `AGENTS.md`, memory, etc.)
+deliberately do **not** quote the literal SN / COM / baud — see [`BENCH.md`](BENCH.md) for the
+why and the full board-swap procedure. To see the **current** values:
 
-| Key | Value |
-|-----|-------|
-| `stlink_sn` | `003C00193137510C39383538` |
-| `com_port` | `COM9` |
-| `baud` | `921600` |
+```powershell
+python scripts/discover.py --show-bench        # human-readable
+python scripts/discover.py --show-bench --json # machine-readable
+```
 
-> **These values are project- / bench-specific, not a global rule.** Other projects
-> and other benches use different COM ports and baud rates. **`scripts/bench.defaults.json`
-> is the single source of truth** — if the bench migrates (new PC, re-enumerated COM
-> port, different probe), the **user** updates that file (or drops a gitignored
-> `bench.defaults.local.json`) and the scripts/skills follow automatically. Any
-> COM9 / 921600 values quoted inline in skill docs are just mirroring this file for
-> convenience; **the JSON wins** if they ever disagree.
+> **These values are project- / bench-specific, not a global rule.** If the bench migrates
+> (new PC, re-enumerated COM port, different probe, new MCU), the **user** edits
+> `scripts/bench.defaults.json` (or drops a gitignored `bench.defaults.local.json`) and every
+> script/skill follows automatically — **no other file needs touching.**
 
-`discover.py --default-stlink` and `--default-port` read these files. Flash/smoke scripts call discover when `--stlink-sn` / `--port` are omitted.
+`discover.py --show-bench` / `--default-stlink` / `--default-port` read these files.
+Flash/smoke scripts call discover when `--stlink-sn` / `--port` are omitted, so **don't pass
+those flags unless you're deliberately overriding the bench.**
 
 **Port won't open?** It's almost always because **you have the port grabbed in a
 terminal** (Tera Term / Windows Terminal / PuTTY) for a hands-on session. Close that

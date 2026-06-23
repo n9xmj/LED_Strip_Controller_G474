@@ -7,9 +7,7 @@ argument-hint: "[version-string]"
 
 # SetVer Skill
 
-**Bench defaults (source of truth for this local setup):**
-- COM port: COM9
-- ST-Link SN: 003C00193137510C39383538
+**Bench defaults:** resolved from [`scripts/bench.defaults.json`](scripts/bench.defaults.json) — never hardcode SN/COM/baud; scripts auto-resolve. Values: `python scripts/discover.py --show-bench` (see [`BENCH.md`](BENCH.md)).
 
 This skill provides the `/setver` command (and natural language equivalents) to manage FIRMWARE_VERSION in `App/Inc/platform.h`. It does not affect BUILD_NUMBER.
 

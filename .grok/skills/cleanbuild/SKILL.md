@@ -7,9 +7,7 @@ argument-hint: ""
 
 # Clean Build Skill (with BUILD_NUMBER bump)
 
-**Bench defaults (source of truth for this local setup):**
-- COM port: COM9
-- ST-Link SN: 003C00193137510C39383538
+**Bench defaults:** resolved from [`scripts/bench.defaults.json`](scripts/bench.defaults.json) — never hardcode SN/COM/baud; scripts auto-resolve. Values: `python scripts/discover.py --show-bench` (see [`BENCH.md`](BENCH.md)).
 
 When invoked as `/cleanbuild`, `/fullbuild`, or natural language requesting a clean debug build:
 
