@@ -40,11 +40,11 @@ later-version work parked in the **Wishlist**.
 | D5 | 🟢 | REPL input reuses the `term.c` line editor (`x_term_getline_editor`, unbounded canvas). |
 | D6 | 🟢 | REPL launched from top-level debug-menu key **`b`** (`MENU_ITEM_FUNCTION`); `b`/`B` confirmed free — no reassignment needed. Exit returns to menu (ESC-unwind convention). |
 | I1 | 🟢 | Heap (v1.0): Berry uses **libc `malloc`** on the linker heap (`_Min_Heap_Size = 0x5000`, 20 KB). Arena/static-pool = Wishlist (W5). |
-| I2 | 🔴 | **Build gate:** run `coc` to generate + commit `generate/be_const_strtab*.h` (relocated tool, explicit paths — no `make prebuild`). |
+| I2 | 🟢 | **Build gate:** run `coc` to generate + commit `generate/be_const_strtab*.h` (relocated tool, explicit paths — no `make prebuild`). **Shipped (G1)** — exact command in detail section. |
 | I3 | 🟢 | `berry_conf.h` config — **RAM-not-flash priority**. **Keep all modules except `os`** (+ FS, bytecode save/load, shared-lib off — no FS yet). Keep `PRECOMPILED_OBJECT`/compiler/`PERF_COUNTERS`. `time` backed by `HAL_GetTick` now, RTC later. **Console I/O = base-lib `print`/`input` over reimplemented `be_writebuffer`/`be_readstring` (S1)** — no module/class needed. FFI needs no optional module. See worksheet below Wishlist. |
-| I4 | 🔴 | MCU entry layer (replaces `berry.c` `main()`) — **shared VM core + two front-ends:** (1) **REPL** (line-editor eval/print loop, v1.0); (2) **headless run** of a pre-existing RAM script buffer to completion (mechanism for W4). "Headless" = no REPL line entry, **not** no console I/O — the script may still `print`/`input`. Both register the S2 pump. |
+| I4 | 🟢 | **Shipped (G4)** as `default/berry_app.c/.h`. MCU entry layer (replaces `berry.c` `main()`) — **shared VM core + two front-ends:** (1) **REPL** (line-editor eval/print loop, v1.0); (2) **headless run** of a pre-existing RAM script buffer to completion (mechanism for W4). "Headless" = no REPL line entry, **not** no console I/O — the script may still `print`/`input`. Both register the S2 pump. |
 | I5 | 🟢 | **Float precision** — `BE_USE_SINGLE_FLOAT = 1` (was 0=double). Single → hardware-FPU `sinf`/`cosf` (M4F FPU is single-only; double trig is software) + halves float RAM (matches RAM priority). Cost ≈ 7-digit script precision. **Locked: single on G474; revisit double at H723 (W7).** Makes CORDIC-for-`math` moot (E2). |
-| S1 | 🔴 | `be_port.c` bare-metal port: stub/redirect file & time ops, route `abort`/output to our error + console paths. |
+| S1 | 🟢 | **Shipped (G3).** `be_port.c` bare-metal port: stub/redirect file & time ops, route `abort`/output to our error + console paths. |
 | S2 | 🟢 | **Cooperative VM execution** — keep `v_app_polling_task()` pumping during a running Berry script via the obshook **`BE_OBS_VM_HEARTBEAT`** (already on via `BE_USE_PERF_COUNTERS=1`). Binding cadence is **PLAY's 1 ms main-context poll** (`v_play_poll`), not the 4 ms audio chunk. Gate the pump on the **existing 1 ms tick** (`v_periodic_timer_service`) — no new timer needed; **don't reuse TIM7** (`v_delay_us` single-owner). Pumps, doesn't suspend (no coroutines). **No RTOS needed.** Enables W4; cheaply robustifies the v1.0 REPL. |
 | Q1 | 🟢 | Leftovers resolved: grammar → `Docs/berry-lang/grammar/`; editor support (Pygments lexer + VSCode TextMate grammar) → `Docs/berry-lang/editor-support/`; `tests/`+`testall.be`+`modules/` kept in-tree (build-inert; `tests/` = VM golden corpus for W4); upstream `.gitignore` **deleted** (it hid `generate/` + CubeIDE files). |
 | Q2 | 🔵 | Storage device choice (**W25Q128 SPI NOR vs microSD**) — gates the future FS tie-in (W3); hardware on-hand, unwired. |
@@ -54,18 +54,18 @@ later-version work parked in the **Wishlist**.
 ## Must-Ship Gap (MSG) — v1.0 firmware
 
 *Append-only `G` IDs; mark ✅ when shipped (do not renumber). **Ord** = bring-up tier (1 before 2).*
-*Last audited: 2026-06-25.*
+*Last audited: 2026-06-26. (G1–G8 all shipped — v1.0 complete, bench-verified.)*
 
 | ID | Ord | Status | Item | Ref |
 |----|:---:|:------:|------|-----|
-| G1 | 1 | 🔴 | Run `coc`; commit `App/berry-lang/generate/be_const_strtab*.h`. | I2 |
-| G2 | 1 | 🔴 | Configure `berry_conf.h` — module flags + `BE_EXPLICIT_MALLOC/REALLOC/FREE` (default libc for v1.0). | I1, I3 |
-| G3 | 2 | 🔴 | Port `be_port.c` for bare metal (stub FS/time; abort + console output hooks). | S1 |
-| G4 | 2 | 🔴 | MCU entry/eval wrapper (`be_vm_new` → load → `be_pcall` → print) replacing `berry.c`. | I4 |
-| G5 | 3 | 🔴 | Compile clean; flip CubeIDE **Exclude from build → OFF** on `App/berry-lang`. | D4 |
-| G6 | 4 | 🔴 | Berry REPL loop driven by the `term.c` line editor. | D5 |
-| G7 | 4 | 🔴 | Hook the REPL into the top-level debug menu (key per D6). | D6 |
-| G8 | 5 | 🔴 | Bench smoke: banner + REPL eval round-trip (e.g. `print(1+2)` → `3`). | — |
+| G1 | 1 | ✅ | Run `coc`; commit `App/berry-lang/generate/be_const_strtab*.h`. **Ran G2 before G1** — coc gates const-objects on the config macros, so generate against final config. | I2 |
+| G2 | 1 | ✅ | Configure `berry_conf.h` — module flags + `BE_EXPLICIT_MALLOC/REALLOC/FREE` (libc). Also routed abort/exit → port handlers. | I1, I3 |
+| G3 | 2 | ✅ | Port `be_port.c` for bare metal (FS stubs; console→`stdout` w/ **LF→CRLF**; `be_readstring`→term editor; abort/exit→`Error_Handler`; `_gettimeofday`→`HAL_GetTick`). | S1 |
+| G4 | 2 | ✅ | MCU entry layer `berry_app.c/.h` (shared core + REPL + headless). Lives in `default/` (build-exclude umbrella). | I4 |
+| G5 | 3 | ✅ | Compiles + links clean (0/0). Folder-scoped `-Wno-unused-function -Wno-char-subscripts` on `App/berry-lang` keeps `src/` pristine. | D4 |
+| G6 | 4 | ✅ | REPL loop = stock `be_repl()` + term-editor getline (history) in `berry_app.c`. | D5 |
+| G7 | 4 | ✅ | Top-menu key `b` → `v_berry_repl_run()` in `debug_menu.c`. | D6 |
+| G8 | 5 | ✅ | Bench smoke green: banner + REPL eval round-trip incl. integers (`print(123)`→`123`, `print(1+2)`→`3`), ESC unwind. Nano-printf int bug fixed via `BE_INTGER_TYPE 2→1`. | — |
 
 ---
 
@@ -79,11 +79,12 @@ later-version work parked in the **Wishlist**.
 | W2 | 🔵 | Expose LED-strip / audio APIs as Berry native modules (script-driven lighting & tones). |
 | W3 | 🔵 | Filesystem tie-in: wire `be_port.c` file ops → LittleFS/FatFs once storage exists; load/save Berry scripts. Depends on Q2. |
 | W4 | 🔵 | **Test-runner single-instance Berry:** external host script uploads a Berry script into RAM; one persistent embedded VM runs it to completion and exits. Realized via **I4's headless run front-end** (`be_loadbuffer` → `be_pcall`). Depends on the cooperative pump (S2) to keep the polling task / job queue alive during the run. |
-| W5 | 🔵 | Graduate heap from libc `malloc` to an on-demand arena / static pool (per-session alloc+free); GC cadence tuning. |
+| W5 | 🔵 | **Graduate heap from libc `malloc` to a dedicated arena (target 8 KB).** *Current state (verified [`be_mem.c`](../../App/berry-lang/src/be_mem.c)):* no dedicated Berry heap — `be_realloc` keeps ≤32 B objects in per-VM bitmap pools (`gc16/gc32`) and routes larger allocs to `BE_EXPLICIT_MALLOC` = **libc malloc on the shared 20 KB linker heap** (`_Min_Heap_Size 0x5000`), **uncapped**, co-mingled with LED DMA buffers. *Target:* static `berry_arena[8192]` + small allocator, with `BE_EXPLICIT_MALLOC/REALLOC/FREE` pointed at it → bounds Berry to 8 KB and isolates it from the firmware heap. **Runtime-sized:** stock `be_vm_new(void)` has no size knob (allocator is compile-time, global), but the arena layer can take size as a param — fold a `berry_vm_create(size_t heap_bytes)` into `berry_app.c`. **Multi-VM:** Berry has no global mutable state (all state in `bvm`; const objects are read-only in flash) so multiple `bvm*` instances are safe; one shared 8 KB arena suffices in the cooperative model (REPL & headless never run concurrently). Concurrent side-by-side (RTOS) needs arena-per-VM **or** a mutex on the allocator, plus serialized console + per-VM REPL buffers. Also: GC cadence tuning. *Same 8 KB applies to the W4 test-runner VM.* **Preferred refinement → W8** (malloc'd-per-VM chunk freed on terminate, rather than a fixed static buffer). |
 | W6 | 🔵 | **Lightweight text editor for script authoring** — a free-form (multiline) on-device editor to compose internal Berry scripts, beyond single-line REPL entry. Built on the `term.*` multiline editor (term plan **W15**). Eventually ties into the filesystem (W3) so *any* text doc (Berry, JSON, config) can be loaded → edited → saved. |
 | E1 | 🔵 | Solidified (precompiled bytecode) scripts stored in flash — cut parse time + RAM. |
 | E2 | 🔵 | **CORDIC-accelerated bulk trig** via a native func (e.g. `wave.fill` over many LED/audio samples) — *not* generic scalar `math.sin`. Requires arbitrating the shared CORDIC with the synth's ISR usage (sticky SINE/Q1.31 config; synth is growing toward FM/polyphony on CORDIC+FMAC). Scalar math uses the FPU (I5); CORDIC stays reserved for streaming DSP. |
 | W7 | 🔵 | **Re-enable double-precision floats** (`BE_USE_SINGLE_FLOAT = 0`) **after the H723 (Cortex-M7) migration** — the M7 has a hardware double-precision FPU, so full-precision Berry `math` costs nothing there. Reverses the I5 single-float choice (a G474 M4F single-FPU optimization). |
+| W8 | 🔵 | **Memory allocation strategy — per-VM heap chunk (preferred over W5's static buffer).** At VM creation `malloc()` a **caller-selected chunk** of the system heap, serve all of that VM's allocations from inside it, and `free()` the chunk on VM termination — wrapped around instantiation (e.g. `berry_vm_create(size_t bytes)` / `berry_vm_destroy()`). **No vendor edits:** redirect the allocator via `BE_EXPLICIT_MALLOC/REALLOC/FREE` in `default/berry_conf.h` → custom funcs in our code; cooperative single-VM makes a global "active arena" pointer safe (set on create, clear on destroy). Needs a real within-block sub-allocator (free-list/TLSF — Berry frees objects mid-run, so a bump allocator won't reclaim). Bounds each VM, isolates it from firmware-heap fragmentation, returns all memory on exit, and the chunk size is a runtime arg (answers the "runtime-settable heap" question). Supersedes [[W5]]'s static-buffer variant for the dynamic case; pairs with W5's multi-VM analysis (arena-per-VM for any future RTOS concurrency). |
 
 ---
 
@@ -177,7 +178,11 @@ token (e.g. `.exit` or ESC-unwind, matching the menu's 3×ESC convention) return
 menu. `B` reserved as the alt/secondary if ever needed.
 
 ### I2 — coc build gate
-**Status:** 🔴 · **Needs user:** no
+**Status:** 🟢 (shipped G1) · **Needs user:** no
+**As built:** `python scripts/berry/coc/coc -o App/berry-lang/generate App/berry-lang/src
+App/berry-lang/default -c App/berry-lang/default/berry_conf.h` (run from repo root, after G2 set
+the config). 23 headers generated; `be_fixed_os.h` correctly empty (os off), `be_fixed_math.h`
+populated — confirming the macro gating took. Re-run only when modules / native funcs change.
 `be_string.c`/`.h` `#include "../generate/be_const_strtab*.h"`, produced by `tools/coc` (now at
 `scripts/berry/coc/`). Because `make prebuild`'s relative paths broke when we relocated the
 tool, invoke `coc` directly with explicit `-o App/berry-lang/generate <srcpaths> -c
@@ -200,7 +205,13 @@ hooks (see S1). **FFI:** native binding uses the core API only; no optional modu
 `BE_STACK_*` to taste (RAM).
 
 ### I4 — MCU entry layer (shared VM core + two front-ends)
-**Status:** 🔴 · **Needs user:** no
+**Status:** 🟢 (shipped G4) · **Needs user:** no
+**As built:** `default/berry_app.c` + `default/berry_app.h`. Shared core = `berry_vm_create()`
+(`be_vm_new` + S2 heartbeat obshook). Front-ends: `v_berry_repl_run()` (REPL via stock
+`be_repl()` + term-editor getline with history) and `i_berry_run_buffer(pc, len)` (headless,
+W4 seam, already present as the thin second entry). Native-module registration seam is the
+TODO comment in `berry_vm_create()` (W1/W2 land there). Placed in `default/` (not `App/Src`) so
+the build-exclude flip brings VM + entry layer in atomically.
 Replace `berry.c`'s PC `main()` with an App-layer entry layer. Structure as a **shared VM core**
 (`be_vm_new` → register native modules → wire `be_port` console hooks → register the S2
 heartbeat obshook → `be_vm_delete`), driven by **two front-ends**:
@@ -235,7 +246,14 @@ This also makes the CORDIC-for-`math` idea moot — FPU `sinf` is clean and cont
 Global notes).
 
 ### S1 — be_port.c bare-metal port
-**Status:** 🔴 · **Needs user:** no
+**Status:** 🟢 (shipped G3) · **Needs user:** no
+**As built:** `be_writebuffer`→`fwrite(stdout)` (the firmware `_write`→`__io_putchar` UART path)
+**with LF→CRLF translation** in that one chokepoint — Berry emits bare `\n` and `__io_putchar`
+does no translation, so without it all REPL output staircases. `be_readstring`→
+`x_term_getline_editor` (fgets-style, returns NULL on ESC/Ctrl-C). File ops = inert stubs (FS off)
+except stdout/stderr/stdin still flow. `be_port_abort`/`be_port_exit`→`Error_Handler()` (wired via
+`BE_EXPLICIT_ABORT/EXIT` in `berry_conf.h`). `time` backed by a new `_gettimeofday` →
+`HAL_GetTick` (monotonic ms; RTC later). `clock()` already works via stock `syscalls.c::_times`.
 Adapt `default/be_port.c`. **Console I/O (load-bearing):** reimplement `be_writebuffer(buf,len)`
 to push to our console (`uart_stream`/stdio) and `be_readstring(buf,size)` to pull a line from
 `x_term_getline_editor` — these are the hooks behind the base-lib `print`/`input` built-ins, so
@@ -305,10 +323,13 @@ against vendored `src/be_vm.c` + `src/berry.h` + `default/berry_conf.h`; PLAY pa
 - **Build-exclude lifecycle:** `App/berry-lang` is CubeIDE *Exclude from build* **ON** now;
   flip **OFF** only after G1–G4 (coc generate + config + port + entry) so the first real build
   doesn't face-plant on missing `generate/` headers.
-- **Plan status (2026-06-26):** Big Board — 11 🟢 · 3 🔴 · 0 🟡 · 1 🔵. MSG — 0/8 shipped.
-  **All decisions resolved** (only 🔵 Q2 storage deferred). Remaining 🔴 are pure implementation
-  tasks (I2/I4/S1, *Needs user: no*) — **no decision blockers**. **Next:** G1 (coc generate) →
-  G2 (`berry_conf.h`) → G3/G4 (port + entry) → user wires CubeIDE + flips build-exclude → G5–G8.
+- **Plan status (2026-06-26, v1.0 COMPLETE — bench-verified):** Big Board — 14 🟢 · 0 🔴 · 0 🟡 ·
+  1 🔵 (Q2 storage). MSG — **8/8 shipped (G1–G8 ✅)**. Berry builds, coexists, REPL runs from
+  debug-menu `b`, eval round-trip (incl. integers) verified on hardware. Berry flash cost ≈136 KB
+  text (GC-sectioned away until the G7 hook made it live), total ~231 KB / 512 KB. Open IDE chore:
+  add `-Wno-format` to the `App/berry-lang` folder-scoped flags (type-1 fallout). **Next (v1.1):**
+  W8 per-VM heap arena (preferred over W5), W1 PLAY-as-Berry-function, W4 headless test-runner,
+  W6 multiline editor.
 - **Standing rule:** `Core/` stays CubeMX-owned; all Berry code is App-layer / RTOS-agnostic.
 - **CORDIC sharing (re I5/E2):** the synth drives CORDIC from the **audio-fill ISR** with a
   *sticky* one-time SINE/Q1.31 config ([`synth_engine.c`](../../App/Src/synth_engine.c)). It is
@@ -316,5 +337,49 @@ against vendored `src/be_vm.c` + `src/berry.h` + `default/berry_conf.h`; PLAY pa
   corrupt the synth's assumed state when the ISR fires. Safe sharing needs per-op configure +
   IRQ-guarded atomic access (or one arbitrated CORDIC API) — deferred. Scalar Berry trig uses the
   FPU (I5) instead; CORDIC reserved for streaming DSP (E2).
+
+## Implementation log — v1.0 build-out (2026-06-26)
+
+Files: [`berry_conf.h`](../../App/berry-lang/default/berry_conf.h),
+[`be_port.c`](../../App/berry-lang/default/be_port.c),
+[`berry_app.c`](../../App/berry-lang/default/berry_app.c)/`.h`,
+[`generate/`](../../App/berry-lang/generate/), menu hook in
+[`debug_menu.c`](../../App/Src/debug_menu.c).
+
+**Deviations / decisions made during build (none reopen a locked item):**
+- **Ran G2 before G1.** coc (`block_builder.depend()`) gates const-objects on the config macros,
+  so the generated tables must be produced *against the final config*. MSG IDs read G1→G2; correct
+  build order is config-then-generate.
+- **LF→CRLF in `be_writebuffer`.** `__io_putchar` ([app_main.c](../../App/Src/app_main.c)) sends raw
+  bytes; Berry emits bare `\n`. Translate at the single console chokepoint so all Berry output
+  (print, tracebacks, REPL echo) matches the firmware `\r\n` convention without touching `src/`.
+- **abort/exit → `Error_Handler()`** via `be_port_abort`/`be_port_exit` + `BE_EXPLICIT_*` macros.
+- **`_gettimeofday` → `HAL_GetTick`** added in `be_port.c` (the only missing time syscall; `_times`
+  for `clock()` already exists in `syscalls.c`). Monotonic-since-boot; RTC wall-clock later.
+- **Entry layer in `default/`, not `App/Src/`** — keeps it under the `App/berry-lang` build-exclude
+  umbrella so the G5 flip is atomic and nothing in the always-built tree references Berry until G7.
+- **Headless front-end built now** (`i_berry_run_buffer`) as the thin second entry I4 wanted, even
+  though it only *ships* with W4 — keeps the core shaped for it.
+- **Integer width: `BE_INTGER_TYPE = 1` (32-bit `long`), not the default 2 (`long long`).**
+  newlib-**nano** printf has no `long long` support and no request symbol to add it (verified:
+  `libc_nano.a` exports `_printf_float` but no `_printf_long_long`; toolchain GNU Tools for STM32
+  13.3.rel1). With type 2, `BE_INT_FORMAT` is `"%lld"` and every integer prints a literal `ld`.
+  Type 1 → `"%ld"` (supported), ~2.1e9 range — ample for a scripting layer, consistent with the
+  nano + single-float (I5) choices. Retaining 64-bit would require full newlib firmware-wide
+  (revisit at the H723 migration alongside W7 double-float), or vendor edits (rejected).
+- **Warning suppression:** folder-scoped `-Wno-unused-function -Wno-char-subscripts -Wno-format`
+  on `App/berry-lang` (all upstream `src/`: `i_savecode` unused under `BYTECODE_SAVER=0`;
+  `isalnum(char)` + `%i`-vs-`bint(long)` in `be_solidifylib.c` — the last from the type-1 change).
+  Keeps `src/` a pristine drop-in.
+- **Flash accounting:** before G7 the whole VM was dead code and `--gc-sections` dropped it
+  (text 100 KB); the live menu hook retains it (text 237 KB) → **Berry ≈136 KB text**, +~0.8 KB bss
+  for the REPL line/history buffers. VM working memory is runtime heap (see W5).
+
+**Heap / VM-lifecycle reference (answers, 2026-06-26):**
+- *REPL heap:* no dedicated heap; libc `malloc` on the shared 20 KB linker heap, uncapped. 8 KB
+  dedicated arena = **W5** (see that row for full detail incl. runtime-size + multi-VM analysis).
+- *Runtime-settable size:* not in stock `be_vm_new(void)`; only via the W5 arena layer.
+- *Multiple VMs:* safe to instantiate (no global mutable state); concurrent execution needs RTOS +
+  allocator/console/buffer guarding (cooperative model runs one at a time).
 
 **End of berry-integration-plan.md**

@@ -25,7 +25,11 @@
  * type when the value is 2.
  * Default: 2
  */
-#define BE_INTGER_TYPE                  2
+/* 32-bit (long) integers: BE_INT_FORMAT becomes "%ld", which newlib-nano printf
+ * supports. The default 2 (long long -> "%lld") is NOT supported by nano printf
+ * and prints a literal "ld" for every integer. ~2.1e9 range is ample for a
+ * scripting layer; also lighter on flash/RAM. (No -u _printf_long_long needed.) */
+#define BE_INTGER_TYPE                  1
 
 /* Macro: BE_USE_SINGLE_FLOAT
  * Select floating point precision.
@@ -34,7 +38,9 @@
  * numbers.
  * Default: 0
  **/
-#define BE_USE_SINGLE_FLOAT             0
+/* G474 M4F has a single-precision-only hardware FPU; single float -> HW sinf/cosf
+ * + halves float RAM (plan I5). Revisit double at the H723 migration (W7). */
+#define BE_USE_SINGLE_FLOAT             1
 
 /* Macro: BE_BYTES_MAX_SIZE
  * Maximum size in bytes of a `bytes()` object.
@@ -134,7 +140,8 @@
  * will not be used.
  * Default: 0
  **/
-#define BE_USE_FILE_SYSTEM              1
+/* No filesystem on the G474 yet (plan I3 / W3). Off until storage lands. */
+#define BE_USE_FILE_SYSTEM              0
 
 /* Macro: BE_USE_SCRIPT_COMPILER
  * Enable compiler when BE_USE_SCRIPT_COMPILER is not 0, otherwise
@@ -148,21 +155,23 @@
  * otherwise disable the feature.
  * Default: 1
  **/
-#define BE_USE_BYTECODE_SAVER           1
+/* Bytecode save/load needs a filesystem (plan I3). Off until W3. */
+#define BE_USE_BYTECODE_SAVER           0
 
 /* Macro: BE_USE_BYTECODE_LOADER
  * Enable load bytecode from file when BE_USE_BYTECODE_LOADER is not 0,
  * otherwise disable the feature.
  * Default: 1
  **/
-#define BE_USE_BYTECODE_LOADER          1
+#define BE_USE_BYTECODE_LOADER          0
 
 /* Macro: BE_USE_SHARED_LIB
  * Enable shared library  when BE_USE_SHARED_LIB is not 0,
  * otherwise disable the feature.
  * Default: 1
  **/
-#define BE_USE_SHARED_LIB               1
+/* Host-OS dlopen; meaningless on the MCU (plan I3). */
+#define BE_USE_SHARED_LIB               0
 
 /* Macro: BE_USE_OVERLOAD_HASH
  * Allows instances to overload hash methods for use in the
@@ -212,7 +221,8 @@
 #define BE_USE_JSON_MODULE              1
 #define BE_USE_MATH_MODULE              1
 #define BE_USE_TIME_MODULE              1
-#define BE_USE_OS_MODULE                1
+/* os = filesystem + path/dir + system(); forces FS on. Off until W3 (plan I3). */
+#define BE_USE_OS_MODULE                0
 #define BE_USE_GLOBAL_MODULE            1
 #define BE_USE_SYS_MODULE               1
 #define BE_USE_DEBUG_MODULE             1
@@ -227,8 +237,13 @@
  * are not required.
  * The default is to use the functions in the standard library.
  **/
-#define BE_EXPLICIT_ABORT               abort
-#define BE_EXPLICIT_EXIT                exit
+/* Route Berry's unrecoverable abort/exit into the firmware error path
+ * (be_port.c) instead of libc abort()/exit() on bare metal (plan S1). */
+void be_port_abort(void);
+void be_port_exit(int status);
+#define BE_EXPLICIT_ABORT               be_port_abort
+#define BE_EXPLICIT_EXIT                be_port_exit
+/* Heap: v1.0 uses libc malloc on the linker heap (_Min_Heap_Size, plan I1). */
 #define BE_EXPLICIT_MALLOC              malloc
 #define BE_EXPLICIT_FREE                free
 #define BE_EXPLICIT_REALLOC             realloc

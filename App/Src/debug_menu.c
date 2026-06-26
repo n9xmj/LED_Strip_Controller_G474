@@ -21,6 +21,7 @@
 #include "note_player.h"    // interactive terminal piano / note player ('p' from top menu)
 #include "play.h"
 #include "play_presets.h"
+#include "berry_app.h"     // Berry scripting REPL ('b' from top menu)
 
 #include "debug_config.h"   // logging sugar (LOGCT etc.) for this module
 
@@ -1405,6 +1406,12 @@ static const menu_item_t x_debug_top_menu[] =
         .c_key = 'p',
         .p_c_text = "Interactive note player (terminal piano, CORDIC sustained tones)",
         .pfn_function = v_note_player_run
+    },
+    {
+        .x_type = MENU_ITEM_FUNCTION,
+        .c_key = 'b',
+        .p_c_text = "Berry REPL (scripting playground)",
+        .pfn_function = v_berry_repl_run
     },
     {
         .x_type = MENU_ITEM_CALL_MENU,
