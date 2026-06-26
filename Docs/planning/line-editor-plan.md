@@ -448,7 +448,7 @@ Extend **T4**:
 |----|---------|
 | **W7** | ~~Soft-wrap-aware redraw~~ **Retired** — dynamic wrap machinery removed; unbounded uses fixed `max_len-1` canvas + terminal scroll |
 | **W16** | **Bounded horizontal viewport** — ✅ shipped 2026-06-22: `field_width` = display window; entry up to `max_len-1`; `u16_view_offset` scroll |
-| **W15** | **Multiline mini text editor** — dedicated sub-window (DECSTBM or alternate screen), basic keys only (motion, insert, delete, kill); not vim/nano; builds on line editor + **I7** |
+| **W15** | **Multiline mini text editor** — dedicated sub-window (DECSTBM or alternate screen), basic keys only (motion, insert, delete, kill); not vim/nano; builds on line editor + **I7**. **Driving use case:** free-form authoring of internal **Berry** scripts on-device (see [`berry-integration-plan.md`](berry-integration-plan.md) **W6**); eventually load/edit/save **any** text document (Berry, JSON, config) once a **filesystem** is added (PROJECT.md storage wishlist). |
 | **W8** | **Word-wise motion / edit** — Ctrl/Alt-Left/Right, delete-word (`Ctrl-W`), if the terminal delivers the modified-key sequences |
 | **W9** | **Kill-ring / yank** (`Ctrl-K`/`Ctrl-U`/`Ctrl-Y`) — readline-style cut buffer (builds on D17 option B) |
 | **W10** | **Reverse-incremental history search** (`Ctrl-R`) over the S7 pool |
@@ -490,3 +490,7 @@ Extend **T4**:
   block=OVR, restore on all exits; needs Tera Term "Cursor control sequence" enabled). **Q6** →
   option B (always start insert, live toggle only). **D18/S12/T5** 🟢. Bench 15/15 + 13/13;
   HuIL-verified on bench (mechanics + cue).
+- **2026-06-26** — **W15 scope expanded:** the multiline mini-editor gains an explicit driving
+  use case — free-form authoring of on-device **Berry** scripts (Berry plan **W6**), and
+  eventually load/edit/save of any text document (JSON, config) once a filesystem lands. Still
+  v2+/backlog; recorded so the term and Berry plans stay in sync.

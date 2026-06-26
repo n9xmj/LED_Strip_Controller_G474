@@ -35,6 +35,25 @@ issue-tied work). Name pattern: `<topic>-plan.md` (e.g.
 - **Working mode** one-liner: resolve OPEN items in chat; update table + detail
   sections as decisions land.
 
+### 1a. Brief (executive summary) — **first thing in the doc**
+
+A **one-to-two paragraph** plain-language overview at the very top: (sub)project
+title, the big-picture of what it provides, and the scope of the current version.
+This is the reader's orientation before any table. Keep it tight — it is *not* the
+place for detail; that lives in the detail sections at the bottom.
+
+### At-a-glance ordering (load-bearing)
+
+The plan is the user's **at-a-glance** document — *where are we, where are we going,
+what must I decide* — visible without scrolling/searching. So the **three key tables
+sit together near the top, in this order, with minimal prose between them**:
+
+1. **The Big Board** (decisions) → 2. **§ MSG** (must-ship gap) → 3. **Wish list**.
+
+Row descriptions follow a **one-or-two-sentence soft rule**: bias to brevity, but
+favor clarity when a row genuinely needs a few more words. **Longer descriptive
+text comes *after* the three tables** (LOCKED CONTEXT, detail sections, notes).
+
 ### 2. Summary decision table — **The Big Board**
 
 Single table at the top of each plan — easy to scan in the editor (nickname from

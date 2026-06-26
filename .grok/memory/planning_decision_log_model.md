@@ -7,7 +7,8 @@
 
 For multi-session design (PLAY v1, etc.):
 
-1. Create `Docs/planning/<topic>-plan.md` with **The Big Board** — the summary decision table at the top: ID · status · one-line subject. (*Dr. Strangelove* nickname; user may refer to it that way in chat.)
+0. **Brief first** — open the doc with a 1–2 paragraph executive summary (subproject title, big-picture, current-version scope) before any table. Then the **three key tables sit together near the top, in order: Big Board → § MSG → Wish list**, minimal prose between them; row descriptions 1–2 sentences (soft rule — balance brevity vs clarity). Longer prose (LOCKED CONTEXT, detail sections) comes *after*. This is the user's **at-a-glance** doc — decisions + status visible without searching.
+1. Create `Docs/planning/<topic>-plan.md` with **The Big Board** — the summary decision table near the top: ID · status · one-line subject. (*Dr. Strangelove* nickname; user may refer to it that way in chat.)
 2. **§ MSG (Must-Ship Gap)** — optional scan table between Big Board and wish list: **`G1`…`Gn`** firmware gaps (append-only IDs); **`GP1`…`** peripheral; **Ord** = bring-up tier. (*Mine-Shaft-Gap* joke.)
 3. **ID prefixes:** D=design, S=semantics, I=implementation, T=tooling/docs, Q=user question, W=wish, **G**=MSG firmware gap, **GP**=MSG peripheral.
 4. **Status:** 🔴 open · 🟡 leaning · 🟢 resolved · 🔵 deferred.

@@ -31,6 +31,7 @@ item&gt;"*) using the **Topic Map**:
 | **Line editor / term HuIL** | [`line-editor-plan.md`](Docs/planning/line-editor-plan.md), [`App/Src/term.c`](App/Src/term.c), [`.grok/memory/session-handoff-2026-06-21-line-editor.md`](.grok/memory/session-handoff-2026-06-21-line-editor.md) |
 | **wishlist / roadmap / "what's next"** | [`Docs/PROJECT.md`](Docs/PROJECT.md) (TODO + product lineage) |
 | **build / flash / automation** | [`SCRIPTS.md`](SCRIPTS.md), `.claude/skills/` or `.grok/skills/` |
+| **Berry scripting** (embed Berry VM; expose PLAY as a Berry native func) | **Agent refs:** [`Docs/berry-lang/LLM_BERRY_C_EXTENSION_REFERENCE.md`](Docs/berry-lang/LLM_BERRY_C_EXTENSION_REFERENCE.md) (FFI/embedding) + [`LLM_BERRY_LANGUAGE_REFERENCE.md`](Docs/berry-lang/LLM_BERRY_LANGUAGE_REFERENCE.md). Human refs: `README-FOR_HUMANS.md` + `berry-readthedocs-io-en-latest.pdf` (same dir). **Source:** `App/berry-lang/` (vendored, no submodule); **build tooling** (coc generator, Makefile) in `scripts/berry/`. See `Docs/PROJECT.md` wishlist. |
 
 If a named topic isn't in the table, search `Docs/`, `.grok/memory/`, and `Docs/planning/` by
 keyword before asking. **Keep this table current** as new project aspects get docs.
