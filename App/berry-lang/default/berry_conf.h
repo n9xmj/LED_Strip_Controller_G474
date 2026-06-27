@@ -9,6 +9,7 @@
 #define BERRY_CONF_H
 
 #include <assert.h>
+#include <stddef.h>     /* size_t for the BE_EXPLICIT_* allocator hook decls */
 
 /* Macro: BE_DEBUG
  * Berry interpreter debug switch.
@@ -243,10 +244,15 @@ void be_port_abort(void);
 void be_port_exit(int status);
 #define BE_EXPLICIT_ABORT               be_port_abort
 #define BE_EXPLICIT_EXIT                be_port_exit
-/* Heap: v1.0 uses libc malloc on the linker heap (_Min_Heap_Size, plan I1). */
-#define BE_EXPLICIT_MALLOC              malloc
-#define BE_EXPLICIT_FREE                free
-#define BE_EXPLICIT_REALLOC             realloc
+/* Heap (W8): per-VM TLSF arena sandbox. Every Berry allocation funnels through
+ * these (verified: all malloc/free/realloc in berry-lang/src live in be_mem.c).
+ * They operate on the active arena selected per-VM in berry_heap.c. */
+void *be_arena_malloc(size_t size);
+void  be_arena_free(void *ptr);
+void *be_arena_realloc(void *ptr, size_t size);
+#define BE_EXPLICIT_MALLOC              be_arena_malloc
+#define BE_EXPLICIT_FREE                be_arena_free
+#define BE_EXPLICIT_REALLOC             be_arena_realloc
 
 /* Macro: be_assert
  * Berry debug assertion. Only enabled when BE_DEBUG is active.

@@ -8,8 +8,11 @@
 #include "berry.h"
 #include "be_repl.h"
 #include "berry_app.h"
+#include "berry_heap.h"   /* per-VM TLSF heap sandbox (W8) */
 
 #include <string.h>
+#include <stdbool.h>
+#include <stdio.h>   /* snprintf for the exit heap-usage readout */
 
 #include "main.h"    /* HAL_GetTick() */
 #include "utils.h"   /* v_app_polling_task() */
@@ -21,6 +24,9 @@
 #endif
 #ifndef BERRY_REPL_HIST_BYTES
 #define BERRY_REPL_HIST_BYTES   512u   /* history pool for the line editor */
+#endif
+#ifndef BERRY_DEFAULT_HEAP_BYTES
+#define BERRY_DEFAULT_HEAP_BYTES  8192u  /* per-VM sandbox size (W8); ~TLSF overhead off the top */
 #endif
 
 /* ===========================================================================
@@ -51,16 +57,59 @@ static void berry_heartbeat(bvm *vm, int event, ...)
     }
 }
 
-static bvm *berry_vm_create(void)
+/*
+ * A sandboxed VM session (W8): a VM living inside its own TLSF arena carved
+ * from the system heap. The arena is active for the whole VM lifetime --
+ * including teardown -- so every alloc/free routes to the same allocator.
+ */
+typedef struct {
+    bvm                *vm;
+    berry_heap_arena_t *arena;
+    berry_heap_arena_t *prev;   /* active arena to restore on close (nesting) */
+} berry_session_t;
+
+/* Open a session: malloc a `heap_bytes` arena, make it active, build the VM
+ * inside it, register the S2 heartbeat. false on OOM (arena or VM). */
+static bool b_berry_session_open(berry_session_t *px, size_t heap_bytes)
 {
-    bvm *vm = be_vm_new();
-    if (vm != NULL) {
-        be_set_obs_hook(vm, berry_heartbeat);
-        /* Native module/function registration (PLAY, LED, audio ...) lands
-         * here in later versions (W1/W2) -- the shared seam for both
-         * front-ends. */
+    px->vm    = NULL;
+    px->prev  = NULL;
+    px->arena = px_berry_heap_create(heap_bytes ? heap_bytes : BERRY_DEFAULT_HEAP_BYTES);
+    if (px->arena == NULL) {
+        return false;
     }
-    return vm;
+
+    px->prev = px_berry_heap_set_active(px->arena);
+    px->vm   = be_vm_new();   /* allocates entirely inside the arena */
+    if (px->vm == NULL) {
+        px_berry_heap_set_active(px->prev);
+        v_berry_heap_destroy(px->arena);
+        px->arena = NULL;
+        return false;
+    }
+
+    be_set_obs_hook(px->vm, berry_heartbeat);
+    /* Native module/function registration (PLAY, LED, audio ...) lands here in
+     * later versions (W1/W2) -- the shared seam for both front-ends. */
+    return true;
+}
+
+/* Close a session: delete the VM (returns its memory to the arena), restore
+ * the previous active arena, then free the whole arena chunk. */
+static void v_berry_session_close(berry_session_t *px)
+{
+    if (px->arena != NULL) {
+        px_berry_heap_set_active(px->arena);   /* arena must be active during teardown */
+    }
+    if (px->vm != NULL) {
+        be_vm_delete(px->vm);
+        px->vm = NULL;
+    }
+    px_berry_heap_set_active(px->prev);
+    if (px->arena != NULL) {
+        v_berry_heap_destroy(px->arena);
+        px->arena = NULL;
+    }
 }
 
 /*
@@ -126,19 +175,32 @@ static void berry_repl_freeline(char *ptr)
 
 void v_berry_repl_run(void)
 {
-    bvm *vm = berry_vm_create();
-    if (vm == NULL) {
-        be_writestring("berry: VM allocation failed\n");
+    berry_session_t sess;
+    if (!b_berry_session_open(&sess, BERRY_DEFAULT_HEAP_BYTES)) {
+        be_writestring("berry: heap/VM allocation failed\n");
         return;
     }
 
     be_writestring("\nBerry " BERRY_VERSION " - scripting playground\n");
     be_writestring("Type Berry expressions; press ESC to exit.\n");
 
-    (void) be_repl(vm, berry_repl_getline, berry_repl_freeline);
+    int i_repl_rc = be_repl(sess.vm, berry_repl_getline, berry_repl_freeline);
 
-    be_vm_delete(vm);
+    /* Snapshot arena free space before teardown so the user can size the
+     * sandbox (W8). Measured with live objects still held, i.e. headroom left. */
+    char ac_stat[56];
+    (void) snprintf(ac_stat, sizeof ac_stat,
+                    "[berry] arena: %u bytes free at exit\n",
+                    (unsigned) sz_berry_heap_free_bytes(sess.arena));
+
+    v_berry_session_close(&sess);
+    if (i_repl_rc == BE_MALLOC_FAIL) {
+        /* The sandbox did its job: a runaway script exhausted the arena and
+         * unwound via be_pcall instead of crashing the firmware (W8). */
+        be_writestring("[berry] arena exhausted -- VM terminated\n");
+    }
     be_writestring("[berry] REPL closed\n");
+    be_writestring(ac_stat);
 }
 
 /* ===========================================================================
@@ -151,17 +213,17 @@ int i_berry_run_buffer(const char *pc_script, size_t sz_len)
         return -1;
     }
 
-    bvm *vm = berry_vm_create();
-    if (vm == NULL) {
+    berry_session_t sess;
+    if (!b_berry_session_open(&sess, BERRY_DEFAULT_HEAP_BYTES)) {
         return -1;
     }
 
-    int res = be_loadbuffer(vm, "buffer", pc_script, sz_len);
+    int res = be_loadbuffer(sess.vm, "buffer", pc_script, sz_len);
     if (res == BE_OK) {
-        res = be_pcall(vm, 0);
+        res = be_pcall(sess.vm, 0);
     }
 
-    int status = berry_report(vm, res);
-    be_vm_delete(vm);
+    int status = berry_report(sess.vm, res);
+    v_berry_session_close(&sess);
     return status;
 }
