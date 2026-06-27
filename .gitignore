@@ -26,7 +26,7 @@ __pycache__/
 .crossnote/
 
 # External reference / example code from other projects (not part of this tree)
-not-in-project/
+/Docs/Not-in-project-temp/
 
 # Per-machine bench overrides (see scripts/bench.defaults.json)
 scripts/bench.defaults.local.json
