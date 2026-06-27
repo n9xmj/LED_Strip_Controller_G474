@@ -108,8 +108,12 @@ void Error_Handler(void);
 #define RCC_OSC_IN_GPIO_Port GPIOF
 #define RCC_OSC_OUT_Pin GPIO_PIN_1
 #define RCC_OSC_OUT_GPIO_Port GPIOF
+#define LCD_CS_Pin GPIO_PIN_0
+#define LCD_CS_GPIO_Port GPIOC
 #define LED_STRIP_2_Pin GPIO_PIN_1
 #define LED_STRIP_2_GPIO_Port GPIOC
+#define FLASH_CS_Pin GPIO_PIN_3
+#define FLASH_CS_GPIO_Port GPIOC
 #define ANALOG_MIC_Pin GPIO_PIN_0
 #define ANALOG_MIC_GPIO_Port GPIOA
 #define DEBUG_TX_Pin GPIO_PIN_2
@@ -118,12 +122,12 @@ void Error_Handler(void);
 #define DEBUG_RX_GPIO_Port GPIOA
 #define ANALOG_AMP_Pin GPIO_PIN_4
 #define ANALOG_AMP_GPIO_Port GPIOA
-#define LCD_SCK_Pin GPIO_PIN_5
-#define LCD_SCK_GPIO_Port GPIOA
+#define SPI_SCK_Pin GPIO_PIN_5
+#define SPI_SCK_GPIO_Port GPIOA
 #define NUCLEO_LED_Pin GPIO_PIN_6
 #define NUCLEO_LED_GPIO_Port GPIOA
-#define LCD_DATA_Pin GPIO_PIN_7
-#define LCD_DATA_GPIO_Port GPIOA
+#define SPI_MOSI_Pin GPIO_PIN_7
+#define SPI_MOSI_GPIO_Port GPIOA
 #define LED_STRIP_1_Pin GPIO_PIN_4
 #define LED_STRIP_1_GPIO_Port GPIOC
 #define LED_STRIP_3_Pin GPIO_PIN_10
@@ -144,16 +148,20 @@ void Error_Handler(void);
 #define SWDIO_GPIO_Port GPIOA
 #define SWCLK_Pin GPIO_PIN_14
 #define SWCLK_GPIO_Port GPIOA
+#define I2C_SCL_Pin GPIO_PIN_15
+#define I2C_SCL_GPIO_Port GPIOA
 #define LED_STRIP_4_Pin GPIO_PIN_10
 #define LED_STRIP_4_GPIO_Port GPIOC
 #define LED_STRIP_5__UART5__Pin GPIO_PIN_12
 #define LED_STRIP_5__UART5__GPIO_Port GPIOC
 #define SWO_Pin GPIO_PIN_3
 #define SWO_GPIO_Port GPIOB
+#define SPI_MISO_Pin GPIO_PIN_4
+#define SPI_MISO_GPIO_Port GPIOB
 #define I2C_SDA_Pin GPIO_PIN_7
 #define I2C_SDA_GPIO_Port GPIOB
-#define I2C_SCL_Pin GPIO_PIN_8
-#define I2C_SCL_GPIO_Port GPIOB
+#define I2S_AMP_MCLK_Pin GPIO_PIN_8
+#define I2S_AMP_MCLK_GPIO_Port GPIOB
 
 /* USER CODE BEGIN Private defines */
 

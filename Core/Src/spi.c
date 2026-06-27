@@ -75,16 +75,25 @@ void HAL_SPI_MspInit(SPI_HandleTypeDef* spiHandle)
     __HAL_RCC_SPI1_CLK_ENABLE();
 
     __HAL_RCC_GPIOA_CLK_ENABLE();
+    __HAL_RCC_GPIOB_CLK_ENABLE();
     /**SPI1 GPIO Configuration
     PA5     ------> SPI1_SCK
     PA7     ------> SPI1_MOSI
+    PB4     ------> SPI1_MISO
     */
-    GPIO_InitStruct.Pin = LCD_SCK_Pin|LCD_DATA_Pin;
+    GPIO_InitStruct.Pin = SPI_SCK_Pin|SPI_MOSI_Pin;
     GPIO_InitStruct.Mode = GPIO_MODE_AF_PP;
     GPIO_InitStruct.Pull = GPIO_NOPULL;
     GPIO_InitStruct.Speed = GPIO_SPEED_FREQ_VERY_HIGH;
     GPIO_InitStruct.Alternate = GPIO_AF5_SPI1;
     HAL_GPIO_Init(GPIOA, &GPIO_InitStruct);
+
+    GPIO_InitStruct.Pin = SPI_MISO_Pin;
+    GPIO_InitStruct.Mode = GPIO_MODE_AF_PP;
+    GPIO_InitStruct.Pull = GPIO_NOPULL;
+    GPIO_InitStruct.Speed = GPIO_SPEED_FREQ_LOW;
+    GPIO_InitStruct.Alternate = GPIO_AF5_SPI1;
+    HAL_GPIO_Init(SPI_MISO_GPIO_Port, &GPIO_InitStruct);
 
     /* SPI1 DMA Init */
     /* SPI1_TX Init */
@@ -124,8 +133,11 @@ void HAL_SPI_MspDeInit(SPI_HandleTypeDef* spiHandle)
     /**SPI1 GPIO Configuration
     PA5     ------> SPI1_SCK
     PA7     ------> SPI1_MOSI
+    PB4     ------> SPI1_MISO
     */
-    HAL_GPIO_DeInit(GPIOA, LCD_SCK_Pin|LCD_DATA_Pin);
+    HAL_GPIO_DeInit(GPIOA, SPI_SCK_Pin|SPI_MOSI_Pin);
+
+    HAL_GPIO_DeInit(SPI_MISO_GPIO_Port, SPI_MISO_Pin);
 
     /* SPI1 DMA DeInit */
     HAL_DMA_DeInit(spiHandle->hdmatx);

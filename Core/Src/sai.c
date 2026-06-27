@@ -52,7 +52,7 @@ void MX_SAI1_Init(void)
   hsai_BlockA1.Init.MckOverSampling = SAI_MCK_OVERSAMPLING_DISABLE;
   hsai_BlockA1.Init.FIFOThreshold = SAI_FIFOTHRESHOLD_EMPTY;
   hsai_BlockA1.Init.AudioFrequency = SAI_AUDIO_FREQUENCY_32K;
-  hsai_BlockA1.Init.MckOutput = SAI_MCK_OUTPUT_DISABLE;
+  hsai_BlockA1.Init.MckOutput = SAI_MCK_OUTPUT_ENABLE;
   hsai_BlockA1.Init.SynchroExt = SAI_SYNCEXT_DISABLE;
   hsai_BlockA1.Init.MonoStereoMode = SAI_MONOMODE;
   hsai_BlockA1.Init.CompandingMode = SAI_NOCOMPANDING;
@@ -109,6 +109,7 @@ void HAL_SAI_MspInit(SAI_HandleTypeDef* saiHandle)
     PA8     ------> SAI1_SCK_A
     PA9     ------> SAI1_FS_A
     PA10     ------> SAI1_SD_A
+    PB8-BOOT0     ------> SAI1_MCLK_A
     */
     GPIO_InitStruct.Pin = I2S_AMP_SCK_Pin|I2S_AMP_FS_Pin|I2S_AMP_SD_Pin;
     GPIO_InitStruct.Mode = GPIO_MODE_AF_PP;
@@ -116,6 +117,13 @@ void HAL_SAI_MspInit(SAI_HandleTypeDef* saiHandle)
     GPIO_InitStruct.Speed = GPIO_SPEED_FREQ_LOW;
     GPIO_InitStruct.Alternate = GPIO_AF14_SAI1;
     HAL_GPIO_Init(GPIOA, &GPIO_InitStruct);
+
+    GPIO_InitStruct.Pin = I2S_AMP_MCLK_Pin;
+    GPIO_InitStruct.Mode = GPIO_MODE_AF_PP;
+    GPIO_InitStruct.Pull = GPIO_NOPULL;
+    GPIO_InitStruct.Speed = GPIO_SPEED_FREQ_LOW;
+    GPIO_InitStruct.Alternate = GPIO_AF14_SAI1;
+    HAL_GPIO_Init(I2S_AMP_MCLK_GPIO_Port, &GPIO_InitStruct);
 
     /* Peripheral DMA init*/
 
@@ -157,8 +165,11 @@ void HAL_SAI_MspDeInit(SAI_HandleTypeDef* saiHandle)
     PA8     ------> SAI1_SCK_A
     PA9     ------> SAI1_FS_A
     PA10     ------> SAI1_SD_A
+    PB8-BOOT0     ------> SAI1_MCLK_A
     */
     HAL_GPIO_DeInit(GPIOA, I2S_AMP_SCK_Pin|I2S_AMP_FS_Pin|I2S_AMP_SD_Pin);
+
+    HAL_GPIO_DeInit(I2S_AMP_MCLK_GPIO_Port, I2S_AMP_MCLK_Pin);
 
     HAL_DMA_DeInit(saiHandle->hdmarx);
     HAL_DMA_DeInit(saiHandle->hdmatx);
