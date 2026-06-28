@@ -176,12 +176,47 @@ typedef struct
 }
 spiflash_id_t;
 
-/* Device handle (I4). Embeds the bus transport; geometry/device_info fields are
- * added at G4 (SFDP). Init once, long-lived. */
+/* Standard SPI-NOR geometry defaults (W25Q family + most parts). Used as the
+ * fallback when SFDP is absent; SFDP overrides at runtime where present. */
+#define SPIFLASH_PAGE_SIZE_DEFAULT     256u
+#define SPIFLASH_SECTOR_SIZE_DEFAULT   4096u
+#define SPIFLASH_BLOCK32_SIZE_DEFAULT  32768u
+#define SPIFLASH_BLOCK64_SIZE_DEFAULT  65536u
+
+/* Where the geometry came from (diagnostics). */
+typedef enum
+{
+    SPIFLASH_INFO_SRC_DEFAULT = 0,  // standard defaults + 2^capacity_code
+    SPIFLASH_INFO_SRC_SFDP,         // parsed from the device's SFDP table
+    SPIFLASH_INFO_SRC_JEDEC_TABLE,  // matched a known-part fallback entry
+}
+spiflash_info_src_e;
+
+/* Runtime device geometry (G4, S1). Populated by x_spiflash_detect(). Replaces
+ * the legacy compile-time size #defines so one binary fits W25Q128 / W25Q64 /
+ * any compatible part. */
+typedef struct
+{
+    uint32_t            u32_capacity;       // total bytes
+    uint32_t            u32_sector_count;   // capacity / sector_size
+    uint16_t            u16_page_size;      // program page (256)
+    uint16_t            u16_sector_size;    // smallest erase unit (4096)
+    uint32_t            u32_block32_size;   // 32 KiB erase
+    uint32_t            u32_block64_size;   // 64 KiB erase
+    uint8_t             u8_addr_bytes;      // 3 (<=16 MB) or 4
+    uint8_t             u8_op_erase_sector; // 0x20
+    uint8_t             u8_op_erase_32k;    // 0x52
+    uint8_t             u8_op_erase_64k;    // 0xD8
+    spiflash_info_src_e x_source;
+}
+spiflash_info_t;
+
+/* Device handle (I4). Embeds the bus transport. Init once, long-lived. */
 typedef struct
 {
     spiflash_transport_t x_tp;      // embedded bus transport (G2)
     spiflash_id_t        x_id;      // JEDEC id, read at init
+    spiflash_info_t      x_info;    // runtime geometry (G4)
     bool                 b_init;    // true once init succeeded
 }
 spiflash_device_t;
@@ -201,6 +236,14 @@ extern spiflash_err_t x_spiflash_init(spiflash_device_t *p_x_dev,
 
 extern spiflash_err_t x_spiflash_read_jedec_id(spiflash_device_t *p_x_dev,
                                                spiflash_id_t *p_x_id);
+
+/* (Re)run geometry detection: SFDP first, then a known-part fallback table,
+ * then standard defaults sized from the JEDEC capacity code. Called by
+ * x_spiflash_init; safe to call again. */
+extern spiflash_err_t x_spiflash_detect(spiflash_device_t *p_x_dev);
+
+/* Read-only access to the detected geometry (NULL if p_x_dev is NULL). */
+extern const spiflash_info_t *p_x_spiflash_info(spiflash_device_t *p_x_dev);
 
 /* Register read / write. Write uses the volatile write-enable (0x50) when
  * b_volatile is true, else the standard write-enable (0x06); a non-volatile

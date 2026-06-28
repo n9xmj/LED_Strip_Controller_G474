@@ -54,11 +54,11 @@ own**; SFUD / FAL / the legacy MX25R80 driver are **reference material only**.
 | I2 | 🟢 | **DMA for bulk transfers** above a size threshold; command headers + register reads stay **polled**. RX DMA (`DMA2_Ch1`) + TX DMA (`DMA1_Ch4`) both provisioned in the IOC. (Exact HAL call + threshold → I6.) |
 | I3 | 🟢 | **littlefs BD shim in its own file:** `block_size = sector (4 KB)`, `prog_size = page (256 B)` (so writes never cross a page → dumb `prog`), `read_size = 1`; `sync` flushes DMA + `wait_ready`. `lfs_config` filled at **runtime** from `device_info` (S1). |
 | I4 | 🟢 | **Handle struct shapes (locked)** — device handle (transport vtable, CS port/pin, `device_info`, busy flag, idle cb, lock hook); runtime partition handle (parent device ptr, base offset, size, label). On-flash 64-byte partition entry struct (type/subtype/offset/size/flags/label + `_reserved` + user-meta) — see detail. |
-| I5 | 🟡 | **Partition system — now v1 scope** (promoted from W1). ESP-*conceptual*. **Sector 0** = table (header: magic+ver+CRC32 + entry array); **sectors 1–2** = nvmparams; **sectors 3..end** = **two equal littlefs partitions**. Layout computed at provisioning from SFDP geometry (odd leftover sector left unallocated). Two littlefs FSes double as the partition-API test. |
-| I6 | 🟡 | **DMA specifics:** `HAL_SPI_TransmitReceive_DMA` (dummy-TX + capture-RX, unambiguous full-duplex) vs `HAL_SPI_Receive_DMA`; DMA-vs-polled size threshold value; 32-byte buffer alignment (H7-forward). *(Leaning: TransmitReceive_DMA.)* |
-| I7 | 🟡 | **SFDP fallback table scope** — which parts to hardcode for the SFDP-absent path. Minimum **W25Q128** (bench) + **W25Q64** (H723). *(Leaning: those two + a generic 24-bit default.)* |
+| I5 | 🟡 | **Partition system — now v1 scope** (promoted from W1). ESP-*conceptual*; table in **sector 0** (magic+ver+CRC32 + entry array). Default layout: `0`=table, `1–3`=generic data (stress test), `4–5`=nvmparams, `6–9`=reserved-A, `10..n-2`=two **equal** littlefs, `n-1..n`=reserved-B. Fixed regions = 12 sectors (even) → littlefs `N-12` splits exactly, no gap. See detail table. |
+| I6 | 🟢 | **DMA specifics (locked)** — bulk reads via `HAL_SPI_TransmitReceive_DMA` (same-buffer; MOSI don't-care); polled below a **16-byte threshold** (`SPIFLASH_DMA_THRESHOLD_DEFAULT`); header always polled; 32-byte-align + cache-maintenance seam reserved for H7. Implemented in G2 (`spiflash_ll.c`). |
+| I7 | 🟢 | **SFDP fallback table (locked)** — explicit entries for **W25Q128JV** (`EF 40 18`) + **W25Q64** (`EF 40 17`), plus a generic `2^capacity_code` / 256·4K·32K·64K default. Implemented in G4 (`ax_known_parts`). |
 | Q1 | 🟢 | H723 board uses **OCTOSPI** for its W25Q64 (HOLD/WP bonded → full quad/octal there); TF-card slot is a **separate bus/IP** (no contention). Resolved 2026-06-27 → drives D4 / W3. |
-| I8 | 🟡 | **SPI clock / per-transaction prescaler on the shared bus.** Bench is clean to **42.5 MHz** (fast-read, /4) with margin (G0). But SPI1 is **shared with the LCD**, so a faster flash rate can't just be the global default — the **transport/bus-lock (S5)** should set the prescaler per acquisition (flash claims → fast; LCD claims → its rate) via `HAL_SPI_Init` re-config (proven to work at runtime in G2). Driver default clock TBD; fast-read (0x0B) gives headroom to 133 MHz. |
+| I8 | 🟢 | **SPI clock (locked)** — keep the CubeMX default **10 MHz (/16)** for now (LCD + flash share it; bench proven clean to 42.5 MHz, so ample margin). Per-transaction prescaler switching deferred until a faster flash rate is wanted — trivial to add later (G2 proved runtime `HAL_SPI_Init` reconfig works). |
 | T1 | 🟡 | **Bring-up + test plan:** JEDEC-ID read, register dump, erase/program/read-back, DMA path, littlefs mount/format/file-IO — exercised via debug-menu hooks (and later a PLAY/Berry tie-in). |
 
 ---
@@ -66,7 +66,7 @@ own**; SFUD / FAL / the legacy MX25R80 driver are **reference material only**.
 ## Must-Ship Gap (MSG) — v1 firmware
 
 *Append-only `G` IDs; mark ✅ when shipped (do not renumber). **Ord** = bring-up tier (1 before 2).*
-*Last audited: 2026-06-27 (G0 bench-verified; G1–G3 ✅ code-complete/builds; G4–G12 pending).*
+*Last audited: 2026-06-27 (G0 bench-verified; G1–G4 ✅ code-complete/builds; G5–G12 pending).*
 
 | ID | Ord | Status | Item | Ref |
 |----|:---:|:------:|------|-----|
@@ -74,14 +74,14 @@ own**; SFUD / FAL / the legacy MX25R80 driver are **reference material only**.
 | G1 | 1 | ✅ | **Platform wiring** — CubeMX regen (`hdma_spi1_rx` + DMA2 clk/IRQ) done; `FLASH_SPI_HANDLE` + `FLASH_SELECT()/FLASH_DESELECT()` (PC3) added to `platform.h`. | D4, I2 |
 | G2 | 1 | ✅ | **Transport layer** — `App/spiflash/spiflash_ll.{c,h}` + `spiflash_common.h`: `spiflash_cmd_t` transaction model, CS control, polled + DMA data (threshold, fast-read via TxRx-DMA same-buf), per-phase line-width (single-wire backend), bus lock/unlock + idle hooks, re-entrancy guard, `spiflash_err_t`. **Builds 0/0; first bench-exercised at G3.** | D4, S5, S4, S3, I6 |
 | G3 | 1 | ✅ | **Device primitives + register layer** — `App/spiflash/spiflash.{c,h}`: `SPIFLASH_CMD_*` opcodes + `SPIFLASH_REG_*` ids (D7), SR1/2/3 bitfield unions + masks (datasheet-verified), `spiflash_device_t` handle (embeds transport), `read_reg`/`write_reg` (vol + non-vol), WREN/WRDI, `is_busy`/`wait_ready` (pumps idle between polls), JEDEC-ID read + NODEV sanity. Driver accepts any valid JEDEC part (the `EF 40 18` assert lives in bench tests, not the driver — S1). **Builds 0/0; bench-exercised when wired into the G12 menu.** | I1, D7, S1 |
-| G4 | 2 | 🔴 | **SFDP detect → runtime `device_info`** (capacity, page/sector/block, addr-bytes, erase opcodes) + **JEDEC fallback table** (W25Q128/64). | S1, I7 |
+| G4 | 2 | ✅ | **SFDP detect → runtime `device_info`** — `spiflash_info_t` (capacity, sector_count, page/sector/block sizes, addr-bytes, erase opcodes, source). `x_spiflash_detect`: parse SFDP BFPT (density→capacity, addr-bytes, page size) → **JEDEC fallback table** (W25Q128/64) → standard defaults sized from `2^capacity_code`. Called by `init`. **Builds 0/0; bench-exercised at G12.** | S1, I7 |
 | G5 | 2 | 🔴 | **Erase/program/read primitives:** sector/32K/64K/chip erase, page program, fast-read; **address-range read/write** (page-split; range erase). Separate dumb erase/program; optional L2 auto-erase write. | D6, S2 |
 | G6 | 2 | 🔴 | **DMA bulk path + cooperative pump + re-entrancy guard** wired into read/program; polled fallback below threshold. | I2, I6, S4 |
-| G11 | 3 | 🔴 | **Partition module + default provisioning** (needs G4 geometry + G5 range R/W; precedes all FS layers) — read/validate the sector-0 table (magic+CRC32); provision default layout (S0=table, S1–2=nvmparams, S3..end=two equal littlefs); enumerate + open-by-label → `spiflash_partition_t`. | I5, I4 |
-| G12 | 3 | 🔴 | **Debug-menu reorg — SPI Flash submenu** (`MENU_ITEM_SUBMENU`): a dedicated home for flash ops + tests. **Migrate `v_debug_quick_test_1/2` (G0/G2) into it** (frees the top-level quick-test slots) and add device-op items as primitives land (JEDEC/ID, register dump, erase, hex-dump read/write). G9 later extends it with partition/FS ops. | T1, G0 |
+| G11 | 3 | 🔴 | **Partition module + default provisioning** (needs G4 geometry + G5 range R/W; precedes all FS layers) — read/validate the sector-0 table (magic+CRC32); provision the default layout (I5 table: table / generic-data / nvmparams / reserved-A / 2×littlefs / reserved-B); enumerate + open-by-label → `spiflash_partition_t`. | I5, I4 |
+| G12 | 3 | 🔴 | **Debug-menu reorg — SPI Flash submenu** (`MENU_ITEM_SUBMENU`): a dedicated home for flash ops + tests. **Migrate `v_debug_quick_test_1/2` (G0/G2) into it** (frees the top-level quick-test slots); add device-op items as primitives land (JEDEC/ID, register dump, erase, hex-dump read/write); add a **partition map / "directory" listing** (per-entry label, type/subtype, offset, size, flags) once G11 lands. G9 later adds FS ops. | T1, G0, I5 |
 | G7 | 4 | 🔴 | **littlefs BD shim** (`read/prog/erase/sync` callbacks; `cfg.context` → partition handle) + `lfs_config` from runtime geometry. Per-partition — instantiated **twice** (two FSes). Depends on G11. | D2, I3, I5 |
 | G8 | 4 | 🔴 | **Mount / format / file-IO bench test** on **both** littlefs partitions (format, write, remount, read-back, verify) — exercises the partition API via two independent FS instances. | T1 |
-| G9 | 5 | 🔴 | **Extend the SPI Flash submenu (G12)** with partition + filesystem ops: partition list, FS format/ls/cat/put — the higher-level bring-up surface, once G11/G7 exist. | T1, I5 |
+| G9 | 5 | 🔴 | **Extend the SPI Flash submenu (G12)** with filesystem ops once G7 mounts: **directory listing for both littlefs partitions** + format / cat / put — the higher-level bring-up surface. (Partition-map listing already added at G12.) | T1, I5 |
 | G10 | 6 | 🔴 | **Final cleanup (LAST step)** — archive the original bare-metal G0/G2 snippets to `Docs/Not-in-project-temp/` for reference; the live tests persist (migrated) under the G12 submenu. Remove any remaining throwaway top-level scaffolding. | G0, G12 |
 
 ---
@@ -196,13 +196,23 @@ rules are fixed.
 **Table location:** **sector 0** (reserved). Format: a small header (magic + version + entry count +
 **CRC32** over the entry array) followed by up to 64 `spiflash_part_entry_t` records (I4, 64 B each
 → 64 fit in the 4 KB sector). Empty slot = `u16_magic == 0xFFFF` (erased flash).
-**Default layout (provisioned at runtime from SFDP-detected capacity):**
-- `S0` (0x000000) — partition table.
-- `S1–S2` (0x001000, 8 KB) — **nvmparams** pool (W8 consumer).
-- `S3..end` — **two equal littlefs partitions**. Split = `floor((sector_count - 3) / 2)` each;
-  the odd leftover sector (e.g. 4093 usable on the -128 → 2046+2046, 1 spare) is left unallocated.
-  On the W25Q64 the same formula applies to its smaller sector count — geometry is runtime, so one
-  provisioning routine covers both parts.
+**Default layout (provisioned at runtime; `N` = sector count = capacity / 4 KB, SFDP-detected;
+last index `n = N-1`). Concrete values shown for the 16 MB W25Q128 (N = 4096, n = 4095):**
+
+| Sectors        | Bytes (16 MB)        | Region        | Purpose |
+|----------------|----------------------|---------------|---------|
+| `0`            | 0x000000–0x000FFF    | table         | header (magic+ver+CRC32) + entry array |
+| `1..3`         | 0x001000–0x003FFF    | generic data  | scratch R/W; **hosts the R/W-speed stress test** (migrated G2) — 3 sectors |
+| `4..5`         | 0x004000–0x005FFF    | nvmparams     | KV pool (W8) |
+| `6..9`         | 0x006000–0x009FFF    | reserved-A    | partition create/delete testing |
+| `10..n-2`      | 0x00A000–0xFFDFFF    | littlefs ×2   | two **equal** partitions (no gap) |
+| `n-1..n`       | 0xFFE000–0xFFFFFF    | reserved-B    | partition create/delete testing (last 2 sectors) |
+
+- The fixed regions total **12 sectors** (table 1 + generic 3 + nvmparams 2 + reserved-A 4 +
+  reserved-B 2) — **even** — so the littlefs region `10 .. N-3` = `N-12` sectors splits **exactly in
+  two, no leftover** for any even N (true of every 2^k-MB part): 16 MB → 4084 → **2042 + 2042**
+  (LFS_A `10..2051`, LFS_B `2052..4093`); W25Q64 (N=2048) → 2036 → **1018 + 1018**. Geometry is
+  runtime, so one provisioning routine covers both parts.
 **API:** validate/read table, provision-default (format), enumerate, open-by-label →
 `spiflash_partition_t`. ESP-*conceptual*, minus bootloader baggage (no fixed 0x8000, no 0xC00 cap).
 FAL is the reference; the legacy MX25R80 "directory" is the primitive ancestor.
@@ -228,36 +238,33 @@ mirror-project-specific and get replaced wholesale for this project; the engine/
 part. Port *after* the driver + partition layer exist.
 
 ### I6 — DMA specifics
-**Status:** 🟡 · **Needs user:** no
-**Leaning:** use `HAL_SPI_TransmitReceive_DMA` for bulk reads (clock dummies out on TX/DMA1_Ch4
-while capturing on RX/DMA2_Ch1) — unambiguous full-duplex master path now that both channels
-exist. Command/address headers go out polled; only the payload uses DMA, gated by a size threshold
-(candidate ≈ 16–32 B — below it, DMA setup cost dominates). Keep DMA buffers 32-byte aligned and
-the cache-maintenance seam defined (no-op on G4, real on H723). The legacy used `Receive_DMA`;
-either works — pick at implementation after a quick bench check.
-**Resolution:** _(pending bench)_
+**Status:** 🟢 · **Needs user:** no
+**Resolution (locked 2026-06-27, implemented in G2 `spiflash_ll.c`):** bulk reads use
+`HAL_SPI_TransmitReceive_DMA` with the **same buffer** for TX/RX (MOSI don't-care during a flash
+read) — unambiguous full-duplex master path using both DMA channels (TX DMA1_Ch4 / RX DMA2_Ch1).
+Writes use `HAL_SPI_Transmit_DMA`. The opcode/address/dummy header is always polled; the data phase
+uses DMA only at/above **`SPIFLASH_DMA_THRESHOLD_DEFAULT` = 16 bytes**, polled below. DMA-burst
+waits block without pumping (mid-burst, S4). The 32-byte-alignment + cache-maintenance seam is
+reserved for the H723 D-cache port (no-op on G4). Bench-tune the threshold later if wanted.
 
 ### I7 — SFDP fallback table scope
-**Status:** 🟡 · **Needs user:** no
-**Leaning:** SFDP is primary; the fallback table covers the two parts we actually run — **W25Q128JV**
-(`EF 40 18`, 16 MB) and **W25Q64** (`EF 40 17`, 8 MB) — plus a generic 24-bit/4 KB-sector/256 B-page
-default so an unknown but compatible part still mounts. Lift the table shape from SFUD's
-`sfud_flash_def.h`.
-**Resolution:** _(confirm part numbers/IDs against datasheet at G4)_
+**Status:** 🟢 · **Needs user:** no
+**Resolution (locked 2026-06-27, implemented in G4 `ax_known_parts`):** SFDP is primary; the
+fallback table holds the two parts we actually run — **W25Q128JV** (`EF 40 18`, 16 MB) and **W25Q64**
+(`EF 40 17`, 8 MB). If neither SFDP nor the table matches, geometry falls back to a generic default:
+capacity = `2^capacity_code`, page 256 / sector 4K / 32K / 64K, address bytes by capacity. So an
+unknown-but-compatible part still sizes correctly.
 
 ### I8 — SPI clock / per-transaction prescaler
-**Status:** 🟡 · **Needs user:** no (decide driver default at G2-driver time)
+**Status:** 🟢 · **Needs user:** no
 **Bench data (G0, 2026-06-27):** read-verify sweep PASS with 0 errors at 5.31 / 10.62 / 21.25 /
 42.50 MHz, 8 runs (~6.5 MB total), W25Q128 on ~10 cm dupont jumpers. Writes verified at 10 MHz.
-So the bench has large margin; the current 10 MHz (/16) default is very conservative.
-**Implication:** SPI1 is shared with the LCD (different max clock), so don't just raise the global
-prescaler. The transport layer + bus-lock (S5) should select the prescaler **per bus acquisition**
-(flash → fast, LCD → its own), restoring on release — `HAL_SPI_Init` runtime re-config is proven
-clean (G2 sweep used exactly this). Use **fast-read 0x0B** (133 MHz-capable) not 0x03 (~50 MHz) so
-the read protocol isn't the limit. **Open:** pick the driver's flash-clock default (candidate /4
-≈ 42 MHz given the margin; or stay conservative and expose a setter). Re-test margin on the H723
-port (OCTOSPI, different board/layout) — bench numbers don't transfer.
-**Resolution:** _(driver default chosen at G2-driver implementation)_
+**Resolution (locked 2026-06-27):** keep the existing CubeMX **10 MHz (/16)** default for now.
+SPI1 is shared with the LCD and both run at /16, so no per-transaction prescaler switching is needed
+at this rate. The bench has ~4× margin (proven to 42.5 MHz), so this is safe and trivially
+changeable later (a one-line prescaler swap, or the per-acquisition switch via runtime
+`HAL_SPI_Init` that G2 demonstrated) if a faster flash rate is ever wanted. Use **fast-read 0x0B**
+(133 MHz-capable) for the read path. Re-test margin on the H723 (OCTOSPI, different layout).
 
 ### T1 — Bring-up + test plan
 **Status:** 🟡 · **Needs user:** no
@@ -307,11 +314,11 @@ Captured now so the migration agent has context (the driver is being built *for*
   chip table + read/erase/write structure + lock hook → `Docs/Not-in-project-temp/SFUD/`; FS BD
   templates + littlefs DESIGN/SPEC → `Docs/littlefs-extras/` (moved out of the build dir;
   `App/littlefs/` now holds only the built core + LICENSE/VENDOR).
-- **Plan status (2026-06-27):** Big Board — 14 🟢 · 5 🟡 (I5, I6, I7, I8, T1) · 0 🔵 · 0 🔴 —
-  no open user confirms. MSG — **4/13 (G0–G3 ✅)**; G4–G12 pending. Partition table promoted from W1
+- **Plan status (2026-06-27):** Big Board — 20 🟢 · 2 🟡 (I5, T1) · 0 🔵 · 0 🔴 —
+  no open user confirms. MSG — **5/13 (G0–G4 ✅)**; G5–G12 pending. Partition table promoted from W1
   into v1 (I5/G11); two littlefs FSes are the partition-API test. **Bench facts banked:** wiring
-  solid to 42.5 MHz (I8); transport + device layer (`App/spiflash/`) build 0/0. **Next suggested:**
-  **G4** (SFDP detect → runtime geometry + JEDEC fallback table). *G9 prereq:* add `App/spiflash`
-  to the IDE include path before external files include its headers.
+  solid to 42.5 MHz (I8); transport + device + geometry layers (`App/spiflash/`) build 0/0. **Next
+  suggested:** **G5** (erase/program/read primitives + address-range read/write). *G9 prereq:* add
+  `App/spiflash` to the IDE include path before external files include its headers.
 
 **End of spiflash-driver-implementation-plan.md**
