@@ -68,7 +68,7 @@ own**; SFUD / FAL / the legacy MX25R80 driver are **reference material only**.
 
 *Append-only `G` IDs; mark ✅ when shipped (do not renumber). **Ord** = bring-up tier (1 before 2).*
 *Last audited: 2026-06-28 (**G1–G8 + G11 HIL-validated on hardware** via `scripts/spiflash_bench.py` —
-52 checks: 12 driver + 22 partition + 18 littlefs, all green; G12 in progress; G9–G10 pending).*
+52 checks: 12 driver + 22 partition + 18 littlefs, all green; G12 in progress; G9, G10, G13 pending).*
 
 | ID | Ord | Status | Item | Ref |
 |----|:---:|:------:|------|-----|
@@ -85,6 +85,7 @@ own**; SFUD / FAL / the legacy MX25R80 driver are **reference material only**.
 | G8 | 4 | ✅ | **Mount / format / file-IO bench test** on **both** littlefs partitions — `spiflash_bench.py` `littlefs` suite (18 checks): per-FS format/mount/write/readback/`ls`/unmount→remount→**persist**, plus two **independent** FS instances holding distinct content concurrently, bracketed by table backup/restore. Driven by the harness **`M`** op (`L` is the list builtin). **All green 2026-06-28.** | T1 |
 | G9 | 5 | 🔴 | **Extend the SPI Flash submenu (G12)** with filesystem ops once G7 mounts: **directory listing for both littlefs partitions** + format / cat / put — the higher-level bring-up surface. (Partition-map listing already added at G12.) | T1, I5 |
 | G10 | 6 | 🔴 | **Final cleanup (LAST step)** — archive the original bare-metal G0/G2 snippets to `Docs/Not-in-project-temp/` for reference; the live tests persist (migrated) under the G12 submenu. Remove any remaining throwaway top-level scaffolding. | G0, G12 |
+| G13 | 7 | 🔴 | **Boot-time storage init in `v_system_init()`** (after Phase B; necessary) — wire `app_main.c`'s `v_system_init()` to bring the flash filesystem **live for the app**: `x_spiflash_init` → load partition table (provision default if absent) → mount both littlefs partitions via the VFS (format-on-first-boot) → so `fopen("/lfs0/...")` / VFS access works immediately post-init. Lifts the lazy/bench init out of the test path into startup; the test ops then reference the already-initialised globals. | W10, G7, G11 |
 
 ---
 
@@ -476,7 +477,7 @@ Captured now so the migration agent has context (the driver is being built *for*
   templates + littlefs DESIGN/SPEC → `Docs/littlefs-extras/` (moved out of the build dir;
   `App/littlefs/` now holds only the built core + LICENSE/VENDOR).
 - **Plan status (2026-06-28):** Big Board — 23 🟢 · 0 🟡 · 0 🔵 · 0 🔴 — no open items. MSG —
-  **10/13 (G0–G8, G11 ✅; G12 🟡 in progress)**; G9–G10 pending. **Validated on hardware:** the whole
+  **10/14 (G0–G8, G11 ✅; G12 🟡 in progress)**; G9, G10, G13 pending. **Validated on hardware:** the whole
   stack — transport (polled+DMA) → device/registers → SFDP geometry → erase/program/range-write/read →
   partition manager (provision/CRC/create corner-cases/mounted-guard) → **two littlefs FSes** — via
   `scripts/spiflash_bench.py` (**52 checks**: 12 driver + 22 partition + 18 littlefs, all green), driven

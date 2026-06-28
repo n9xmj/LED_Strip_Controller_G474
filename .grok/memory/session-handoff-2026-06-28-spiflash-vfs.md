@@ -42,8 +42,9 @@ Phase A). Supersedes [session-handoff-2026-06-27-spiflash-driver.md](session-han
 2. **G12 remainder (HuIL):** partition-map/utility menu items (create/del/list/reset-to-default/
    erase-table-sector) the user specced; **G9** FS ops in the menu; **G10** archive bare-metal G0/G2.
 3. **W7** Berry FS via stdio (after Phase B); **W13** host FS shell; **W14** RO enforcement (low pri).
-4. Eventually move `x_spiflash_init` + partition provision + littlefs mount into `v_system_init()`
-   (boot-time); today they lazy-init from the bench/test path.
+4. **G13** (filed): move `x_spiflash_init` + partition provision + littlefs mount into `v_system_init()`
+   (boot-time) so the FS is live for the app — necessary after Phase B; today they lazy-init from the
+   bench/test path.
 
 ## Gotchas / invariants (don't re-break)
 - **Harness opcode space is case-folded** (`toupper(line[0])`): builtins `V`/`L`/`Q`/`?`; ops
