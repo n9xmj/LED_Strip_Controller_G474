@@ -51,6 +51,7 @@
 									<listOptionValue builtIn="false" value="../App/uart-stream"/>
 									<listOptionValue builtIn="false" value="../App/berry-lang/src"/>
 									<listOptionValue builtIn="false" value="../App/tlsf"/>
+									<listOptionValue builtIn="false" value="../App/spiflash"/>
 									<listOptionValue builtIn="false" value="../App/berry-lang/default"/>
 									<listOptionValue builtIn="false" value="../App/berry-lang/generate"/>
 									<listOptionValue builtIn="false" value="../Core/Inc"/>
@@ -187,6 +188,7 @@
 									<listOptionValue builtIn="false" value="../App/uart-stream"/>
 									<listOptionValue builtIn="false" value="../App/berry-lang/src"/>
 									<listOptionValue builtIn="false" value="../App/tlsf"/>
+									<listOptionValue builtIn="false" value="../App/spiflash"/>
 									<listOptionValue builtIn="false" value="../App/berry-lang/default"/>
 									<listOptionValue builtIn="false" value="../App/berry-lang/generate"/>
 									<listOptionValue builtIn="false" value="../Core/Inc"/>
