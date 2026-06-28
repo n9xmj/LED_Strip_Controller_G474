@@ -99,6 +99,8 @@ own**; SFUD / FAL / the legacy MX25R80 driver are **reference material only**.
 | W6 | 🔵 | **SD/TF-card driver** (H723 board) — *separate* API/bus/IP; LBA/512-byte addressing; not part of this driver. |
 | W7 | 🔵 | **Berry / PLAY tie-in** — expose flash + FS ops as script functions (depends on Berry W3 FS tie-in). |
 | W8 | 🔵 | **nvmparams integration** — port the lightweight ESP-NVS-inspired KV parameter manager (`Docs/Not-in-project-temp/nvmparams/`) and add a **`NVM_DEVICE_SPIFLASH`** backend so an nvmparams *pool* lives in a dedicated **spiflash partition** (whole-pool read = range-read; commit = erase+program the partition). A *second* consumer of the partition layer alongside littlefs — strengthens I5/W1. Project-specific slot IDs (`NVM_PARAM_*`/`NVM_CONFIG_*`) get replaced for this project. See detail note. |
+| W9 | 🔵 | **External-script / host littlefs access** — file upload/download, directory listing, rename, delete over the host protocol / **HIL test REPL**; complementary **Berry** tie-ins (with W7). Builds on the existing test-harness file-upload path (Berry W4). |
+| W10 | 🔵 | **littlefs ↔ C stdio retarget** — route newlib `<stdio.h>` (`fopen/fread/fwrite/fclose/fseek/…`) to littlefs by path prefix via the `_open/_read/_write/_close/_lseek` syscalls. **Likely a prerequisite for W7** — Berry's file plugin (`be_filelib`) is stdio-based, so this makes Berry FS access work for free. |
 
 ---
 
@@ -331,6 +333,13 @@ low; (2) register dump (SR1/2/3 decoded) — proves register layer + protection 
 erase → page program → read-back compare at a few addresses (polled, then DMA); (4) address-range
 write across page/sector boundaries; (5) littlefs format → mount → write/read/verify → remount;
 (6) all driven from debug-menu hooks (G9). Later: a PLAY/Berry tie-in (W7) for scripted tests.
+**Next-session approach (test-first, incremental):** build the G12 SPI Flash submenu *incrementally* —
+add a HuIL (human-in-the-loop) bench test for each already-completed layer as the menu grows
+(JEDEC/geometry readout → register dump → partition provision/map/create/delete → erase/program/
+read round-trips), and fold in a few **automated HIL tests via the test REPL** where deterministic.
+This is the first on-hardware validation of the whole G1–G11 stack. Once that's green, do **G7**
+(littlefs ×2), then revisit tests/utilities for it (G8/G9), then start **W7** (Berry littlefs
+tie-in), with **W10** (stdio→littlefs retarget) likely landing first as its enabler.
 **Resolution:** _(builds out with the G-rows)_
 
 ---

@@ -114,6 +114,18 @@ Working end-to-end on the bench (mic → DMA → job queue → main-context hand
 - **`r`** — DMA stream bench: prints `chunks/ac/pk` once per second to confirm the stream + job path are alive.
 - Sensitivity note: INMP441 is a fixed-gain digital mic (sens −26 dBFS @ 94 dB SPL, SNR ~61 dB, overload ~120 dB SPL). Ambient sound is small in *linear* terms but well above the noise floor — meter/DSP should work in **dB** and apply digital gain/AGC. 16-bit truncation is fine (mic SNR fits in 16 bits).
 
+### SPI NOR flash + partitions (`App/spiflash/`, in progress)
+W25Q128 SPI-NOR driver, layered (D4): `spiflash_ll` (bus transport) → `spiflash` (device +
+registers + **SFDP runtime geometry** + erase/program/read) → `spiflash_part` (partition manager,
+sector-0 table) → littlefs (vendored `App/littlefs/`, **build-excluded** until its shim lands).
+CRC32 util at `App/Src/crc32.c` (force-sets standard reflected CRC-32 over the HW CRC IP). **SPI1 is
+shared with the LCD** (`FLASH_CS`=PC3, `LCD_CS`=PC0, both run /16 ≈ 10 MHz); SPI1_RX DMA on
+DMA2_Ch1. Geometry is auto-detected so one binary fits the W25Q128 (bench) and W25Q64 (future H723).
+**Status:** G0 bench-verified; G1–G11 code-complete + builds, **not yet hardware-validated** — G12
+(debug submenu) is the first real exercise. Authoritative state:
+[`Docs/planning/spiflash-driver-implementation-plan.md`](Docs/planning/spiflash-driver-implementation-plan.md)
++ newest `.grok/memory/session-handoff-2026-06-27-spiflash-driver.md`.
+
 ### When to Introduce RTOS (FreeRTOS)
 - Current super-loop + blocking debug menu is sufficient for bring-up and static tests.
 - Add FreeRTOS only when a feature genuinely needs real concurrency (e.g. continuous audio capture + LED animation).
