@@ -99,8 +99,11 @@ own**; SFUD / FAL / the legacy MX25R80 driver are **reference material only**.
 | W6 | 🔵 | **SD/TF-card driver** (H723 board) — *separate* API/bus/IP; LBA/512-byte addressing; not part of this driver. |
 | W7 | 🔵 | **Berry / PLAY tie-in** — expose flash + FS ops as script functions (depends on Berry W3 FS tie-in). |
 | W8 | 🔵 | **nvmparams integration** — port the lightweight ESP-NVS-inspired KV parameter manager (`Docs/Not-in-project-temp/nvmparams/`) and add a **`NVM_DEVICE_SPIFLASH`** backend so an nvmparams *pool* lives in a dedicated **spiflash partition** (whole-pool read = range-read; commit = erase+program the partition). A *second* consumer of the partition layer alongside littlefs — strengthens I5/W1. Project-specific slot IDs (`NVM_PARAM_*`/`NVM_CONFIG_*`) get replaced for this project. See detail note. |
-| W9 | 🔵 | **External-script / host littlefs access** — file upload/download, directory listing, rename, delete over the host protocol / **HIL test REPL**; complementary **Berry** tie-ins (with W7). Builds on the existing test-harness file-upload path (Berry W4). |
+| W9 | 🔵 | **External-script / host littlefs access** — file upload/download, directory listing, rename, delete over the host protocol / **HIL test REPL**; complementary **Berry** tie-ins (with W7). Builds on the existing test-harness file-upload path (Berry W4). **W13** is the interactive host shell built on these ops. |
 | W10 | 🔵 | **littlefs ↔ C stdio retarget** — route newlib `<stdio.h>` (`fopen/fread/fwrite/fclose/fseek/…`) to littlefs by path prefix via the `_open/_read/_write/_close/_lseek/_fstat` syscalls (+ fd→`lfs_file_t` table). **newlib-nano is sufficient** (file I/O is in the syscalls, not the nano/full split); mind heap per `fopen` (FILE+buffer — use `setvbuf`). Makes any `fopen` code work, incl. Berry's stdio file plugin → **enables W7**. *Lighter Berry-only alt:* bind `be_port` file ops straight to `lfs_file_*`, skipping stdio. |
+| W11 | 🔵 | **Migrate SPI flash SPI1 → QUADSPI** — frees SPI1 for LCD-exclusive use; a dedicated flash bus retires the shared-bus lock (S5) and the dual-CS-power-up dance. Single-line (1-1-1) for cmd/program + **dual-line read** (`0x3B`, same pins) for ~2× read throughput; quad N/A (breakout + pin pressure). New D4 transport backend `spiflash_ll_qspi.c`, layers above unchanged — doubles as the W3 OCTOSPI dress rehearsal. **Pin-move prereq DONE** (USART3_TX/LED_STRIP_3 PB10→PB9, .ioc regen + rewire, 2026-06-28). See detail. |
+| W12 | 🔵 | **littlefs partition mount/unmount + label-prefixed unix paths** — address files `/<partition-label>/path/to/file` across the two FSes via C stdio. Mount/unmount is native littlefs (one `lfs_t` per partition); the label namespace is a thin mount-table router built into the W10 stdio retarget (or the lighter Berry-only `fs.*` binding). Depends on G7/G8 + W10. See detail. |
+| W13 | 🔵 | **Host-side filesystem shell (interactive REPL)** — a Python shell over the device host-protocol giving reasonably complete remote FS access: `ls` / `cd` / `pwd`, `rm`, `rename`, `cp` / `mv`, plus `get` (copy-to-host) and `put` (upload-from-host). Unix-like, using the W12 `/<label>/...` path scheme across both littlefs partitions. The host-side **front-end** over the **W9** device fs ops (W9 = the primitives; W13 = the usable shell). Depends on W9 + G7/G8 (+ W12 paths). See detail. |
 
 ---
 
@@ -341,6 +344,76 @@ This is the first on-hardware validation of the whole G1–G11 stack. Once that'
 (littlefs ×2), then revisit tests/utilities for it (G8/G9), then start **W7** (Berry littlefs
 tie-in), with **W10** (stdio→littlefs retarget) likely landing first as its enabler.
 **Resolution:** _(builds out with the G-rows)_
+
+### W11 — SPI flash SPI1 → QUADSPI migration
+**Status:** 🔵 · **Needs user:** no
+**Why:** SPI1 is shared with the LCD today (S5 lock, dual-CS-power-up dance, flash↔LCD contention).
+QUADSPI is an independent IP and a purpose-built serial-NOR controller; moving the flash there frees
+SPI1 for the LCD exclusively and lets flash DMA + LCD refresh run concurrently. QUADSPI's command
+model (instruction / address-size / dummy-cycles / data / functional-mode) maps **~1:1 onto our
+`spiflash_cmd_t`**, so the backend is cleaner than the SPI-HAL one (the hardware frames the
+transaction — no manual header-byte assembly).
+**Bus widths:** single-line (1-1-1) is plain SPI to the W25Q128; **dual-line read** (`0x3B`, data on
+IO0+IO1 = the breakout's bonded DI/DO) is a free **~2× read-throughput** bonus needing no extra pins.
+**Quad is out** — IO2/IO3 aren't bonded on the bench breakout and those pins are taken regardless.
+**Pins (LQFP64, locked):** `CLK`=**PB10**, `BK1_NCS`=**PB11**, `BK1_IO0`=**PB1**, `BK1_IO1`=**PB0**.
+NCS is hardware-driven, so the soft `FLASH_CS` (PC3) is **freed**. The only contended signal was CLK —
+LQFP64 offers it on PA3 or PB10 only, and PA3 is the immovable ST-Link VCP debug RX; resolved by
+moving USART3_TX (LED_STRIP_3) PB10→PB9 (its only free alt on this package). **That pin move is
+already DONE on the bench (.ioc regen'd + board rewired, 2026-06-28); QUADSPI itself is not yet
+enabled and the flash still runs on SPI1.**
+**Backend (D4):** new `App/spiflash/spiflash_ll_qspi.c` implementing the same `spiflash_transport_*`
+interface (CCR field mapping + QUADSPI DMA via DMAMUX); `platform.h`'s `FLASH_SPI_HANDLE` indirection
+swaps to the QUADSPI handle. Device / geometry / partition / littlefs layers are unchanged — this is
+the transport seam's **second** real backend, which both proves D4 and **de-risks the H723 OCTOSPI
+port (W3)** (QUADSPI→OCTOSPI is a small leap from a like command engine). The existing SPI1_RX DMA
+(DMA2_Ch1) becomes flash-irrelevant.
+**Sequencing:** do this **after** the G1–G11 stack is bench-validated on the SPI1 backend. The
+bus-agnostic layers need no re-validation; only the new transport gets its own bring-up (JEDEC read +
+one erase/program/read round-trip), so validating on SPI1 first wastes nothing.
+
+### W12 — littlefs partition mount/unmount + label-prefixed paths
+**Status:** 🔵 · **Needs user:** no (feasibility note; first-time-littlefs caveats flagged)
+**What's asked:** mount/unmount partitions and address files unix-like as `/<partition-label>/path/
+to/file` through C stdio.
+**Mount/unmount — native, easy:** littlefs is single-volume; **one `lfs_t` + `lfs_config` per
+partition** (`cfg.context` → partition handle), with `lfs_mount`/`lfs_unmount`/`lfs_format`. This is
+exactly the G7/G8 "two FS instances" plan — the vendored core is reentrant across instances, so both
+mount at once. Tie-in: a mount should also set the partition's RAM **mounted guard**
+(`x_spiflash_part_set_mounted`) so `delete`/`erase` refuse while mounted.
+**Label namespace — NOT a littlefs feature, but a thin VFS over it:** each `lfs_t` is its own root
+"/"; littlefs has no cross-volume namespace. The `/<label>/...` scheme is a small **mount-table
+router**: `{label → lfs_t*, mounted}` + a path parser that strips the leading component, looks up the
+FS, and dispatches the remainder (`/lfs0/foo/bar` → `lfs_file_open(lfs0, "foo/bar")`). This is
+precisely the job of the **W10 stdio retarget** `_open/_read/_write/_close/_lseek` syscalls (+ an
+fd→`lfs_file_t` table): W12 = give that router a label-keyed mount table. Precedent everywhere —
+ESP-IDF VFS, FatFs `"0:/"` volume prefixes.
+**Fiddly bits (the first-littlefs caveats):** (1) a **synthetic root** — `opendir("/")` must enumerate
+the mount table (labels as pseudo-dirs); littlefs can't, the VFS supplies it; (2) keep `..` from
+escaping a volume root via the prefix; (3) decide unmounted-label path → `ENODEV`/`ENOENT`; (4) stdio
+heap — each `fopen` mallocs a FILE+buffer (use `setvbuf`), per W10. **Lighter alt:** skip stdio and
+bind the label-routed open straight to Berry `fs.*` → `lfs_file_*` (the W10 Berry-only path) — far
+less machinery if scripts are the only consumer.
+**Depends on:** G7/G8 (FS instances) + W10 (stdio retarget); W12 is essentially W10 with a label-keyed
+mount table. Defer until those land.
+
+### W13 — Host-side filesystem shell (interactive REPL)
+**Status:** 🔵 · **Needs user:** no
+**What:** a host-side Python **interactive shell** exposing the device littlefs FS with familiar unix
+verbs — `ls` (dir listing), `cd`/`pwd` (a host-tracked working directory), `rm`, `rename`, `cp`,
+`mv`, plus host↔device transfer: `get <devpath> [hostpath]` (copy-to-host) and
+`put <hostpath> <devpath>` (upload-from-host). History / tab-completion optional. Paths are unix-like
+and **label-qualified per W12** (`/<partition-label>/dir/file`), so one namespace spans both littlefs
+partitions; `cd /lfs0/...` sets the working dir the other verbs resolve against.
+**Layering:** W13 is the host-side **front-end**; the device side is **W9** (the host-protocol /
+HIL-REPL fs ops — stat / list / read-chunk / write-chunk / rename / delete). W13 is to those ops what
+`spiflash_bench.py` is to the `S`/`T` harness ops: the working-directory tracking, path resolution,
+and chunked-transfer loops live host-side, and the device stays a thin op server.
+**Transfer detail:** `get`/`put` stream in bounded chunks through the harness framing (read/write N
+bytes at offset), reusing the test-harness file-upload buffer path (Berry W4) where it fits, so device
+RAM never caps file size; a length/CRC check per transfer guards integrity.
+**Depends on:** W9 (device fs ops) + G7/G8 (mounted FSes) + W12 (label paths). Natural companion to
+the Berry `fs.*` tie-in (W7) — same device ops, two front-ends (interactive shell + scripting).
 
 ---
 

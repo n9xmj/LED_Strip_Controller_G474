@@ -89,6 +89,18 @@ extern void v_spiflash_transport_set_lock(spiflash_transport_t *p_x_tp,
 extern void v_spiflash_transport_set_dma_threshold(spiflash_transport_t *p_x_tp,
                                                    uint16_t u16_threshold);
 
+/* Reconfigure the bus clock prescaler. u32_prescaler is a backend-specific clock
+ * selector: for this single-wire HAL backend it is an SPI_BAUDRATEPRESCALER_*
+ * constant, applied by re-initialising the SPI handle (reconfig only — no
+ * MspInit). The resulting SCK frequency (Hz) is returned via p_u32_sck_hz when
+ * non-NULL. An OCTOSPI backend (W3) honours the same seam via its own clock
+ * divider. NOTE: SPI1 is a SHARED bus (flash + LCD) — this mutates that shared
+ * handle, so callers must restore the system default when finished. Returns
+ * SPIFLASH_ERR_BUSY if a transaction is in flight. */
+extern spiflash_err_t x_spiflash_transport_set_prescaler(spiflash_transport_t *p_x_tp,
+                                                         uint32_t u32_prescaler,
+                                                         uint32_t *p_u32_sck_hz);
+
 /* Run one command transaction: [lock] -> CS low -> opcode+addr+dummy (polled)
  * -> data (polled or DMA per threshold) -> CS high -> [unlock]. DMA data waits
  * block without pumping (mid-burst, CS asserted - S4). */

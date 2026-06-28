@@ -130,8 +130,6 @@ void Error_Handler(void);
 #define SPI_MOSI_GPIO_Port GPIOA
 #define LED_STRIP_1_Pin GPIO_PIN_4
 #define LED_STRIP_1_GPIO_Port GPIOC
-#define LED_STRIP_3_Pin GPIO_PIN_10
-#define LED_STRIP_3_GPIO_Port GPIOB
 #define I2S_MIC_WS_Pin GPIO_PIN_12
 #define I2S_MIC_WS_GPIO_Port GPIOB
 #define I2S_MIC_SCK_Pin GPIO_PIN_13
@@ -162,6 +160,8 @@ void Error_Handler(void);
 #define I2C_SDA_GPIO_Port GPIOB
 #define I2S_AMP_MCLK_Pin GPIO_PIN_8
 #define I2S_AMP_MCLK_GPIO_Port GPIOB
+#define LED_STRIP_3_Pin GPIO_PIN_9
+#define LED_STRIP_3_GPIO_Port GPIOB
 
 /* USER CODE BEGIN Private defines */
 

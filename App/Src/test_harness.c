@@ -22,6 +22,7 @@
 #include "play_config.h"    /* PLAY_HARNESS_LINE_MAX */
 #include "debug_menu.h"     /* b_debug_play_feed_string (P op) */
 #include "uart_stream.h"    /* tx-ring status (used by the 'F' flush op) */
+#include "spiflash_test.h"  /* S op — granular SPI-NOR storage primitives */
 
 /* Defined in app_main.c — the debug-console uart_stream handle, so the flush op
  * can observe TX-ring drain state directly. */
@@ -557,6 +558,7 @@ static const harness_op_t s_ax_harness_ops[] =
     { 'X', "size: inject 18t reply <hex>, run get_size_direct", v_harness_op_size_direct },
     { 'Z', "size: inject CPR reply <hex>, run get_size_cpr",   v_harness_op_size_cpr    },
     { 'F', "flush: fill TX ring <n=256>, fflush(stdout), report drain", v_harness_op_flush },
+    { 'S', "storage: S <verb> [args] — id|geom|rdsr|wren|wrdi|erase|prog|write|read", v_spiflash_test_harness_op },
 };
 
 //------------------------------------------------------------------------------

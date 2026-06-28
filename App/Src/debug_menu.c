@@ -22,6 +22,7 @@
 #include "play.h"
 #include "play_presets.h"
 #include "berry_app.h"     // Berry scripting REPL ('b' from top menu)
+#include "spiflash_test.h" // SPI-NOR bench/HIL surface ('f' submenu + harness 'S' op)
 
 #include "debug_config.h"   // logging sugar (LOGCT etc.) for this module
 
@@ -77,13 +78,14 @@ static void v_debug_show_clocks(void)
  * Polled HAL only - NO driver, abstraction, or DMA (by design; see
  * Docs/planning/spiflash-driver-implementation-plan.md row G0). Scope/LA-
  * friendly: reads the JEDEC ID a few times with gaps, then exercises a
- * NON-BINDING (volatile) status-register write + readback. Run manually from
- * the bench via main-menu key '1'. Lives entirely in this function on purpose.
+ * NON-BINDING (volatile) status-register write + readback. Run from the bench
+ * via the SPI flash submenu ('f' -> 'a'). Lives entirely in this function on
+ * purpose.
  *
  * Both LCD_CS (PC0) and FLASH_CS (PC3) power up LOW (asserted) per MX_GPIO_Init
  * - we drive both HIGH first so only the flash responds and its CS idles HIGH.
  */
-static void v_debug_quick_test_1(void)
+static void v_debug_spiflash_lowlevel_test(void)
 {
 #define G0_CMD_JEDEC_ID     0x9Fu   /* Read JEDEC ID -> mfr, type, capacity   */
 #define G0_CMD_RDSR1        0x05u   /* Read Status Register-1 (BUSY, WEL, ...) */
@@ -199,7 +201,8 @@ g0_done:
  ******************************************************************************/
 
 /*
- * G2 - SPI flash bus-integrity stress test (throwaway bench test, key '2').
+ * G2 - SPI flash bus-integrity stress test (bench test; SPI flash submenu
+ * 'f' -> 's').
  *
  * Validates SPI1 clock rate / signal integrity over the cobbled bench wiring
  * (W25Q128 on ~10 cm dupont jumpers). Per invocation: ONE sector erase, write
@@ -214,7 +217,9 @@ g0_done:
  * read cannot masquerade as correct. RX buffer is poisoned before each read.
  */
 
-#define G2T_SECTOR_ADDR     0x00010000u  /* test sector (block 1, sector-aligned) */
+#define G2T_SECTOR_ADDR     0x00001000u  /* sector 1 = scratch generic-data region
+                                          * (sectors 1-3 per the I5 default layout;
+                                          * destructive R/W confined here) */
 #define G2T_PAGE_SIZE       256u
 #define G2T_PAGES_PER_SECT  16u          /* 4096 / 256 */
 #define G2T_READ_PASSES     50u
@@ -278,7 +283,7 @@ static uint32_t u32_g2t_set_speed(uint32_t u32_prescaler, uint16_t u16_div)
     return HAL_RCC_GetPCLK2Freq() / (uint32_t)u16_div;
 }
 
-static void v_debug_quick_test_2(void)
+static void v_debug_spiflash_speed_test(void)
 {
 #define G2T_CMD_WREN        0x06u
 #define G2T_CMD_SE          0x20u   /* sector erase (4K)       */
@@ -441,6 +446,24 @@ g2_done:
 #undef G2T_CMD_FREAD
 #undef G2T_CS_LOW
 #undef G2T_CS_HIGH
+}
+
+/******************************************************************************
+ * Top-level quick-test slots (keys '1'/'2') - inactive stubs.
+ *
+ * The former SPI-flash bench tests that lived here were migrated into the
+ * "SPI flash and storage operations" submenu (key 'f'): low-level access -> 'a',
+ * speed test -> 's'. These stubs keep the slots available for the next
+ * throwaway experiment.
+ ******************************************************************************/
+static void v_debug_quick_test_1(void)
+{
+    printf("Quick test function #1\r\n");
+}
+
+static void v_debug_quick_test_2(void)
+{
+    printf("Quick test function #2\r\n");
 }
 
 /******************************************************************************
@@ -1700,6 +1723,57 @@ static const menu_item_t x_term_tests_submenu[] =
 };
 
 //------------------------------------------------------------------------------
+// SPI flash and storage operations. Home for the W25Q128 SPI-NOR driver bring-up
+// (transport -> device -> geometry -> partitions -> littlefs) and its bench
+// tests. Grows incrementally per the G12 plan; for now it hosts the two migrated
+// bare-metal smoke/stress tests (G0/G2).
+
+static const menu_item_t x_spiflash_storage_submenu[] =
+{
+    {
+        .x_type = MENU_ITEM_HELP_TEXT_FIXED,
+        .c_key = 0,
+        .p_c_text = "\r\n--- SPI flash and storage operations ---\r\n"
+    },
+    {
+        .x_type = MENU_ITEM_HELP,
+        .c_key = '?',
+        .p_c_text = NULL
+    },
+    {
+        .x_type = MENU_ITEM_HELP_HIDDEN,
+        .c_key = '\r',
+        .p_c_text = NULL
+    },
+    {
+        .x_type = MENU_ITEM_FUNCTION,
+        .c_key = 'i',
+        .p_c_text = "Init + identify SPI flash via driver (JEDEC + geometry)",
+        .pfn_function = v_spiflash_test_identify
+    },
+    {
+        .x_type = MENU_ITEM_FUNCTION,
+        .c_key = 'a',
+        .p_c_text = "SPI flash low-level access test (JEDEC ID + WEL handshake)",
+        .pfn_function = v_debug_spiflash_lowlevel_test
+    },
+    {
+        .x_type = MENU_ITEM_FUNCTION,
+        .c_key = 's',
+        .p_c_text = "SPI flash speed test (erase/program + read-verify sweep)",
+        .pfn_function = v_debug_spiflash_speed_test
+    },
+    {
+        .x_type = MENU_ITEM_RETURN_TO_PREVIOUS_MENU,
+        .c_key = 0x1B,
+        .p_c_text = NULL
+    },
+    {
+        .x_type = MENU_ITEM_END_OF_LIST,
+    }
+};
+
+//------------------------------------------------------------------------------
 
 static const menu_item_t x_debug_top_menu[] =
 {
@@ -1777,6 +1851,12 @@ static const menu_item_t x_debug_top_menu[] =
         .c_key = 'T',
         .p_c_text = "term API operations / tests",
         .p_x_menu = x_term_tests_submenu
+    },
+    {
+        .x_type = MENU_ITEM_CALL_MENU,
+        .c_key = 'f',
+        .p_c_text = "SPI flash and storage operations",
+        .p_x_menu = x_spiflash_storage_submenu
     },
     {
         .x_type = MENU_ITEM_FUNCTION,

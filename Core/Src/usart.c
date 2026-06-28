@@ -582,7 +582,7 @@ void HAL_UART_MspInit(UART_HandleTypeDef* uartHandle)
 
     __HAL_RCC_GPIOB_CLK_ENABLE();
     /**USART3 GPIO Configuration
-    PB10     ------> USART3_TX
+    PB9     ------> USART3_TX
     */
     GPIO_InitStruct.Pin = LED_STRIP_3_Pin;
     GPIO_InitStruct.Mode = GPIO_MODE_AF_PP;
@@ -721,7 +721,7 @@ void HAL_UART_MspDeInit(UART_HandleTypeDef* uartHandle)
     __HAL_RCC_USART3_CLK_DISABLE();
 
     /**USART3 GPIO Configuration
-    PB10     ------> USART3_TX
+    PB9     ------> USART3_TX
     */
     HAL_GPIO_DeInit(LED_STRIP_3_GPIO_Port, LED_STRIP_3_Pin);
 

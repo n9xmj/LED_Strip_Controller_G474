@@ -118,6 +118,32 @@ void v_spiflash_transport_set_dma_threshold(spiflash_transport_t *p_x_tp, uint16
     if (p_x_tp != NULL) p_x_tp->u16_dma_threshold = u16_threshold;
 }
 
+/* SPI_BAUDRATEPRESCALER_* constants carry the CR1.BR field (bits 5:3); the field
+ * value n maps to a divisor of 2^(n+1). Derive the divisor without a lookup. */
+static uint32_t u32_prescaler_to_div(uint32_t u32_prescaler)
+{
+    uint32_t u32_br = (u32_prescaler & SPI_CR1_BR_Msk) >> SPI_CR1_BR_Pos;   // 0..7
+    return (1u << (u32_br + 1u));                                           // 2..256
+}
+
+spiflash_err_t x_spiflash_transport_set_prescaler(spiflash_transport_t *p_x_tp,
+                                                  uint32_t u32_prescaler,
+                                                  uint32_t *p_u32_sck_hz)
+{
+    if ((p_x_tp == NULL) || (p_x_tp->p_x_hspi == NULL)) return SPIFLASH_ERR_PARAM;
+    if (p_x_tp->b_in_txn)                               return SPIFLASH_ERR_BUSY;
+
+    p_x_tp->p_x_hspi->Init.BaudRatePrescaler = u32_prescaler;
+    if (HAL_SPI_Init(p_x_tp->p_x_hspi) != HAL_OK)       return SPIFLASH_ERR_BUS;
+
+    if (p_u32_sck_hz != NULL)
+    {
+        // SPI1 is clocked from APB2 (PCLK2).
+        *p_u32_sck_hz = HAL_RCC_GetPCLK2Freq() / u32_prescaler_to_div(u32_prescaler);
+    }
+    return SPIFLASH_OK;
+}
+
 void v_spiflash_transport_pump_idle(spiflash_transport_t *p_x_tp)
 {
     if ((p_x_tp != NULL) && (p_x_tp->pfn_idle != NULL))
