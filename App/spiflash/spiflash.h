@@ -265,4 +265,42 @@ extern spiflash_err_t x_spiflash_wait_ready(spiflash_device_t *p_x_dev,
  * threshold (S4/S5/I6). */
 extern spiflash_transport_t *p_x_spiflash_transport(spiflash_device_t *p_x_dev);
 
+//------------------------------------------------------------------------------
+// Erase / program / read (G5). All addresses are absolute device byte offsets.
+//------------------------------------------------------------------------------
+
+/* Erase one 4K sector / 32K block / 64K block / the whole chip. Each does
+ * write-enable -> erase -> wait-ready. Address may be anywhere within the unit. */
+extern spiflash_err_t x_spiflash_erase_sector(spiflash_device_t *p_x_dev, spiflash_addr_t x_addr);
+extern spiflash_err_t x_spiflash_erase_block32(spiflash_device_t *p_x_dev, spiflash_addr_t x_addr);
+extern spiflash_err_t x_spiflash_erase_block64(spiflash_device_t *p_x_dev, spiflash_addr_t x_addr);
+extern spiflash_err_t x_spiflash_erase_chip(spiflash_device_t *p_x_dev);
+
+/* Erase every sector overlapping [x_addr, x_addr+u32_len): rounds out to sector
+ * boundaries, using 64K/32K block erase where aligned for speed. */
+extern spiflash_err_t x_spiflash_erase_range(spiflash_device_t *p_x_dev,
+                                             spiflash_addr_t x_addr, uint32_t u32_len);
+
+/* Program up to one page; must NOT cross a page boundary (caller/range-write
+ * guarantees this). Target must already be erased. Does write-enable + wait. */
+extern spiflash_err_t x_spiflash_page_program(spiflash_device_t *p_x_dev, spiflash_addr_t x_addr,
+                                              const void *p_v_src, uint32_t u32_len);
+
+/* Address-range write: splits into page-aligned page-programs. **No erase** —
+ * the FS/caller owns erase scheduling (D6). This is the littlefs prog path. */
+extern spiflash_err_t x_spiflash_write(spiflash_device_t *p_x_dev, spiflash_addr_t x_addr,
+                                       const void *p_v_src, uint32_t u32_len);
+
+/* Address-range fast-read (0x0B + 1 dummy). No alignment constraint; chunked
+ * internally to stay within the transport's per-transaction limit. */
+extern spiflash_err_t x_spiflash_read(spiflash_device_t *p_x_dev, spiflash_addr_t x_addr,
+                                      void *p_v_dst, uint32_t u32_len);
+
+/* L2 convenience (NON-FS): erase-before-write smart write. A sector is erased
+ * when the running address lands on a sector boundary (so the start sector is
+ * erased only if x_addr is sector-aligned, matching the legacy semantics). For
+ * ad-hoc / bench use — never the littlefs path. */
+extern spiflash_err_t x_spiflash_write_erase(spiflash_device_t *p_x_dev, spiflash_addr_t x_addr,
+                                             const void *p_v_src, uint32_t u32_len);
+
 #endif /* SPIFLASH_H */

@@ -395,3 +395,254 @@ spiflash_transport_t *p_x_spiflash_transport(spiflash_device_t *p_x_dev)
 {
     return (p_x_dev == NULL) ? NULL : &p_x_dev->x_tp;
 }
+
+//------------------------------------------------------------------------------
+// Erase / program / read (G5)
+//------------------------------------------------------------------------------
+
+#define SPIFLASH_TMO_PAGE_MS     50u        // page program (tPP ~3 ms)
+#define SPIFLASH_TMO_SECTOR_MS   800u       // 4K sector erase (tSE ~45-400 ms)
+#define SPIFLASH_TMO_BLK32_MS    2000u      // 32K block erase
+#define SPIFLASH_TMO_BLK64_MS    2500u      // 64K block erase
+#define SPIFLASH_TMO_CHIP_MS     250000u    // chip erase (tens of seconds)
+#define SPIFLASH_READ_CHUNK_MAX  0x8000u    // 32 KB per fast-read (< 64K HAL cap)
+
+/* True if [u32_addr, u32_addr+u32_len) lies within the detected capacity. */
+static bool b_in_bounds(spiflash_device_t *p_x_dev, spiflash_addr_t u32_addr, uint32_t u32_len)
+{
+    uint32_t u32_cap = p_x_dev->x_info.u32_capacity;
+    if (u32_cap == 0u) return true;          // geometry unknown — don't block
+    if (u32_len == 0u) return true;
+    if (u32_addr >= u32_cap) return false;
+    return (u32_len <= (u32_cap - u32_addr));
+}
+
+/* write-enable -> erase opcode at address -> wait. */
+static spiflash_err_t x_erase_at(spiflash_device_t *p_x_dev, spiflash_addr_t u32_addr,
+                                 uint8_t u8_opcode, uint32_t u32_tmo_ms)
+{
+    spiflash_cmd_t x_cmd;
+    spiflash_err_t x_err;
+
+    x_err = x_spiflash_write_enable(p_x_dev);
+    if (x_err != SPIFLASH_OK) return x_err;
+
+    v_cmd_init(&x_cmd, u8_opcode);
+    x_cmd.u8_addr_bytes = p_x_dev->x_info.u8_addr_bytes;
+    x_cmd.x_addr        = u32_addr;
+    x_err = x_spiflash_transport_exec(&p_x_dev->x_tp, &x_cmd);
+    if (x_err != SPIFLASH_OK) return x_err;
+
+    return x_spiflash_wait_ready(p_x_dev, u32_tmo_ms);
+}
+
+spiflash_err_t x_spiflash_erase_sector(spiflash_device_t *p_x_dev, spiflash_addr_t x_addr)
+{
+    if (p_x_dev == NULL) return SPIFLASH_ERR_PARAM;
+    if (!b_in_bounds(p_x_dev, x_addr, 1u)) return SPIFLASH_ERR_PARAM;
+    return x_erase_at(p_x_dev, x_addr, p_x_dev->x_info.u8_op_erase_sector, SPIFLASH_TMO_SECTOR_MS);
+}
+
+spiflash_err_t x_spiflash_erase_block32(spiflash_device_t *p_x_dev, spiflash_addr_t x_addr)
+{
+    if (p_x_dev == NULL) return SPIFLASH_ERR_PARAM;
+    if (!b_in_bounds(p_x_dev, x_addr, 1u)) return SPIFLASH_ERR_PARAM;
+    return x_erase_at(p_x_dev, x_addr, p_x_dev->x_info.u8_op_erase_32k, SPIFLASH_TMO_BLK32_MS);
+}
+
+spiflash_err_t x_spiflash_erase_block64(spiflash_device_t *p_x_dev, spiflash_addr_t x_addr)
+{
+    if (p_x_dev == NULL) return SPIFLASH_ERR_PARAM;
+    if (!b_in_bounds(p_x_dev, x_addr, 1u)) return SPIFLASH_ERR_PARAM;
+    return x_erase_at(p_x_dev, x_addr, p_x_dev->x_info.u8_op_erase_64k, SPIFLASH_TMO_BLK64_MS);
+}
+
+spiflash_err_t x_spiflash_erase_chip(spiflash_device_t *p_x_dev)
+{
+    spiflash_cmd_t x_cmd;
+    spiflash_err_t x_err;
+
+    if (p_x_dev == NULL) return SPIFLASH_ERR_PARAM;
+
+    x_err = x_spiflash_write_enable(p_x_dev);
+    if (x_err != SPIFLASH_OK) return x_err;
+
+    v_cmd_init(&x_cmd, (uint8_t)SPIFLASH_CMD_CHIP_ERASE);    // no address phase
+    x_err = x_spiflash_transport_exec(&p_x_dev->x_tp, &x_cmd);
+    if (x_err != SPIFLASH_OK) return x_err;
+
+    return x_spiflash_wait_ready(p_x_dev, SPIFLASH_TMO_CHIP_MS);
+}
+
+spiflash_err_t x_spiflash_erase_range(spiflash_device_t *p_x_dev, spiflash_addr_t x_addr,
+                                      uint32_t u32_len)
+{
+    spiflash_addr_t x_a, x_end;
+    uint16_t        u16_sector;
+    uint32_t        u32_b32, u32_b64;
+    spiflash_err_t  x_err;
+
+    if (p_x_dev == NULL) return SPIFLASH_ERR_PARAM;
+    if (u32_len == 0u)   return SPIFLASH_OK;
+    if (!b_in_bounds(p_x_dev, x_addr, u32_len)) return SPIFLASH_ERR_PARAM;
+
+    u16_sector = p_x_dev->x_info.u16_sector_size;
+    u32_b32    = p_x_dev->x_info.u32_block32_size;
+    u32_b64    = p_x_dev->x_info.u32_block64_size;
+
+    x_a   = x_addr - (x_addr % u16_sector);     // round start down to a sector
+    x_end = x_addr + u32_len;
+
+    while (x_a < x_end)
+    {
+        uint32_t u32_remaining = x_end - x_a;
+        if (((x_a % u32_b64) == 0u) && (u32_remaining >= u32_b64))
+        {
+            x_err = x_spiflash_erase_block64(p_x_dev, x_a);
+            x_a += u32_b64;
+        }
+        else if (((x_a % u32_b32) == 0u) && (u32_remaining >= u32_b32))
+        {
+            x_err = x_spiflash_erase_block32(p_x_dev, x_a);
+            x_a += u32_b32;
+        }
+        else
+        {
+            x_err = x_spiflash_erase_sector(p_x_dev, x_a);
+            x_a += u16_sector;
+        }
+        if (x_err != SPIFLASH_OK) return x_err;
+    }
+    return SPIFLASH_OK;
+}
+
+spiflash_err_t x_spiflash_page_program(spiflash_device_t *p_x_dev, spiflash_addr_t x_addr,
+                                       const void *p_v_src, uint32_t u32_len)
+{
+    spiflash_cmd_t x_cmd;
+    spiflash_err_t x_err;
+    uint16_t       u16_page;
+
+    if (p_x_dev == NULL) return SPIFLASH_ERR_PARAM;
+    if (u32_len == 0u)   return SPIFLASH_OK;
+    if (p_v_src == NULL) return SPIFLASH_ERR_PARAM;
+    if (!b_in_bounds(p_x_dev, x_addr, u32_len)) return SPIFLASH_ERR_PARAM;
+
+    u16_page = p_x_dev->x_info.u16_page_size;
+    if (u32_len > u16_page) return SPIFLASH_ERR_PARAM;
+    if (((x_addr % u16_page) + u32_len) > u16_page) return SPIFLASH_ERR_PARAM;  // crosses page
+
+    x_err = x_spiflash_write_enable(p_x_dev);
+    if (x_err != SPIFLASH_OK) return x_err;
+
+    v_cmd_init(&x_cmd, (uint8_t)SPIFLASH_CMD_PAGE_PROGRAM);
+    x_cmd.u8_addr_bytes = p_x_dev->x_info.u8_addr_bytes;
+    x_cmd.x_addr        = x_addr;
+    x_cmd.x_dir         = SPIFLASH_DIR_WRITE;
+    x_cmd.p_v_data      = (void *)p_v_src;      // transport only reads it for a write
+    x_cmd.u32_data_len  = u32_len;
+    x_err = x_spiflash_transport_exec(&p_x_dev->x_tp, &x_cmd);
+    if (x_err != SPIFLASH_OK) return x_err;
+
+    return x_spiflash_wait_ready(p_x_dev, SPIFLASH_TMO_PAGE_MS);
+}
+
+spiflash_err_t x_spiflash_write(spiflash_device_t *p_x_dev, spiflash_addr_t x_addr,
+                                const void *p_v_src, uint32_t u32_len)
+{
+    const uint8_t *p_u8 = (const uint8_t *)p_v_src;
+    uint16_t       u16_page;
+    spiflash_err_t x_err;
+
+    if (p_x_dev == NULL) return SPIFLASH_ERR_PARAM;
+    if (u32_len == 0u)   return SPIFLASH_OK;
+    if (p_v_src == NULL) return SPIFLASH_ERR_PARAM;
+    if (!b_in_bounds(p_x_dev, x_addr, u32_len)) return SPIFLASH_ERR_PARAM;
+
+    u16_page = p_x_dev->x_info.u16_page_size;
+    while (u32_len > 0u)
+    {
+        uint32_t u32_chunk = (uint32_t)u16_page - (x_addr % u16_page);   // to page end
+        if (u32_chunk > u32_len) u32_chunk = u32_len;
+
+        x_err = x_spiflash_page_program(p_x_dev, x_addr, p_u8, u32_chunk);
+        if (x_err != SPIFLASH_OK) return x_err;
+
+        x_addr  += u32_chunk;
+        p_u8    += u32_chunk;
+        u32_len -= u32_chunk;
+    }
+    return SPIFLASH_OK;
+}
+
+spiflash_err_t x_spiflash_read(spiflash_device_t *p_x_dev, spiflash_addr_t x_addr,
+                               void *p_v_dst, uint32_t u32_len)
+{
+    uint8_t       *p_u8 = (uint8_t *)p_v_dst;
+    spiflash_cmd_t x_cmd;
+    spiflash_err_t x_err;
+
+    if (p_x_dev == NULL) return SPIFLASH_ERR_PARAM;
+    if (u32_len == 0u)   return SPIFLASH_OK;
+    if (p_v_dst == NULL) return SPIFLASH_ERR_PARAM;
+    if (!b_in_bounds(p_x_dev, x_addr, u32_len)) return SPIFLASH_ERR_PARAM;
+
+    while (u32_len > 0u)
+    {
+        uint32_t u32_chunk = (u32_len > SPIFLASH_READ_CHUNK_MAX) ? SPIFLASH_READ_CHUNK_MAX : u32_len;
+
+        v_cmd_init(&x_cmd, (uint8_t)SPIFLASH_CMD_FAST_READ);
+        x_cmd.u8_addr_bytes  = p_x_dev->x_info.u8_addr_bytes;
+        x_cmd.x_addr         = x_addr;
+        x_cmd.u8_dummy_bytes = 1u;
+        x_cmd.x_dir          = SPIFLASH_DIR_READ;
+        x_cmd.p_v_data       = p_u8;
+        x_cmd.u32_data_len   = u32_chunk;
+        x_err = x_spiflash_transport_exec(&p_x_dev->x_tp, &x_cmd);
+        if (x_err != SPIFLASH_OK) return x_err;
+
+        x_addr  += u32_chunk;
+        p_u8    += u32_chunk;
+        u32_len -= u32_chunk;
+    }
+    return SPIFLASH_OK;
+}
+
+spiflash_err_t x_spiflash_write_erase(spiflash_device_t *p_x_dev, spiflash_addr_t x_addr,
+                                      const void *p_v_src, uint32_t u32_len)
+{
+    const uint8_t *p_u8 = (const uint8_t *)p_v_src;
+    uint16_t       u16_page, u16_sector;
+    spiflash_err_t x_err;
+
+    if (p_x_dev == NULL) return SPIFLASH_ERR_PARAM;
+    if (u32_len == 0u)   return SPIFLASH_OK;
+    if (p_v_src == NULL) return SPIFLASH_ERR_PARAM;
+    if (!b_in_bounds(p_x_dev, x_addr, u32_len)) return SPIFLASH_ERR_PARAM;
+
+    u16_page   = p_x_dev->x_info.u16_page_size;
+    u16_sector = p_x_dev->x_info.u16_sector_size;
+
+    while (u32_len > 0u)
+    {
+        uint32_t u32_chunk;
+
+        // Erase the sector when the running address sits on a sector boundary.
+        if ((x_addr % u16_sector) == 0u)
+        {
+            x_err = x_spiflash_erase_sector(p_x_dev, x_addr);
+            if (x_err != SPIFLASH_OK) return x_err;
+        }
+
+        u32_chunk = (uint32_t)u16_page - (x_addr % u16_page);
+        if (u32_chunk > u32_len) u32_chunk = u32_len;
+
+        x_err = x_spiflash_page_program(p_x_dev, x_addr, p_u8, u32_chunk);
+        if (x_err != SPIFLASH_OK) return x_err;
+
+        x_addr  += u32_chunk;
+        p_u8    += u32_chunk;
+        u32_len -= u32_chunk;
+    }
+    return SPIFLASH_OK;
+}

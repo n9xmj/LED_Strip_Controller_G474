@@ -20,6 +20,7 @@
 #include "main.h"
 #include "adc.h"
 #include "cordic.h"
+#include "crc.h"
 #include "dac.h"
 #include "dma.h"
 #include "fmac.h"
@@ -125,6 +126,7 @@ int main(void)
   MX_TIM17_Init();
   MX_TIM16_Init();
   MX_USB_PCD_Init();
+  MX_CRC_Init();
   /* USER CODE BEGIN 2 */
 
   // Disable I/O buffering for STDxxx streams, so that I/O data is

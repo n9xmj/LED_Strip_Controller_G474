@@ -59,6 +59,7 @@ own**; SFUD / FAL / the legacy MX25R80 driver are **reference material only**.
 | I7 | 🟢 | **SFDP fallback table (locked)** — explicit entries for **W25Q128JV** (`EF 40 18`) + **W25Q64** (`EF 40 17`), plus a generic `2^capacity_code` / 256·4K·32K·64K default. Implemented in G4 (`ax_known_parts`). |
 | Q1 | 🟢 | H723 board uses **OCTOSPI** for its W25Q64 (HOLD/WP bonded → full quad/octal there); TF-card slot is a **separate bus/IP** (no contention). Resolved 2026-06-27 → drives D4 / W3. |
 | I8 | 🟢 | **SPI clock (locked)** — keep the CubeMX default **10 MHz (/16)** for now (LCD + flash share it; bench proven clean to 42.5 MHz, so ample margin). Per-transaction prescaler switching deferred until a faster flash rate is wanted — trivial to add later (G2 proved runtime `HAL_SPI_Init` reconfig works). |
+| I9 | 🟢 | **CRC32 via the STM32 hardware CRC IP** (wrapped). On-chip CRC unit behind a thin `u32_crc32(buf,len)` util (cand. `App/Src/crc32.{c,h}`) shared by the partition table (I5) + nvmparams (W8) — one CRC path. Standard reflected CRC-32 / zlib (over CRC-16); **CPU-fed, DMA not warranted** (small buffers, no CRC DMA request line). Stateful peripheral → atomic use (cooperative, no ISR users); **util force-sets config (not `.ioc`-dependent)**, keeps layers portable. **Prereq: enable CRC in `.ioc` + regen** (at G11). |
 | T1 | 🟡 | **Bring-up + test plan:** JEDEC-ID read, register dump, erase/program/read-back, DMA path, littlefs mount/format/file-IO — exercised via debug-menu hooks (and later a PLAY/Berry tie-in). |
 
 ---
@@ -66,7 +67,7 @@ own**; SFUD / FAL / the legacy MX25R80 driver are **reference material only**.
 ## Must-Ship Gap (MSG) — v1 firmware
 
 *Append-only `G` IDs; mark ✅ when shipped (do not renumber). **Ord** = bring-up tier (1 before 2).*
-*Last audited: 2026-06-27 (G0 bench-verified; G1–G4 ✅ code-complete/builds; G5–G12 pending).*
+*Last audited: 2026-06-27 (G0 bench-verified; G1–G6 ✅ code-complete/builds; G7–G12 pending).*
 
 | ID | Ord | Status | Item | Ref |
 |----|:---:|:------:|------|-----|
@@ -75,9 +76,9 @@ own**; SFUD / FAL / the legacy MX25R80 driver are **reference material only**.
 | G2 | 1 | ✅ | **Transport layer** — `App/spiflash/spiflash_ll.{c,h}` + `spiflash_common.h`: `spiflash_cmd_t` transaction model, CS control, polled + DMA data (threshold, fast-read via TxRx-DMA same-buf), per-phase line-width (single-wire backend), bus lock/unlock + idle hooks, re-entrancy guard, `spiflash_err_t`. **Builds 0/0; first bench-exercised at G3.** | D4, S5, S4, S3, I6 |
 | G3 | 1 | ✅ | **Device primitives + register layer** — `App/spiflash/spiflash.{c,h}`: `SPIFLASH_CMD_*` opcodes + `SPIFLASH_REG_*` ids (D7), SR1/2/3 bitfield unions + masks (datasheet-verified), `spiflash_device_t` handle (embeds transport), `read_reg`/`write_reg` (vol + non-vol), WREN/WRDI, `is_busy`/`wait_ready` (pumps idle between polls), JEDEC-ID read + NODEV sanity. Driver accepts any valid JEDEC part (the `EF 40 18` assert lives in bench tests, not the driver — S1). **Builds 0/0; bench-exercised when wired into the G12 menu.** | I1, D7, S1 |
 | G4 | 2 | ✅ | **SFDP detect → runtime `device_info`** — `spiflash_info_t` (capacity, sector_count, page/sector/block sizes, addr-bytes, erase opcodes, source). `x_spiflash_detect`: parse SFDP BFPT (density→capacity, addr-bytes, page size) → **JEDEC fallback table** (W25Q128/64) → standard defaults sized from `2^capacity_code`. Called by `init`. **Builds 0/0; bench-exercised at G12.** | S1, I7 |
-| G5 | 2 | 🔴 | **Erase/program/read primitives:** sector/32K/64K/chip erase, page program, fast-read; **address-range read/write** (page-split; range erase). Separate dumb erase/program; optional L2 auto-erase write. | D6, S2 |
-| G6 | 2 | 🔴 | **DMA bulk path + cooperative pump + re-entrancy guard** wired into read/program; polled fallback below threshold. | I2, I6, S4 |
-| G11 | 3 | 🔴 | **Partition module + default provisioning** (needs G4 geometry + G5 range R/W; precedes all FS layers) — read/validate the sector-0 table (magic+CRC32); provision the default layout (I5 table: table / generic-data / nvmparams / reserved-A / 2×littlefs / reserved-B); enumerate + open-by-label → `spiflash_partition_t`. | I5, I4 |
+| G5 | 2 | ✅ | **Erase/program/read primitives** — `spiflash.c`: sector/32K/64K/chip erase, `x_spiflash_erase_range` (block-optimized), `page_program` (page-bounded), **address-range `x_spiflash_write`** (page-split, no erase = littlefs prog path) + **`x_spiflash_read`** (fast-read, chunked), and L2 `x_spiflash_write_erase` (auto-erase, non-FS). Bounds-checked vs detected capacity. **Builds 0/0; bench-exercised at G12.** | D6, S2 |
+| G6 | 2 | ✅ | **DMA bulk path + pump + re-entrancy guard** — *subsumed by the architecture*: DMA + 16-byte threshold + re-entrancy guard live in the transport (G2); G5's read/program/erase use them automatically; idle pump runs in `wait_ready` between status polls (G3). *Device-level operation guard (WREN+op+wait) deferred until flash is exposed to re-entrant callers (menu/Berry).* | I2, I6, S4 |
+| G11 | 3 | 🔴 | **Partition module + default provisioning** (needs G4 geometry + G5 range R/W + the CRC util / `.ioc` CRC enable (I9); precedes all FS layers) — read/validate the sector-0 table (header magic+CRC32, slot 0); provision the default layout (I5 table: table / generic-data / nvmparams / reserved-A / 2×littlefs / reserved-B); enumerate + open-by-label → `spiflash_partition_t`. | I5, I4, I9 |
 | G12 | 3 | 🔴 | **Debug-menu reorg — SPI Flash submenu** (`MENU_ITEM_SUBMENU`): a dedicated home for flash ops + tests. **Migrate `v_debug_quick_test_1/2` (G0/G2) into it** (frees the top-level quick-test slots); add device-op items as primitives land (JEDEC/ID, register dump, erase, hex-dump read/write); add a **partition map / "directory" listing** (per-entry label, type/subtype, offset, size, flags) once G11 lands. G9 later adds FS ops. | T1, G0, I5 |
 | G7 | 4 | 🔴 | **littlefs BD shim** (`read/prog/erase/sync` callbacks; `cfg.context` → partition handle) + `lfs_config` from runtime geometry. Per-partition — instantiated **twice** (two FSes). Depends on G11. | D2, I3, I5 |
 | G8 | 4 | 🔴 | **Mount / format / file-IO bench test** on **both** littlefs partitions (format, write, remount, read-back, verify) — exercises the partition API via two independent FS instances. | T1 |
@@ -193,9 +194,25 @@ rules are fixed.
 
 ### I5 — Partition system
 **Status:** 🟡 · **Needs user:** no (now v1 scope, promoted from W1; details firming)
-**Table location:** **sector 0** (reserved). Format: a small header (magic + version + entry count +
-**CRC32** over the entry array) followed by up to 64 `spiflash_part_entry_t` records (I4, 64 B each
-→ 64 fit in the 4 KB sector). Empty slot = `u16_magic == 0xFFFF` (erased flash).
+**Table location + format:** **sector 0** (reserved). The 4 KB sector holds **64 × 64-byte slots**.
+**Slot 0 is reserved for a `spiflash_part_header_t`** (same 64-byte size as an entry, so all records
+stay 64-byte aligned: slot → offset = `slot × 64`). **Slots 1…63 are partition entries (63 usable)**
+— far more than the ~6 the default layout uses. The header carries the table-level metadata that has
+no per-entry home:
+```c
+typedef struct {
+    uint32_t u32_table_magic;   // distinct from entry magic 0x50AA; absent => not provisioned
+    uint16_t u16_version;       // table format version
+    uint16_t u16_entry_count;   // populated entry slots (or capacity)
+    uint32_t u32_crc32;         // CRC32 over the entry region (slots 1..N)
+    uint8_t  u8_reserved[/* pad to SPIFLASH_PART_ENTRY_SIZE */];
+} spiflash_part_header_t;       // sizeof == 64 (same as an entry)
+```
+(Typedef'd; same discipline as the entry — **no `packed`**, explicit derived `u8_reserved`,
+`_Static_assert(sizeof(spiflash_part_header_t) == SPIFLASH_PART_ENTRY_SIZE)`.)
+Validity check: read slot 0, verify `u32_table_magic` + version, then CRC32 over slots 1…N. An
+empty entry slot is still `u16_magic == 0xFFFF` (erased flash). On NOR every table edit rewrites the
+whole sector, so recomputing the header CRC each time is free.
 **Default layout (provisioned at runtime; `N` = sector count = capacity / 4 KB, SFDP-detected;
 last index `n = N-1`). Concrete values shown for the 16 MB W25Q128 (N = 4096, n = 4095):**
 
@@ -266,6 +283,46 @@ changeable later (a one-line prescaler swap, or the per-acquisition switch via r
 `HAL_SPI_Init` that G2 demonstrated) if a faster flash rate is ever wanted. Use **fast-read 0x0B**
 (133 MHz-capable) for the read path. Re-test margin on the H723 (OCTOSPI, different layout).
 
+### I9 — CRC32 (hardware CRC IP)
+**Status:** 🟢 · **Needs user:** no (decision locked; `.ioc` enable + util impl at G11)
+**Decision:** compute CRC32 with the STM32 on-chip **CRC peripheral**, wrapped in a thin
+`u32_crc32(const void *p_v_buf, uint32_t u32_len)` utility (candidate `App/Src/crc32.{c,h}`), shared
+by the partition table header (I5) and the nvmparams pool (W8) — one CRC path, not per-module
+software CRCs. **Why wrap:** partition/nvm layers stay HAL-agnostic and portable (the H723 also has a
+CRC IP; a software fallback is a drop-in), and shared-resource discipline lives in one place.
+**Shared-resource caveat:** the CRC unit is a stateful accumulator — a computation must run to
+completion atomically (it does: feed → read, microseconds, no idle-pump yield mid-CRC) and **no ISR
+may use it**. Nothing else uses CRC today, so single-owner in main context is safe; any future user
+goes through the same util (serialized by the cooperative model).
+**Format (locked): standard reflected CRC-32** (Ethernet/zlib: poly `0x04C11DB7`, init `0xFFFFFFFF`,
+input+output reflected, final XOR `0xFFFFFFFF`) — host-reproducible via zlib `crc32`. Chosen over
+CRC-16-CCITT: the header reserves a 32-bit field, the IP is natively 32-bit, and it's the stronger
+check. NB the STM32 CRC unit defaults to the non-reflected MPEG-2 variant, so the wrapper enables
+byte-wise input reversal + output reversal and applies the final XOR (HAL omits it).
+**Config ownership (locked):** the **util force-sets** the CRC config directly via `hcrc.Init` +
+`HAL_CRC_Init()` — it does **not** rely on the CubeMX `.ioc` values (a drifted config would make
+write- and verify-time CRCs silently disagree). Force-set fields: `DefaultPolynomialUse = ENABLE`
+(→ `0x04C11DB7`/32-bit), `DefaultInitValueUse = ENABLE` (→ `0xFFFFFFFF`),
+`InputDataInversionMode = CRC_INPUTDATA_INVERSION_BYTE`,
+`OutputDataInversionMode = CRC_OUTPUTDATA_INVERSION_ENABLE`,
+`InputDataFormat = CRC_INPUTDATA_FORMAT_BYTES`, then `result ^= 0xFFFFFFFF`. Single-owner → set once
+at util init (re-assert per call only if a 2nd user ever appears). **CubeMX should still be set to
+matching meaningful defaults** (Input Inversion = Byte, Output Inversion = Enable, poly/init Default
+= Enable, Format = Bytes) so `MX_CRC_Init` alone is correct and the `.ioc` documents intent — but the
+util is the source of truth. NB the bare CubeMX default (Inversion None/Disable) is MPEG-2, *not*
+zlib CRC-32. (CubeMX shows the poly in X-term form with the X³² implicit at 32-bit length;
+`X26+X23+X22+X16+X12+X11+X10+X8+X7+X5+X4+X2+X1+X0` = **`0x04C11DB7`**, verified 2026-06-27. Leaving
+`Default Polynomial/Init State = Enable` selects exactly this poly/init.) Even with Output Inversion
+= Enable the HW omits the canonical final XOR — the util applies `^ 0xFFFFFFFF`.
+**Feed method: CPU-fed** (`HAL_CRC_Calculate`, byte input format for arbitrary lengths). **DMA not
+used:** the CRC IP has no DMA request line (only a mem-to-mem blast into `CRC->DR` would work), and
+our CRC'd buffers are small (≤ ~4 KB table / few-KB pool — *not* whole littlefs partitions, which
+self-CRC), so the CPU feed is microseconds and DMA setup would cost more than it saves. Keep the
+util API shaped so a `u32_crc32_dma()` variant could be added later if large-block hashing ever
+appears.
+**Prereq:** enable CRC in the `.ioc` + CubeMX regen (adds `hcrc`, `MX_CRC_Init`), like the SPI1_RX
+DMA step. Tracked under G11 (first consumer).
+
 ### T1 — Bring-up + test plan
 **Status:** 🟡 · **Needs user:** no
 **Plan (tiered, mirrors MSG):** (1) JEDEC-ID read prints `EF 40 18` — proves bus + HOLD not held
@@ -314,11 +371,12 @@ Captured now so the migration agent has context (the driver is being built *for*
   chip table + read/erase/write structure + lock hook → `Docs/Not-in-project-temp/SFUD/`; FS BD
   templates + littlefs DESIGN/SPEC → `Docs/littlefs-extras/` (moved out of the build dir;
   `App/littlefs/` now holds only the built core + LICENSE/VENDOR).
-- **Plan status (2026-06-27):** Big Board — 20 🟢 · 2 🟡 (I5, T1) · 0 🔵 · 0 🔴 —
-  no open user confirms. MSG — **5/13 (G0–G4 ✅)**; G5–G12 pending. Partition table promoted from W1
+- **Plan status (2026-06-27):** Big Board — 21 🟢 · 2 🟡 (I5, T1) · 0 🔵 · 0 🔴 —
+  no open user confirms. MSG — **7/13 (G0–G6 ✅)**; G7–G12 pending. Partition table promoted from W1
   into v1 (I5/G11); two littlefs FSes are the partition-API test. **Bench facts banked:** wiring
-  solid to 42.5 MHz (I8); transport + device + geometry layers (`App/spiflash/`) build 0/0. **Next
-  suggested:** **G5** (erase/program/read primitives + address-range read/write). *G9 prereq:* add
-  `App/spiflash` to the IDE include path before external files include its headers.
+  solid to 42.5 MHz (I8); transport + device + geometry + erase/program/read (`App/spiflash/`) build
+  0/0; CRC IP enabled in `.ioc`. **Next suggested:** **G11** (partition module — needs the I9 CRC
+  util; `.ioc` CRC already on) → then **G12** (SPI Flash debug submenu, first on-hardware exercise).
+  *G9/G12 prereq:* add `App/spiflash` to the IDE include path before external files include its headers.
 
 **End of spiflash-driver-implementation-plan.md**
