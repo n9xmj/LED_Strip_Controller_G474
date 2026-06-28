@@ -29,7 +29,15 @@ extern void v_spiflash_test_identify(void);
 
 /* Test-harness 'S' op dispatcher. pc_arg = "<verb> [args]"; frames one or more
  * <HRN S ...> result lines. Verbs: id, geom, rdsr <n>, wren, wrdi,
- * erase <hexaddr>, prog <hexaddr> <hex>, read <hexaddr> <declen>. */
+ * erase <hexaddr>, prog <hexaddr> <hex>, write <hexaddr> <hex>,
+ * read <hexaddr> <declen>. */
 extern void v_spiflash_test_harness_op(const char *pc_arg);
+
+/* Test-harness 'T' op dispatcher (partition manager). Frames <HRN T ...> lines.
+ * Verbs: backup, restore (device-side malloc'd sector-0 save/restore — the host
+ * brackets the destructive run in try/finally), provision, format, load, list,
+ * create <label> <type> <hexsize> [hexstart], del <label>, erase <label>,
+ * mount <label> <0|1>, free. */
+extern void v_spiflash_test_harness_op_part(const char *pc_arg);
 
 #endif /* SPIFLASH_TEST_H */

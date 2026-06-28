@@ -37,6 +37,24 @@ HARNESS_EXIT = b"\xA5"
 
 SCRATCH_ADDR = 0x1000           # sector 1 — scratch generic-data region (I5)
 FRAME_RE = re.compile(r"<HRN S [^>]*>")
+TPART_RE = re.compile(r"<HRN T part [^>]*>")
+
+# spiflash_err_t codes (App/spiflash/spiflash_common.h)
+ERR_PARAM = "1"
+ERR_BUSY = "4"
+ERR_EXISTS = "10"
+ERR_NOSPACE = "12"
+
+# Default layout provision_default() writes on the 16 MB W25Q128 (spiflash_part.c):
+# label -> (type, offset, size_bytes)
+EXPECT_LAYOUT = {
+    "data":  (1, 0x001000, 12288),
+    "nvm":   (2, 0x004000, 8192),
+    "rsvdA": (4, 0x006000, 16384),
+    "lfs0":  (3, 0x00A000, 8364032),
+    "lfs1":  (3, 0x804000, 8364032),
+    "rsvdB": (4, 0xFFE000, 8192),
+}
 
 
 def load_bench_defaults() -> dict:
@@ -102,11 +120,16 @@ class Harness:
         self._read_until("<HRN BYE>", 1.0)
 
     def op(self, line: str, timeout_s: float = 10.0) -> str:
-        """Send 'S <verb> ...', return the framed <HRN S ...> line (or '')."""
+        """Send a one-frame op, return the last framed <HRN ...> line (or '')."""
         self.s.write((line + "\r").encode("ascii"))
         text = self._read_until(">", timeout_s)
-        m = FRAME_RE.findall(text)
+        m = re.findall(r"<HRN [ST] [^>]*>", text)
         return m[-1] if m else ""
+
+    def op_multi(self, line: str, end_token: str, timeout_s: float = 10.0) -> str:
+        """Send a multi-frame op (e.g. 'T list'), return all text up to end_token."""
+        self.s.write((line + "\r").encode("ascii"))
+        return self._read_until(end_token, timeout_s)
 
 
 def kv(frame: str) -> dict:
@@ -193,7 +216,119 @@ def run_driver_suite(h: Harness) -> bool:
 
     passed = sum(1 for _, ok, _ in results if ok)
     failed = len(results) - passed
-    print(f"\nSUMMARY: {passed} passed, {failed} failed")
+    print(f"\nDRIVER SUMMARY: {passed} passed, {failed} failed")
+    return failed == 0
+
+
+def part_list(h: Harness) -> dict:
+    """Run 'T list', return {label: {field: value}}."""
+    text = h.op_multi("T list", "end>", 5.0)
+    ents: dict = {}
+    for fr in TPART_RE.findall(text):
+        d = kv(fr)
+        ents[d.get("label", "?")] = d
+    return ents
+
+
+def run_partition_suite(h: Harness) -> bool:
+    results: list[tuple[str, bool, str]] = []
+
+    def check(name: str, cond: bool, detail: str = "") -> None:
+        results.append((name, bool(cond), detail))
+        print(f"  [{'PASS' if cond else 'FAIL'}] {name:18} {detail}")
+
+    # Back up the real table sector (device mallocs + reads sector 0) BEFORE any
+    # destructive op. If this fails, do nothing else — there is nothing to restore.
+    bk = kv(h.op("T backup", 5.0))
+    if bk.get("err") != "0":
+        check("backup", False, f"err={bk.get('err')} (no destructive ops run)")
+        print("\nPARTITION SUMMARY: 1 passed... aborted (backup failed)")
+        return False
+    check("backup", True, f"n={bk.get('n')} bytes")
+
+    try:
+        pv = kv(h.op("T provision", 5.0))
+        check("provision", pv.get("err") == "0" and pv.get("count") == "6",
+              f"count={pv.get('count')} err={pv.get('err')}")
+
+        # reload from flash -> validates the CRC round-trip (provision wrote it)
+        ld = kv(h.op("T load"))
+        check("load_crc_ok", ld.get("valid") == "1" and ld.get("count") == "6",
+              f"valid={ld.get('valid')} count={ld.get('count')} err={ld.get('err')}")
+
+        ents = part_list(h)
+        bad = ""
+        for lab, (ty, off, sz) in EXPECT_LAYOUT.items():
+            e = ents.get(lab)
+            if (not e or int(e["type"]) != ty or int(e["off"], 16) != off or int(e["size"]) != sz):
+                bad = f"{lab} -> {e}"
+                break
+        check("default_layout", not bad and len(ents) == 6, bad or f"{len(ents)} entries OK")
+        check("lfs_equal_split",
+              ents.get("lfs0", {}).get("size") == ents.get("lfs1", {}).get("size"),
+              f"lfs0={ents.get('lfs0', {}).get('size')} lfs1={ents.get('lfs1', {}).get('size')}")
+
+        # Free two holes for the placement tests: rsvdA (0x6000, 16 KB) and
+        # rsvdB (0xFFE000, 8 KB). After this the only free space is those two.
+        check("del_rsvdA", kv(h.op("T del rsvdA")).get("err") == "0")
+        check("del_rsvdB", kv(h.op("T del rsvdB")).get("err") == "0")
+
+        # explicit placement into a known hole
+        cr = kv(h.op("T create tst 1 2000 FFE000"))
+        check("create_explicit",
+              cr.get("err") == "0" and int(cr.get("off", "0"), 16) == 0xFFE000 and cr.get("size") == "8192",
+              f"off={cr.get('off')} size={cr.get('size')} err={cr.get('err')}")
+
+        # --- create corner cases (all must be rejected) ---
+        ov = kv(h.op("T create ov 1 1000 A000"))        # start inside lfs0 @0xA000
+        check("overlap_reject", ov.get("err") == ERR_NOSPACE, f"err={ov.get('err')} (want {ERR_NOSPACE} NOSPACE)")
+        ob = kv(h.op("T create ob 1 2000 FFF000"))      # end 0x1001000 > 16 MB
+        check("oob_reject", ob.get("err") == ERR_NOSPACE, f"err={ob.get('err')} (want {ERR_NOSPACE} NOSPACE)")
+        tb = kv(h.op("T create tbl 1 1000 800"))        # rounds down into the table sector
+        check("table_sector_reject", tb.get("err") == ERR_PARAM, f"err={tb.get('err')} (want {ERR_PARAM} PARAM)")
+        zs = kv(h.op("T create zs 1 0 0"))              # zero size
+        check("zerosize_reject", zs.get("err") == ERR_PARAM, f"err={zs.get('err')} (want {ERR_PARAM} PARAM)")
+        ll = kv(h.op("T create 0123456789ABCDEF 1 1000 0"))   # 16-char label > 15 max
+        check("longlabel_reject", ll.get("err") == ERR_PARAM, f"err={ll.get('err')} (want {ERR_PARAM} PARAM)")
+        dup = kv(h.op("T create tst 1 1000 0"))         # duplicate label
+        check("dup_reject", dup.get("err") == ERR_EXISTS, f"err={dup.get('err')} (want {ERR_EXISTS} EXISTS)")
+
+        # --- auto-place (start=0): first-fit into the lowest hole, then advance ---
+        ap = kv(h.op("T create ap 1 2000 0"))           # 8 KB -> first hole 0x6000 (old rsvdA)
+        check("autoplace_first_fit",
+              ap.get("err") == "0" and int(ap.get("off", "0"), 16) == 0x6000,
+              f"off={ap.get('off')} (want 0x6000) err={ap.get('err')}")
+        ap2 = kv(h.op("T create ap2 1 2000 0"))         # next 8 KB -> 0x8000 (advanced past ap)
+        check("autoplace_advance",
+              ap2.get("err") == "0" and int(ap2.get("off", "0"), 16) == 0x8000,
+              f"off={ap2.get('off')} (want 0x8000) err={ap2.get('err')}")
+
+        ents = part_list(h)
+        check("creates_listed",
+              {"tst", "ap", "ap2"} <= set(ents) and "rsvdA" not in ents and "rsvdB" not in ents,
+              f"labels={sorted(ents)}")
+
+        # map is now gap-free (sectors 1..n all allocated) -> auto-place finds no hole
+        nf = kv(h.op("T create nf 1 2000 0"))
+        check("autoplace_nospace", nf.get("err") == ERR_NOSPACE, f"err={nf.get('err')} (want {ERR_NOSPACE} NOSPACE)")
+
+        # mounted guard: a mounted partition refuses delete (BUSY) until unmounted
+        h.op("T mount tst 1")
+        d1 = kv(h.op("T del tst"))
+        check("mounted_blocks_del", d1.get("err") == ERR_BUSY, f"err={d1.get('err')} (want {ERR_BUSY} BUSY)")
+        h.op("T mount tst 0")
+        d2 = kv(h.op("T del tst"))
+        check("unmount_then_del", d2.get("err") == "0", f"err={d2.get('err')}")
+        check("tst_removed", "tst" not in part_list(h), "")
+
+    finally:
+        rs = kv(h.op("T restore", 5.0))
+        check("restore", rs.get("err") == "0" and rs.get("verify") == "1",
+              f"err={rs.get('err')} verify={rs.get('verify')}")
+
+    passed = sum(1 for _, ok, _ in results if ok)
+    failed = len(results) - passed
+    print(f"\nPARTITION SUMMARY: {passed} passed, {failed} failed")
     return failed == 0
 
 
@@ -215,6 +350,7 @@ def main() -> int:
     ap.add_argument("--baud", type=int, default=defaults.get("baud", 921600))
     ap.add_argument("--stlink-sn", default=None)
     ap.add_argument("--reset", action="store_true", help="ST-Link reset before testing")
+    ap.add_argument("--suite", choices=["driver", "partition", "all"], default="all")
     args = ap.parse_args()
 
     if args.reset:
@@ -222,11 +358,17 @@ def main() -> int:
 
     print(f"Opening {args.port} @ {args.baud}...")
     h = Harness(args.port, args.baud)
+    ok = True
     try:
         if not h.enter():
             print("Harness not ready (<HRN v1 RDY> missing)", file=sys.stderr)
             return 2
-        ok = run_driver_suite(h)
+        if args.suite in ("driver", "all"):
+            print("== driver suite ==")
+            ok &= run_driver_suite(h)
+        if args.suite in ("partition", "all"):
+            print("\n== partition suite ==")
+            ok &= run_partition_suite(h)
     finally:
         try:
             h.quit()

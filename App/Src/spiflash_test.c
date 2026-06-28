@@ -20,8 +20,10 @@
 // Bench device handle. TEMPORARY lazy-init home (moves to v_system_init()).
 //------------------------------------------------------------------------------
 
-static spiflash_device_t s_x_flash;
-static bool              s_b_ready;
+static spiflash_device_t     s_x_flash;
+static bool                  s_b_ready;
+static spiflash_part_table_t s_x_parts;       // RAM partition-table context
+static uint8_t              *s_pu8_backup;     // malloc'd sector-0 backup (NULL = none held)
 
 /* Frame-data caps: one page for a program, a bounded chunk for a framed read
  * (the host chunks anything larger via repeated read ops). */
@@ -326,5 +328,190 @@ void v_spiflash_test_harness_op(const char *pc_arg)
     else
     {
         printf("<HRN S ERR verb=%s>\r\n", ac_verb);
+    }
+}
+
+//------------------------------------------------------------------------------
+// Test-harness 'T' op — partition manager
+//
+// Destructive verbs rewrite sector 0 (the table). The HOST brackets a run with
+// 'T backup' (device mallocs + reads sector 0) ... 'T restore' (erase + write
+// back + verify + free) in a try/finally, so the real table is always put back.
+// These two reach sector 0 directly (the S-op table guard does not apply here).
+//------------------------------------------------------------------------------
+
+void v_spiflash_test_harness_op_part(const char *pc_arg)
+{
+    char           ac_verb[12];
+    const char    *pc = pc_next_tok(pc_arg, ac_verb, (uint32_t)sizeof(ac_verb));
+    spiflash_err_t x_err;
+    uint32_t       u32_ssize;
+
+    if (ac_verb[0] == '\0')
+    {
+        printf("<HRN T ERR noverb>\r\n");
+        return;
+    }
+
+    x_err = x_spiflash_test_ensure_init();
+    if (x_err != SPIFLASH_OK)
+    {
+        printf("<HRN T ERR init err=%d>\r\n", (int)x_err);
+        return;
+    }
+    s_x_parts.p_x_dev = &s_x_flash;     // bind the table context to the device
+    u32_ssize = (uint32_t)s_x_flash.x_info.u16_sector_size;
+
+    if (strcmp(ac_verb, "backup") == 0)
+    {
+        if (s_pu8_backup != NULL) { free(s_pu8_backup); s_pu8_backup = NULL; }   // drop stale
+        s_pu8_backup = (uint8_t *)malloc(u32_ssize);
+        if (s_pu8_backup == NULL)
+        {
+            printf("<HRN T backup err=NOMEM>\r\n");
+            return;
+        }
+        x_err = x_spiflash_read(&s_x_flash, 0u, s_pu8_backup, u32_ssize);
+        if (x_err != SPIFLASH_OK)
+        {
+            free(s_pu8_backup);
+            s_pu8_backup = NULL;
+            printf("<HRN T backup err=%d>\r\n", (int)x_err);
+            return;
+        }
+        printf("<HRN T backup n=%lu err=0>\r\n", (unsigned long)u32_ssize);
+    }
+    else if (strcmp(ac_verb, "restore") == 0)
+    {
+        int i_verify = 0;
+
+        if (s_pu8_backup == NULL)
+        {
+            printf("<HRN T restore err=1 nobackup>\r\n");
+            return;
+        }
+        x_err = x_spiflash_erase_sector(&s_x_flash, 0u);
+        if (x_err == SPIFLASH_OK)
+        {
+            x_err = x_spiflash_write(&s_x_flash, 0u, s_pu8_backup, u32_ssize);
+        }
+        if (x_err == SPIFLASH_OK)
+        {
+            uint32_t u32_off;
+            uint8_t  au8_tmp[256];
+            i_verify = 1;
+            for (u32_off = 0u; u32_off < u32_ssize; u32_off += sizeof(au8_tmp))
+            {
+                uint32_t u32_n = ((u32_ssize - u32_off) < sizeof(au8_tmp))
+                                 ? (u32_ssize - u32_off) : sizeof(au8_tmp);
+                if ((x_spiflash_read(&s_x_flash, u32_off, au8_tmp, u32_n) != SPIFLASH_OK)
+                    || (memcmp(au8_tmp, s_pu8_backup + u32_off, u32_n) != 0))
+                {
+                    i_verify = 0;
+                    break;
+                }
+            }
+        }
+        free(s_pu8_backup);
+        s_pu8_backup = NULL;
+        (void)x_spiflash_part_table_load(&s_x_parts, &s_x_flash);    // resync RAM ctx to flash
+        printf("<HRN T restore err=%d verify=%d>\r\n", (int)x_err, i_verify);
+    }
+    else if (strcmp(ac_verb, "provision") == 0)
+    {
+        x_err = x_spiflash_part_provision_default(&s_x_parts);
+        printf("<HRN T provision count=%u err=%d>\r\n",
+               u16_spiflash_part_count(&s_x_parts), (int)x_err);
+    }
+    else if (strcmp(ac_verb, "format") == 0)
+    {
+        x_err = x_spiflash_part_format(&s_x_parts);
+        printf("<HRN T format err=%d>\r\n", (int)x_err);
+    }
+    else if (strcmp(ac_verb, "load") == 0)
+    {
+        x_err = x_spiflash_part_table_load(&s_x_parts, &s_x_flash);
+        printf("<HRN T load valid=%d count=%u err=%d>\r\n",
+               (x_err == SPIFLASH_OK) ? 1 : 0, u16_spiflash_part_count(&s_x_parts), (int)x_err);
+    }
+    else if (strcmp(ac_verb, "list") == 0)
+    {
+        uint16_t u16_cnt = u16_spiflash_part_count(&s_x_parts);
+        uint16_t u16_i;
+        for (u16_i = 0u; u16_i < u16_cnt; u16_i++)
+        {
+            spiflash_part_entry_t x_e;
+            if (x_spiflash_part_get(&s_x_parts, u16_i, &x_e) == SPIFLASH_OK)
+            {
+                char ac_lab[SPIFLASH_PART_LABEL_LEN + 1u];
+                memcpy(ac_lab, x_e.c_label, SPIFLASH_PART_LABEL_LEN);
+                ac_lab[SPIFLASH_PART_LABEL_LEN] = '\0';
+                printf("<HRN T part i=%u label=%s type=%u sub=%u off=0x%06lX size=%lu flags=0x%08lX>\r\n",
+                       u16_i, ac_lab, (unsigned)x_e.u8_type, (unsigned)x_e.u8_subtype,
+                       (unsigned long)x_e.u32_offset, (unsigned long)x_e.u32_size,
+                       (unsigned long)x_e.x_flags.u32_all);
+            }
+        }
+        printf("<HRN T list count=%u end>\r\n", u16_cnt);
+    }
+    else if (strcmp(ac_verb, "create") == 0)
+    {
+        char ac_lab[20], ac_ty[8], ac_sz[16], ac_st[16];
+        const char *p1 = pc_next_tok(pc,  ac_lab, (uint32_t)sizeof(ac_lab));
+        const char *p2 = pc_next_tok(p1,  ac_ty,  (uint32_t)sizeof(ac_ty));
+        const char *p3 = pc_next_tok(p2,  ac_sz,  (uint32_t)sizeof(ac_sz));
+        spiflash_part_create_t x_spec;
+        spiflash_partition_t   x_out;
+
+        (void)pc_next_tok(p3, ac_st, (uint32_t)sizeof(ac_st));
+        memset(&x_spec, 0, sizeof(x_spec));
+        x_spec.psz_label = ac_lab;
+        x_spec.x_type    = (spiflash_part_type_e)atoi(ac_ty);
+        x_spec.u32_size  = (uint32_t)strtoul(ac_sz, NULL, 16);
+        x_spec.x_start   = (spiflash_addr_t)strtoul(ac_st, NULL, 16);   // "" -> 0 -> auto-place
+
+        x_err = x_spiflash_part_create(&s_x_parts, &x_spec, &x_out);
+        if (x_err == SPIFLASH_OK)
+        {
+            printf("<HRN T create label=%s off=0x%06lX size=%lu err=0>\r\n",
+                   ac_lab, (unsigned long)x_out.x_base, (unsigned long)x_out.u32_size);
+        }
+        else
+        {
+            printf("<HRN T create label=%s err=%d>\r\n", ac_lab, (int)x_err);
+        }
+    }
+    else if (strcmp(ac_verb, "del") == 0)
+    {
+        char ac_lab[20];
+        (void)pc_next_tok(pc, ac_lab, (uint32_t)sizeof(ac_lab));
+        x_err = x_spiflash_part_delete(&s_x_parts, ac_lab);
+        printf("<HRN T del label=%s err=%d>\r\n", ac_lab, (int)x_err);
+    }
+    else if (strcmp(ac_verb, "erase") == 0)
+    {
+        char ac_lab[20];
+        (void)pc_next_tok(pc, ac_lab, (uint32_t)sizeof(ac_lab));
+        x_err = x_spiflash_part_erase(&s_x_parts, ac_lab);
+        printf("<HRN T erase label=%s err=%d>\r\n", ac_lab, (int)x_err);
+    }
+    else if (strcmp(ac_verb, "mount") == 0)
+    {
+        char ac_lab[20], ac_m[4];
+        const char *p1 = pc_next_tok(pc, ac_lab, (uint32_t)sizeof(ac_lab));
+        bool b_m;
+        (void)pc_next_tok(p1, ac_m, (uint32_t)sizeof(ac_m));
+        b_m = (atoi(ac_m) != 0);
+        x_err = x_spiflash_part_set_mounted(&s_x_parts, ac_lab, b_m);
+        printf("<HRN T mount label=%s m=%d err=%d>\r\n", ac_lab, b_m ? 1 : 0, (int)x_err);
+    }
+    else if (strcmp(ac_verb, "free") == 0)
+    {
+        printf("<HRN T free bytes=%lu>\r\n",
+               (unsigned long)u32_spiflash_part_largest_free(&s_x_parts));
+    }
+    else
+    {
+        printf("<HRN T ERR verb=%s>\r\n", ac_verb);
     }
 }
