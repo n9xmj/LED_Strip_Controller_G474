@@ -144,3 +144,9 @@ do { \
 
 // Read the state of the user button on STM32 Nucleo board
 #define NUCLEO_BUTTON_PRESSED()    (HAL_GPIO_ReadPin(NUCLEO_BUTTON_GPIO_Port, NUCLEO_BUTTON_Pin) == 0)
+
+// SPI FLASH (W25Q128) chip-select — active-low, soft-NSS on FLASH_CS (PC3).
+// The spiflash transport drives CS via the GPIO port/pin it is given; these
+// macros are the convenience equivalents (also used by bench bring-up tests).
+#define FLASH_SELECT()              HAL_GPIO_WritePin(FLASH_CS_GPIO_Port, FLASH_CS_Pin, GPIO_PIN_RESET)
+#define FLASH_DESELECT()            HAL_GPIO_WritePin(FLASH_CS_GPIO_Port, FLASH_CS_Pin, GPIO_PIN_SET)
