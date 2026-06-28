@@ -40,7 +40,8 @@ littlefs vendored for an upcoming filesystem layer. Built this session; G0 bench
    Build it incrementally; add a **HuIL bench test per completed layer** (JEDEC/geometry → register
    dump → partition provision/map/create/delete → erase/program/read round-trips) + a few
    **automated HIL tests** via the test REPL where deterministic. Migrate `quick_test_1/2` in here.
-   **Prereq: add `App/spiflash` to the IDE include path** (external files will include its headers).
+   **Prereq DONE (2026-06-27):** `App/spiflash` is on the IDE include path (clean in-IDE build
+   confirmed), so G12's external consumer (`debug_menu.c`) can include the spiflash headers.
 2. **G7/G8** — two littlefs FSes on the `lfs0`/`lfs1` partitions (littlefs is fully reentrant: one
    `lfs_t`+`lfs_config` each, `cfg.context` → partition handle).
 3. **G9** — FS ops in the submenu (dir listing ×2, format/cat/put); **G10** — archive + remove the
@@ -71,5 +72,15 @@ littlefs vendored for an upcoming filesystem layer. Built this session; G0 bench
 ```
 /read-the-docs the SPI flash driver work — read .grok/memory/session-handoff-2026-06-27-spiflash-driver.md
 and Docs/planning/spiflash-driver-implementation-plan.md. Next is G12 (SPI Flash debug submenu, first
-on-hardware validation of the G1–G11 stack). Start by adding App/spiflash to the IDE include path.
+on-hardware validation of the G1–G11 stack). The App/spiflash IDE include path is already wired.
 ```
+
+## Update (2026-06-27, post-wrapup)
+- **G12 include-path prereq is DONE** — `App/spiflash` added to the IDE include path; clean in-IDE
+  build confirmed. (Earlier builds passed anyway: `App` is a source-path root so the `.c` auto-compile,
+  and intra-module `""` includes resolve same-dir; the path is only needed for *external* consumers.)
+- **C-lib FS tie-in (W10) works under newlib-nano** — no full newlib needed. File I/O lives in the
+  POSIX syscall stubs (`_open/_read/_write/_close/_lseek/_fstat` + an fd→`lfs_file_t` table), which
+  nano supports identically; nano only trims printf/scanf/locale. Mind heap (each `fopen` mallocs a
+  `FILE`+buffer — use `setvbuf`). Lighter Berry-only alternative: bind `be_port` file ops directly to
+  `lfs_file_*`, bypassing stdio entirely.

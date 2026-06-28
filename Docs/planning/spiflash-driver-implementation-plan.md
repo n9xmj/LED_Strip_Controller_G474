@@ -100,7 +100,7 @@ own**; SFUD / FAL / the legacy MX25R80 driver are **reference material only**.
 | W7 | 🔵 | **Berry / PLAY tie-in** — expose flash + FS ops as script functions (depends on Berry W3 FS tie-in). |
 | W8 | 🔵 | **nvmparams integration** — port the lightweight ESP-NVS-inspired KV parameter manager (`Docs/Not-in-project-temp/nvmparams/`) and add a **`NVM_DEVICE_SPIFLASH`** backend so an nvmparams *pool* lives in a dedicated **spiflash partition** (whole-pool read = range-read; commit = erase+program the partition). A *second* consumer of the partition layer alongside littlefs — strengthens I5/W1. Project-specific slot IDs (`NVM_PARAM_*`/`NVM_CONFIG_*`) get replaced for this project. See detail note. |
 | W9 | 🔵 | **External-script / host littlefs access** — file upload/download, directory listing, rename, delete over the host protocol / **HIL test REPL**; complementary **Berry** tie-ins (with W7). Builds on the existing test-harness file-upload path (Berry W4). |
-| W10 | 🔵 | **littlefs ↔ C stdio retarget** — route newlib `<stdio.h>` (`fopen/fread/fwrite/fclose/fseek/…`) to littlefs by path prefix via the `_open/_read/_write/_close/_lseek` syscalls. **Likely a prerequisite for W7** — Berry's file plugin (`be_filelib`) is stdio-based, so this makes Berry FS access work for free. |
+| W10 | 🔵 | **littlefs ↔ C stdio retarget** — route newlib `<stdio.h>` (`fopen/fread/fwrite/fclose/fseek/…`) to littlefs by path prefix via the `_open/_read/_write/_close/_lseek/_fstat` syscalls (+ fd→`lfs_file_t` table). **newlib-nano is sufficient** (file I/O is in the syscalls, not the nano/full split); mind heap per `fopen` (FILE+buffer — use `setvbuf`). Makes any `fopen` code work, incl. Berry's stdio file plugin → **enables W7**. *Lighter Berry-only alt:* bind `be_port` file ops straight to `lfs_file_*`, skipping stdio. |
 
 ---
 
@@ -387,6 +387,6 @@ Captured now so the migration agent has context (the driver is being built *for*
   → partitions + CRC util) builds 0/0; nothing yet exercised on hardware past G0. **Next suggested:**
   **G12** (SPI Flash debug submenu — first on-hardware exercise of the whole stack: JEDEC/geometry,
   provision, partition-map, erase/program/read), then **G7/G8** (two littlefs FSes).
-  **G12 prereq:** add `App/spiflash` to the IDE include path (external files will include its headers).
+  **G12 prereq DONE (2026-06-27):** `App/spiflash` on the IDE include path; clean in-IDE build confirmed.
 
 **End of spiflash-driver-implementation-plan.md**
