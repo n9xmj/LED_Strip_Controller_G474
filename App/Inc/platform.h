@@ -128,8 +128,10 @@ do { \
  *  Bench: L/R→GND (left slot only); right slot tri-states — ignore in handlers. */
 #define I2S_AUDIO_IN_I2S_HANDLE     hi2s2
 
-/** SPI1 - SPI LCD */
+/** SPI1 — shared bus: SPI LCD + W25Q SPI NOR flash (distinct soft-NSS CS lines:
+ *  LCD_CS=PC0, FLASH_CS=PC3). Both app handles resolve to the same hspi1. */
 #define LCD_SPI_HANDLE              LCD_SPI_H
+#define FLASH_SPI_HANDLE            LCD_SPI_H          // W25Q128 shares SPI1 with the LCD
 
 //------------------------------------------------------------------------------
 // GPIO control macros

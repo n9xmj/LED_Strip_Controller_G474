@@ -70,18 +70,377 @@ static void v_debug_show_clocks(void)
  *
  ******************************************************************************/
 
+/*
+ * G0 - SPI flash bare-metal wiring smoke (throwaway bench test).
+ *
+ * W25Q128JV on SPI1 (Master, Mode 0, /16), soft-NSS chip-select FLASH_CS=PC3.
+ * Polled HAL only - NO driver, abstraction, or DMA (by design; see
+ * Docs/planning/spiflash-driver-implementation-plan.md row G0). Scope/LA-
+ * friendly: reads the JEDEC ID a few times with gaps, then exercises a
+ * NON-BINDING (volatile) status-register write + readback. Run manually from
+ * the bench via main-menu key '1'. Lives entirely in this function on purpose.
+ *
+ * Both LCD_CS (PC0) and FLASH_CS (PC3) power up LOW (asserted) per MX_GPIO_Init
+ * - we drive both HIGH first so only the flash responds and its CS idles HIGH.
+ */
 static void v_debug_quick_test_1(void)
 {
-    printf("Quick test function 1\r\n");
+#define G0_CMD_JEDEC_ID     0x9Fu   /* Read JEDEC ID -> mfr, type, capacity   */
+#define G0_CMD_RDSR1        0x05u   /* Read Status Register-1 (BUSY, WEL, ...) */
+#define G0_CMD_WREN         0x06u   /* Write Enable  -> sets WEL (SR1 bit1)    */
+#define G0_CMD_WRDI         0x04u   /* Write Disable -> clears WEL             */
+#define G0_SR1_WEL          0x02u   /* SR1 bit1 = Write Enable Latch           */
+#define G0_SPI_TMO_MS       100u
+#define G0_ITERATIONS       4u
+#define G0_CS_LOW()         HAL_GPIO_WritePin(FLASH_CS_GPIO_Port, FLASH_CS_Pin, GPIO_PIN_RESET)
+#define G0_CS_HIGH()        HAL_GPIO_WritePin(FLASH_CS_GPIO_Port, FLASH_CS_Pin, GPIO_PIN_SET)
+
+    HAL_StatusTypeDef x_status = HAL_OK;
+    uint8_t  u8_tx;
+    uint8_t  au8_id[3];
+    uint8_t  u8_sr1_wren = 0u, u8_sr1_wrdi = 0u;
+    uint32_t u32_i;
+
+    printf("\r\n[G0] SPI flash wiring smoke - W25Q128 @ SPI1, CS=PC3 (polled)\r\n");
+
+    /* Deselect both shared-bus devices; FLASH_CS idles HIGH between txns. */
+    HAL_GPIO_WritePin(LCD_CS_GPIO_Port, LCD_CS_Pin, GPIO_PIN_SET);
+    G0_CS_HIGH();
+    v_app_delay_ms(1u);
+
+    /* --- JEDEC ID (0x9F): repeat a few times with a gap to catch on a LA. --- */
+    for (u32_i = 0u; u32_i < G0_ITERATIONS; u32_i++)
+    {
+        u8_tx = G0_CMD_JEDEC_ID;
+        au8_id[0] = au8_id[1] = au8_id[2] = 0u;
+
+        G0_CS_LOW();
+        x_status = HAL_SPI_Transmit(&hspi1, &u8_tx, 1u, G0_SPI_TMO_MS);
+        if (x_status == HAL_OK)
+        {
+            x_status = HAL_SPI_Receive(&hspi1, au8_id, sizeof(au8_id), G0_SPI_TMO_MS);
+        }
+        G0_CS_HIGH();
+
+        if (x_status != HAL_OK)
+        {
+            printf("[G0] JEDEC #%lu: SPI error %d\r\n",
+                   (unsigned long)u32_i, (int)x_status);
+        }
+        else
+        {
+            printf("[G0] JEDEC #%lu: %02X %02X %02X  (expect EF 40 18)%s\r\n",
+                   (unsigned long)u32_i, au8_id[0], au8_id[1], au8_id[2],
+                   (au8_id[0] == 0xEFu && au8_id[1] == 0x40u && au8_id[2] == 0x18u)
+                       ? "  <-- OK" : "");
+        }
+        v_app_delay_ms(5u);
+    }
+
+    if (au8_id[0] != 0xEFu)
+    {
+        printf("[G0] No Winbond (0xEF) signature - check power/wiring/CS. Aborting.\r\n");
+        goto g0_done;
+    }
+
+    /* Decode the capacity code (last byte): 2^code bytes. 0x18=16MB, 0x17=8MB. */
+    printf("[G0] Winbond detected; density 0x%02X = %lu bytes\r\n",
+           au8_id[2],
+           (au8_id[2] >= 0x10u && au8_id[2] <= 0x20u)
+               ? (unsigned long)(1uL << au8_id[2]) : 0uL);
+
+    /* --- Write-path check: WREN sets WEL, WRDI clears it (SR1 bit1). ---
+     * Proves the device honors the write-enable/disable handshake (prerequisite
+     * for program/erase) with ZERO wear and no state change. Cleaner than a QE
+     * toggle, whose volatile-SR-write path is part-dependent. */
+
+    /* WREN (0x06) -> WEL should be 1 */
+    u8_tx = G0_CMD_WREN;
+    G0_CS_LOW();  HAL_SPI_Transmit(&hspi1, &u8_tx, 1u, G0_SPI_TMO_MS);  G0_CS_HIGH();
+
+    u8_tx = G0_CMD_RDSR1;
+    G0_CS_LOW();
+    HAL_SPI_Transmit(&hspi1, &u8_tx, 1u, G0_SPI_TMO_MS);
+    HAL_SPI_Receive(&hspi1, &u8_sr1_wren, 1u, G0_SPI_TMO_MS);
+    G0_CS_HIGH();
+
+    /* WRDI (0x04) -> WEL should be 0 (leaves the device write-disabled/clean) */
+    u8_tx = G0_CMD_WRDI;
+    G0_CS_LOW();  HAL_SPI_Transmit(&hspi1, &u8_tx, 1u, G0_SPI_TMO_MS);  G0_CS_HIGH();
+
+    u8_tx = G0_CMD_RDSR1;
+    G0_CS_LOW();
+    HAL_SPI_Transmit(&hspi1, &u8_tx, 1u, G0_SPI_TMO_MS);
+    HAL_SPI_Receive(&hspi1, &u8_sr1_wrdi, 1u, G0_SPI_TMO_MS);
+    G0_CS_HIGH();
+
+    printf("[G0] SR1 WEL: after WREN=%02X (WEL %s) after WRDI=%02X (WEL %s) -> %s\r\n",
+           u8_sr1_wren,  (u8_sr1_wren & G0_SR1_WEL) ? "set"   : "CLR?",
+           u8_sr1_wrdi,  (u8_sr1_wrdi & G0_SR1_WEL) ? "SET?"  : "clr",
+           ((u8_sr1_wren & G0_SR1_WEL) && !(u8_sr1_wrdi & G0_SR1_WEL))
+               ? "VERIFIED" : "MISMATCH");
+
+g0_done:
+    printf("[G0] done.\r\n");
+
+#undef G0_CMD_JEDEC_ID
+#undef G0_CMD_RDSR1
+#undef G0_CMD_WREN
+#undef G0_CMD_WRDI
+#undef G0_SR1_WEL
+#undef G0_SPI_TMO_MS
+#undef G0_ITERATIONS
+#undef G0_CS_LOW
+#undef G0_CS_HIGH
 }
 
 /******************************************************************************
  *
  ******************************************************************************/
 
+/*
+ * G2 - SPI flash bus-integrity stress test (throwaway bench test, key '2').
+ *
+ * Validates SPI1 clock rate / signal integrity over the cobbled bench wiring
+ * (W25Q128 on ~10 cm dupont jumpers). Per invocation: ONE sector erase, write
+ * 16 pages of a deterministic position+seed-dependent pattern, then read-verify
+ * the whole sector many times across a prescaler SWEEP (~5/10/20/40 MHz).
+ * Reads cause no wear, so the speed sweep verifies the (capture-sensitive) read
+ * path without re-erasing. Polled HAL only; bare-metal, no driver. The write is
+ * done once at the safe default 10 MHz (/16); the sweep stresses reads.
+ *
+ * Pattern: pages 0/1 = max-toggle stress (0x55/0xAA, 0x00/0xFF); pages 2..15 =
+ * per-page 8-bit LFSR seeded from run + page index, so a misaddressed/shifted
+ * read cannot masquerade as correct. RX buffer is poisoned before each read.
+ */
+
+#define G2T_SECTOR_ADDR     0x00010000u  /* test sector (block 1, sector-aligned) */
+#define G2T_PAGE_SIZE       256u
+#define G2T_PAGES_PER_SECT  16u          /* 4096 / 256 */
+#define G2T_READ_PASSES     50u
+#define G2T_TMO_MS          100u
+
+/* Deterministic per-page pattern - identical for write and verify. */
+static void v_g2t_gen_page(uint8_t *p_u8_buf, uint32_t u32_page, uint32_t u32_seed)
+{
+    uint32_t u32_i;
+
+    if (u32_page == 0u)
+    {
+        for (u32_i = 0u; u32_i < G2T_PAGE_SIZE; u32_i++)
+            p_u8_buf[u32_i] = (u32_i & 1u) ? 0xAAu : 0x55u;       /* 0x55/0xAA */
+    }
+    else if (u32_page == 1u)
+    {
+        for (u32_i = 0u; u32_i < G2T_PAGE_SIZE; u32_i++)
+            p_u8_buf[u32_i] = (u32_i & 1u) ? 0xFFu : 0x00u;       /* 0x00/0xFF */
+    }
+    else
+    {
+        uint8_t u8_lfsr = (uint8_t)(u32_seed ^ (u32_page * 0x9Bu) ^ 0x01u);
+        if (u8_lfsr == 0u) u8_lfsr = 0xACu;                      /* avoid lock state */
+        for (u32_i = 0u; u32_i < G2T_PAGE_SIZE; u32_i++)
+        {
+            uint8_t u8_lsb = (uint8_t)(u8_lfsr & 1u);
+            p_u8_buf[u32_i] = u8_lfsr;
+            u8_lfsr = (uint8_t)(u8_lfsr >> 1);
+            if (u8_lsb) u8_lfsr ^= 0xB8u;                        /* x^8+x^6+x^5+x^4+1 */
+        }
+    }
+}
+
+/* Poll SR1 BUSY (bit0) until clear or timeout. */
+static HAL_StatusTypeDef x_g2t_wait_ready(uint32_t u32_tmo_ms)
+{
+    uint8_t  u8_cmd = 0x05u;        /* RDSR1 */
+    uint8_t  u8_sr1;
+    uint32_t u32_t0 = HAL_GetTick();
+
+    do
+    {
+        u8_sr1 = 0xFFu;
+        HAL_GPIO_WritePin(FLASH_CS_GPIO_Port, FLASH_CS_Pin, GPIO_PIN_RESET);
+        HAL_SPI_Transmit(&hspi1, &u8_cmd, 1u, G2T_TMO_MS);
+        HAL_SPI_Receive(&hspi1, &u8_sr1, 1u, G2T_TMO_MS);
+        HAL_GPIO_WritePin(FLASH_CS_GPIO_Port, FLASH_CS_Pin, GPIO_PIN_SET);
+        if ((u8_sr1 & 0x01u) == 0u) return HAL_OK;
+    }
+    while ((HAL_GetTick() - u32_t0) < u32_tmo_ms);
+
+    return HAL_TIMEOUT;
+}
+
+/* Reconfigure SPI1 baud-rate prescaler; return resulting SCK Hz. */
+static uint32_t u32_g2t_set_speed(uint32_t u32_prescaler, uint16_t u16_div)
+{
+    hspi1.Init.BaudRatePrescaler = u32_prescaler;
+    (void)HAL_SPI_Init(&hspi1);    /* state != RESET -> reconfig only, no MspInit */
+    return HAL_RCC_GetPCLK2Freq() / (uint32_t)u16_div;
+}
+
 static void v_debug_quick_test_2(void)
 {
-    printf("Quick test function 2\r\n");
+#define G2T_CMD_WREN        0x06u
+#define G2T_CMD_SE          0x20u   /* sector erase (4K)       */
+#define G2T_CMD_PP          0x02u   /* page program            */
+#define G2T_CMD_FREAD       0x0Bu   /* fast read (1 dummy byte) */
+#define G2T_CS_LOW()        HAL_GPIO_WritePin(FLASH_CS_GPIO_Port, FLASH_CS_Pin, GPIO_PIN_RESET)
+#define G2T_CS_HIGH()       HAL_GPIO_WritePin(FLASH_CS_GPIO_Port, FLASH_CS_Pin, GPIO_PIN_SET)
+
+    static const struct { uint32_t u32_presc; uint16_t u16_div; } ax_speeds[] = {
+        { SPI_BAUDRATEPRESCALER_32, 32u },
+        { SPI_BAUDRATEPRESCALER_16, 16u },
+        { SPI_BAUDRATEPRESCALER_8,   8u },
+        { SPI_BAUDRATEPRESCALER_4,   4u },
+    };
+
+    static uint8_t au8_tx[G2T_PAGE_SIZE];
+    static uint8_t au8_rx[G2T_PAGE_SIZE];
+    uint8_t  au8_hdr[5];
+    uint32_t u32_seed = HAL_GetTick();
+    uint32_t u32_addr, u32_page, u32_pass, u32_i, u32_s, u32_freq;
+    HAL_StatusTypeDef x_status;
+
+    printf("\r\n[G2] SPI flash bus-integrity stress - sector 0x%06lX, "
+           "%lu pages, %lu read passes/speed (seed=%08lX)\r\n",
+           (unsigned long)G2T_SECTOR_ADDR, (unsigned long)G2T_PAGES_PER_SECT,
+           (unsigned long)G2T_READ_PASSES, (unsigned long)u32_seed);
+
+    HAL_GPIO_WritePin(LCD_CS_GPIO_Port, LCD_CS_Pin, GPIO_PIN_SET);   /* mute LCD */
+    G2T_CS_HIGH();
+
+    /* ---- Erase + write the sector ONCE at the default 10 MHz (/16) ---- */
+    u32_freq = u32_g2t_set_speed(SPI_BAUDRATEPRESCALER_16, 16u);
+
+    au8_hdr[0] = G2T_CMD_WREN;
+    G2T_CS_LOW(); HAL_SPI_Transmit(&hspi1, au8_hdr, 1u, G2T_TMO_MS); G2T_CS_HIGH();
+
+    au8_hdr[0] = G2T_CMD_SE;
+    au8_hdr[1] = (uint8_t)((G2T_SECTOR_ADDR >> 16) & 0xFFu);
+    au8_hdr[2] = (uint8_t)((G2T_SECTOR_ADDR >>  8) & 0xFFu);
+    au8_hdr[3] = (uint8_t)( G2T_SECTOR_ADDR        & 0xFFu);
+    G2T_CS_LOW(); HAL_SPI_Transmit(&hspi1, au8_hdr, 4u, G2T_TMO_MS); G2T_CS_HIGH();
+
+    x_status = x_g2t_wait_ready(800u);    /* sector erase tSE up to ~400 ms */
+    if (x_status != HAL_OK) { printf("[G2] ERASE timeout - aborting.\r\n"); goto g2_done; }
+
+    /* Confirm erased: page 0 first 32 bytes should be 0xFF */
+    au8_hdr[0] = G2T_CMD_FREAD;
+    au8_hdr[1] = (uint8_t)((G2T_SECTOR_ADDR >> 16) & 0xFFu);
+    au8_hdr[2] = (uint8_t)((G2T_SECTOR_ADDR >>  8) & 0xFFu);
+    au8_hdr[3] = (uint8_t)( G2T_SECTOR_ADDR        & 0xFFu);
+    au8_hdr[4] = 0x00u;
+    for (u32_i = 0u; u32_i < 32u; u32_i++) au8_rx[u32_i] = 0x00u;
+    G2T_CS_LOW();
+    HAL_SPI_Transmit(&hspi1, au8_hdr, 5u, G2T_TMO_MS);
+    HAL_SPI_Receive(&hspi1, au8_rx, 32u, G2T_TMO_MS);
+    G2T_CS_HIGH();
+    for (u32_i = 0u; u32_i < 32u; u32_i++) if (au8_rx[u32_i] != 0xFFu) break;
+    if (u32_i < 32u)
+        printf("[G2] WARN: post-erase byte %lu = %02X (expected FF)\r\n",
+               (unsigned long)u32_i, au8_rx[u32_i]);
+
+    /* Write 16 pages */
+    for (u32_page = 0u; u32_page < G2T_PAGES_PER_SECT; u32_page++)
+    {
+        u32_addr = G2T_SECTOR_ADDR + (u32_page * G2T_PAGE_SIZE);
+        v_g2t_gen_page(au8_tx, u32_page, u32_seed);
+
+        au8_hdr[0] = G2T_CMD_WREN;
+        G2T_CS_LOW(); HAL_SPI_Transmit(&hspi1, au8_hdr, 1u, G2T_TMO_MS); G2T_CS_HIGH();
+
+        au8_hdr[0] = G2T_CMD_PP;
+        au8_hdr[1] = (uint8_t)((u32_addr >> 16) & 0xFFu);
+        au8_hdr[2] = (uint8_t)((u32_addr >>  8) & 0xFFu);
+        au8_hdr[3] = (uint8_t)( u32_addr        & 0xFFu);
+        G2T_CS_LOW();
+        HAL_SPI_Transmit(&hspi1, au8_hdr, 4u, G2T_TMO_MS);
+        HAL_SPI_Transmit(&hspi1, au8_tx, G2T_PAGE_SIZE, G2T_TMO_MS);
+        G2T_CS_HIGH();
+
+        x_status = x_g2t_wait_ready(50u);   /* page program tPP ~3 ms */
+        if (x_status != HAL_OK)
+        { printf("[G2] PROGRAM timeout page %lu - aborting.\r\n", (unsigned long)u32_page); goto g2_done; }
+    }
+    printf("[G2] erased + wrote %lu pages (%lu B) @ %lu.%02lu MHz\r\n",
+           (unsigned long)G2T_PAGES_PER_SECT,
+           (unsigned long)(G2T_PAGES_PER_SECT * G2T_PAGE_SIZE),
+           (unsigned long)(u32_freq / 1000000u),
+           (unsigned long)((u32_freq % 1000000u) / 10000u));
+
+    /* ---- Read-verify sweep across SPI speeds (reads only, no wear) ---- */
+    printf("[G2] read-verify sweep:\r\n");
+    for (u32_s = 0u; u32_s < (sizeof(ax_speeds) / sizeof(ax_speeds[0])); u32_s++)
+    {
+        uint32_t u32_err = 0u, u32_first_off = 0u;
+        int32_t  i32_first_pass = -1;
+        uint8_t  u8_first_exp = 0u, u8_first_act = 0u;
+
+        u32_freq = u32_g2t_set_speed(ax_speeds[u32_s].u32_presc, ax_speeds[u32_s].u16_div);
+
+        for (u32_pass = 0u; u32_pass < G2T_READ_PASSES; u32_pass++)
+        {
+            for (u32_page = 0u; u32_page < G2T_PAGES_PER_SECT; u32_page++)
+            {
+                u32_addr = G2T_SECTOR_ADDR + (u32_page * G2T_PAGE_SIZE);
+                for (u32_i = 0u; u32_i < G2T_PAGE_SIZE; u32_i++) au8_rx[u32_i] = 0xDBu; /* poison */
+
+                au8_hdr[0] = G2T_CMD_FREAD;
+                au8_hdr[1] = (uint8_t)((u32_addr >> 16) & 0xFFu);
+                au8_hdr[2] = (uint8_t)((u32_addr >>  8) & 0xFFu);
+                au8_hdr[3] = (uint8_t)( u32_addr        & 0xFFu);
+                au8_hdr[4] = 0x00u;
+                G2T_CS_LOW();
+                HAL_SPI_Transmit(&hspi1, au8_hdr, 5u, G2T_TMO_MS);
+                HAL_SPI_Receive(&hspi1, au8_rx, G2T_PAGE_SIZE, G2T_TMO_MS);
+                G2T_CS_HIGH();
+
+                v_g2t_gen_page(au8_tx, u32_page, u32_seed);   /* expected */
+                for (u32_i = 0u; u32_i < G2T_PAGE_SIZE; u32_i++)
+                {
+                    if (au8_rx[u32_i] != au8_tx[u32_i])
+                    {
+                        u32_err++;
+                        if (i32_first_pass < 0)
+                        {
+                            i32_first_pass = (int32_t)u32_pass;
+                            u32_first_off  = (u32_page * G2T_PAGE_SIZE) + u32_i;
+                            u8_first_exp   = au8_tx[u32_i];
+                            u8_first_act   = au8_rx[u32_i];
+                        }
+                    }
+                }
+            }
+        }
+
+        if (u32_err == 0u)
+        {
+            printf("  %lu.%02lu MHz: PASS (%lu B checked, 0 errors)\r\n",
+                   (unsigned long)(u32_freq / 1000000u),
+                   (unsigned long)((u32_freq % 1000000u) / 10000u),
+                   (unsigned long)(G2T_READ_PASSES * G2T_PAGES_PER_SECT * G2T_PAGE_SIZE));
+        }
+        else
+        {
+            printf("  %lu.%02lu MHz: FAIL - %lu bad bytes; first @pass%ld off0x%lX exp%02X act%02X\r\n",
+                   (unsigned long)(u32_freq / 1000000u),
+                   (unsigned long)((u32_freq % 1000000u) / 10000u),
+                   (unsigned long)u32_err, (long)i32_first_pass,
+                   (unsigned long)u32_first_off, u8_first_exp, u8_first_act);
+        }
+    }
+
+g2_done:
+    /* Restore default 10 MHz (/16) so the shared SPI1 bus / LCD is left sane. */
+    (void)u32_g2t_set_speed(SPI_BAUDRATEPRESCALER_16, 16u);
+    printf("[G2] done (SPI restored to /16).\r\n");
+
+#undef G2T_CMD_WREN
+#undef G2T_CMD_SE
+#undef G2T_CMD_PP
+#undef G2T_CMD_FREAD
+#undef G2T_CS_LOW
+#undef G2T_CS_HIGH
 }
 
 /******************************************************************************
