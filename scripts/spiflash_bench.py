@@ -38,6 +38,7 @@ HARNESS_EXIT = b"\xA5"
 SCRATCH_ADDR = 0x1000           # sector 1 — scratch generic-data region (I5)
 FRAME_RE = re.compile(r"<HRN S [^>]*>")
 TPART_RE = re.compile(r"<HRN T part [^>]*>")
+LENT_RE = re.compile(r"<HRN M ent [^>]*>")
 
 # spiflash_err_t codes (App/spiflash/spiflash_common.h)
 ERR_PARAM = "1"
@@ -123,7 +124,7 @@ class Harness:
         """Send a one-frame op, return the last framed <HRN ...> line (or '')."""
         self.s.write((line + "\r").encode("ascii"))
         text = self._read_until(">", timeout_s)
-        m = re.findall(r"<HRN [ST] [^>]*>", text)
+        m = re.findall(r"<HRN [STM] [^>]*>", text)  # S=spiflash T=partition M=littlefs
         return m[-1] if m else ""
 
     def op_multi(self, line: str, end_token: str, timeout_s: float = 10.0) -> str:
@@ -332,6 +333,78 @@ def run_partition_suite(h: Harness) -> bool:
     return failed == 0
 
 
+def lfs_ls(h: Harness, label: str) -> list:
+    """Run 'L ls <label>', return the list of entry names (incl . and ..)."""
+    text = h.op_multi(f"M ls {label}", "end>", 10.0)
+    return [kv(fr).get("name", "?") for fr in LENT_RE.findall(text)]
+
+
+def run_littlefs_suite(h: Harness) -> bool:
+    results: list[tuple[str, bool, str]] = []
+
+    def check(name: str, cond: bool, detail: str = "") -> None:
+        results.append((name, bool(cond), detail))
+        print(f"  [{'PASS' if cond else 'FAIL'}] {name:16} {detail}")
+
+    # littlefs lives on the lfs0/lfs1 partitions, so provision the table first;
+    # back it up and restore it around the run (the FS *content* is scratch).
+    bk = kv(h.op("T backup", 5.0))
+    if bk.get("err") != "0":
+        check("backup", False, f"err={bk.get('err')} (aborting)")
+        print("\nLITTLEFS SUMMARY: aborted (backup failed)")
+        return False
+    check("backup", True, f"n={bk.get('n')} bytes")
+
+    try:
+        pv = kv(h.op("T provision", 5.0))
+        check("provision", pv.get("err") == "0" and pv.get("count") == "6", f"count={pv.get('count')}")
+
+        # distinct payloads per FS: "Hello, lfs0" / "Hello, lfs1"
+        payloads = {
+            "lfs0": "48656C6C6F2C206C667330",
+            "lfs1": "48656C6C6F2C206C667331",
+        }
+        for lab, payload in payloads.items():
+            nbytes = len(payload) // 2
+            fmt = kv(h.op(f"M format {lab}", 15.0))
+            check(f"{lab}_format", fmt.get("rc") == "0", f"rc={fmt.get('rc')}")
+            mnt = kv(h.op(f"M mount {lab}", 10.0))
+            check(f"{lab}_mount", mnt.get("rc") == "0", f"rc={mnt.get('rc')}")
+
+            wr = kv(h.op(f"M write {lab} greet.txt {payload}"))
+            check(f"{lab}_write", wr.get("rc") == "0" and wr.get("n") == str(nbytes),
+                  f"n={wr.get('n')} rc={wr.get('rc')}")
+            rd = kv(h.op(f"M read {lab} greet.txt 64"))
+            check(f"{lab}_readback", rd.get("data", "").upper() == payload.upper(), f"data={rd.get('data')}")
+
+            names = lfs_ls(h, lab)
+            check(f"{lab}_ls", "greet.txt" in names, f"names={names}")
+
+            # power-cycle proxy: unmount + remount, data must survive
+            h.op(f"M unmount {lab}")
+            rm = kv(h.op(f"M mount {lab}", 10.0))
+            check(f"{lab}_remount", rm.get("rc") == "0", f"rc={rm.get('rc')}")
+            rd2 = kv(h.op(f"M read {lab} greet.txt 64"))
+            check(f"{lab}_persist", rd2.get("data", "").upper() == payload.upper(), f"data={rd2.get('data')}")
+
+        # two independent FS instances hold distinct content concurrently
+        d0 = kv(h.op("M read lfs0 greet.txt 64")).get("data", "").upper()
+        d1 = kv(h.op("M read lfs1 greet.txt 64")).get("data", "").upper()
+        check("fs_independent", bool(d0) and bool(d1) and d0 != d1, f"lfs0={d0} lfs1={d1}")
+
+        h.op("M unmount lfs0")
+        h.op("M unmount lfs1")
+    finally:
+        rs = kv(h.op("T restore", 5.0))
+        check("restore", rs.get("err") == "0" and rs.get("verify") == "1",
+              f"err={rs.get('err')} verify={rs.get('verify')}")
+
+    passed = sum(1 for _, ok, _ in results if ok)
+    failed = len(results) - passed
+    print(f"\nLITTLEFS SUMMARY: {passed} passed, {failed} failed")
+    return failed == 0
+
+
 def maybe_reset(args, defaults) -> None:
     sn = args.stlink_sn or defaults.get("stlink_sn")
     if not sn:
@@ -350,7 +423,7 @@ def main() -> int:
     ap.add_argument("--baud", type=int, default=defaults.get("baud", 921600))
     ap.add_argument("--stlink-sn", default=None)
     ap.add_argument("--reset", action="store_true", help="ST-Link reset before testing")
-    ap.add_argument("--suite", choices=["driver", "partition", "all"], default="all")
+    ap.add_argument("--suite", choices=["driver", "partition", "littlefs", "all"], default="all")
     args = ap.parse_args()
 
     if args.reset:
@@ -369,6 +442,9 @@ def main() -> int:
         if args.suite in ("partition", "all"):
             print("\n== partition suite ==")
             ok &= run_partition_suite(h)
+        if args.suite in ("littlefs", "all"):
+            print("\n== littlefs suite ==")
+            ok &= run_littlefs_suite(h)
     finally:
         try:
             h.quit()

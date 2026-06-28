@@ -8,6 +8,7 @@
  ******************************************************************************/
 
 #include "spiflash_test.h"
+#include "spiflash_lfs.h"   // littlefs BD shim (L op)
 
 #include <stdio.h>          // printf
 #include <stdlib.h>         // strtoul, atoi
@@ -24,6 +25,13 @@ static spiflash_device_t     s_x_flash;
 static bool                  s_b_ready;
 static spiflash_part_table_t s_x_parts;       // RAM partition-table context
 static uint8_t              *s_pu8_backup;     // malloc'd sector-0 backup (NULL = none held)
+
+/* Up to two bound littlefs instances (lfs0/lfs1), assigned to slots on demand
+ * and keyed by partition label (L op). */
+#define SPIFLASH_TEST_LFS_SLOTS 2
+static spiflash_lfs_t s_ax_fs[SPIFLASH_TEST_LFS_SLOTS];
+static char           s_aac_fs_label[SPIFLASH_TEST_LFS_SLOTS][SPIFLASH_PART_LABEL_LEN + 1u];
+static bool           s_ab_fs_used[SPIFLASH_TEST_LFS_SLOTS];
 
 /* Frame-data caps: one page for a program, a bounded chunk for a framed read
  * (the host chunks anything larger via repeated read ops). */
@@ -513,5 +521,169 @@ void v_spiflash_test_harness_op_part(const char *pc_arg)
     else
     {
         printf("<HRN T ERR verb=%s>\r\n", ac_verb);
+    }
+}
+
+//------------------------------------------------------------------------------
+// Test-harness 'L' op — littlefs (G8)
+//
+// Each verb takes a partition label first. A label is bound to a free FS slot on
+// first use (opens the partition from the loaded table, binds the BD shim). The
+// host provisions the table (T provision) so lfs0/lfs1 exist before driving L.
+//------------------------------------------------------------------------------
+
+/* Get-or-assign the FS slot for @p pc_label, binding the shim on first use.
+ * Returns NULL and sets *p_i_err on no-slot / partition-open failure. */
+static spiflash_lfs_t *p_x_fs_for(const char *pc_label, int *p_i_err)
+{
+    int                  i_free = -1;
+    int                  i;
+    spiflash_partition_t x_part;
+    spiflash_err_t       x_err;
+
+    *p_i_err = 0;
+    for (i = 0; i < SPIFLASH_TEST_LFS_SLOTS; i++)
+    {
+        if (s_ab_fs_used[i] && (strcmp(s_aac_fs_label[i], pc_label) == 0))
+        {
+            return &s_ax_fs[i];                 // already bound
+        }
+        if (!s_ab_fs_used[i] && (i_free < 0))
+        {
+            i_free = i;
+        }
+    }
+    if (i_free < 0) { *p_i_err = (int)SPIFLASH_ERR_FULL; return NULL; }
+
+    x_err = x_spiflash_part_open(&s_x_parts, pc_label, &x_part);
+    if (x_err != SPIFLASH_OK) { *p_i_err = (int)x_err; return NULL; }
+
+    (void)i_spiflash_lfs_bind(&s_ax_fs[i_free], &x_part);
+    strncpy(s_aac_fs_label[i_free], pc_label, SPIFLASH_PART_LABEL_LEN);
+    s_aac_fs_label[i_free][SPIFLASH_PART_LABEL_LEN] = '\0';
+    s_ab_fs_used[i_free] = true;
+    return &s_ax_fs[i_free];
+}
+
+void v_spiflash_test_harness_op_lfs(const char *pc_arg)
+{
+    char            ac_verb[12];
+    char            ac_lab[20];
+    const char     *pc;
+    spiflash_lfs_t *p_x_fs;
+    int             i_err = 0;
+    int             i_rc;
+
+    pc = pc_next_tok(pc_arg, ac_verb, (uint32_t)sizeof(ac_verb));
+    if (ac_verb[0] == '\0') { printf("<HRN M ERR noverb>\r\n"); return; }
+
+    if (x_spiflash_test_ensure_init() != SPIFLASH_OK) { printf("<HRN M ERR init>\r\n"); return; }
+
+    pc = pc_next_tok(pc, ac_lab, (uint32_t)sizeof(ac_lab));   // every L verb takes a label
+    if (ac_lab[0] == '\0') { printf("<HRN M ERR nolabel>\r\n"); return; }
+
+    p_x_fs = p_x_fs_for(ac_lab, &i_err);
+    if (p_x_fs == NULL)
+    {
+        printf("<HRN M %s label=%s err=%d nofs>\r\n", ac_verb, ac_lab, i_err);
+        return;
+    }
+
+    if (strcmp(ac_verb, "format") == 0)
+    {
+        i_rc = i_spiflash_lfs_format(p_x_fs);
+        printf("<HRN M format label=%s rc=%d>\r\n", ac_lab, i_rc);
+    }
+    else if (strcmp(ac_verb, "mount") == 0)
+    {
+        i_rc = i_spiflash_lfs_mount(p_x_fs);
+        printf("<HRN M mount label=%s rc=%d>\r\n", ac_lab, i_rc);
+    }
+    else if (strcmp(ac_verb, "unmount") == 0)
+    {
+        i_rc = i_spiflash_lfs_unmount(p_x_fs);
+        printf("<HRN M unmount label=%s rc=%d>\r\n", ac_lab, i_rc);
+    }
+    else if (strcmp(ac_verb, "write") == 0)
+    {
+        char           ac_name[32];
+        const char    *pc_hex = pc_next_tok(pc, ac_name, (uint32_t)sizeof(ac_name));
+        static uint8_t au8_wr[256];
+        uint32_t       u32_n = u32_hex_to_bytes(pc_hex, au8_wr, (uint32_t)sizeof(au8_wr));
+        lfs_file_t     x_file;
+        lfs_ssize_t    i_w = -1;
+
+        i_rc = lfs_file_open(&p_x_fs->x_lfs, &x_file, ac_name,
+                             LFS_O_WRONLY | LFS_O_CREAT | LFS_O_TRUNC);
+        if (i_rc == 0)
+        {
+            int i_close;
+            i_w = lfs_file_write(&p_x_fs->x_lfs, &x_file, au8_wr, u32_n);
+            i_close = lfs_file_close(&p_x_fs->x_lfs, &x_file);
+            if (i_rc == 0) { i_rc = i_close; }
+        }
+        printf("<HRN M write label=%s name=%s n=%ld rc=%d>\r\n",
+               ac_lab, ac_name, (long)i_w, i_rc);
+    }
+    else if (strcmp(ac_verb, "read") == 0)
+    {
+        char           ac_name[32];
+        char           ac_len[8];
+        const char    *pc_after = pc_next_tok(pc, ac_name, (uint32_t)sizeof(ac_name));
+        uint32_t       u32_len;
+        static uint8_t au8_rd[256];
+        lfs_file_t     x_file;
+        lfs_ssize_t    i_r = -1;
+
+        (void)pc_next_tok(pc_after, ac_len, (uint32_t)sizeof(ac_len));
+        u32_len = (uint32_t)strtoul(ac_len, NULL, 10);
+        if ((u32_len == 0u) || (u32_len > (uint32_t)sizeof(au8_rd)))
+        {
+            printf("<HRN M read label=%s name=%s rc=-1 badlen>\r\n", ac_lab, ac_name);
+            return;
+        }
+        i_rc = lfs_file_open(&p_x_fs->x_lfs, &x_file, ac_name, LFS_O_RDONLY);
+        if (i_rc == 0)
+        {
+            int i_close;
+            i_r = lfs_file_read(&p_x_fs->x_lfs, &x_file, au8_rd, u32_len);
+            i_close = lfs_file_close(&p_x_fs->x_lfs, &x_file);
+            if (i_rc == 0) { i_rc = i_close; }
+        }
+        printf("<HRN M read label=%s name=%s n=%ld data=", ac_lab, ac_name, (long)i_r);
+        if (i_r > 0)
+        {
+            for (lfs_ssize_t i = 0; i < i_r; i++) { printf("%02X", au8_rd[i]); }
+        }
+        printf(" rc=%d>\r\n", i_rc);
+    }
+    else if (strcmp(ac_verb, "ls") == 0)
+    {
+        lfs_dir_t       x_dir;
+        struct lfs_info x_info;
+
+        i_rc = lfs_dir_open(&p_x_fs->x_lfs, &x_dir, "/");
+        if (i_rc == 0)
+        {
+            int i_more;
+            while ((i_more = lfs_dir_read(&p_x_fs->x_lfs, &x_dir, &x_info)) > 0)
+            {
+                printf("<HRN M ent label=%s name=%s type=%d size=%lu>\r\n",
+                       ac_lab, x_info.name, (int)x_info.type, (unsigned long)x_info.size);
+            }
+            (void)lfs_dir_close(&p_x_fs->x_lfs, &x_dir);
+        }
+        printf("<HRN M ls label=%s rc=%d end>\r\n", ac_lab, i_rc);
+    }
+    else if (strcmp(ac_verb, "rm") == 0)
+    {
+        char ac_name[32];
+        (void)pc_next_tok(pc, ac_name, (uint32_t)sizeof(ac_name));
+        i_rc = lfs_remove(&p_x_fs->x_lfs, ac_name);
+        printf("<HRN M rm label=%s name=%s rc=%d>\r\n", ac_lab, ac_name, i_rc);
+    }
+    else
+    {
+        printf("<HRN M ERR verb=%s>\r\n", ac_verb);
     }
 }

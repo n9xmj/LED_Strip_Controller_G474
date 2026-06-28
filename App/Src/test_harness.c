@@ -560,6 +560,7 @@ static const harness_op_t s_ax_harness_ops[] =
     { 'F', "flush: fill TX ring <n=256>, fflush(stdout), report drain", v_harness_op_flush },
     { 'S', "storage: S <verb> [args] — id|geom|rdsr|wren|wrdi|erase|prog|write|read", v_spiflash_test_harness_op },
     { 'T', "partition: T <verb> [args] — backup|restore|provision|format|load|list|create|del|erase|mount|free", v_spiflash_test_harness_op_part },
+    { 'M', "littlefs: M <verb> <label> [args] — format|mount|unmount|write|read|ls|rm ('L' is the list builtin)", v_spiflash_test_harness_op_lfs },
 };
 
 //------------------------------------------------------------------------------
