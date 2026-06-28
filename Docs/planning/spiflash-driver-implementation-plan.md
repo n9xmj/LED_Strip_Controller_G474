@@ -67,7 +67,7 @@ own**; SFUD / FAL / the legacy MX25R80 driver are **reference material only**.
 ## Must-Ship Gap (MSG) — v1 firmware
 
 *Append-only `G` IDs; mark ✅ when shipped (do not renumber). **Ord** = bring-up tier (1 before 2).*
-*Last audited: 2026-06-27 (G0 bench-verified; G1–G6 ✅ code-complete/builds; G7–G12 pending).*
+*Last audited: 2026-06-27 (G0 bench-verified; G1–G6 + G11 ✅ code-complete/builds; G7–G10, G12 pending).*
 
 | ID | Ord | Status | Item | Ref |
 |----|:---:|:------:|------|-----|
@@ -78,7 +78,7 @@ own**; SFUD / FAL / the legacy MX25R80 driver are **reference material only**.
 | G4 | 2 | ✅ | **SFDP detect → runtime `device_info`** — `spiflash_info_t` (capacity, sector_count, page/sector/block sizes, addr-bytes, erase opcodes, source). `x_spiflash_detect`: parse SFDP BFPT (density→capacity, addr-bytes, page size) → **JEDEC fallback table** (W25Q128/64) → standard defaults sized from `2^capacity_code`. Called by `init`. **Builds 0/0; bench-exercised at G12.** | S1, I7 |
 | G5 | 2 | ✅ | **Erase/program/read primitives** — `spiflash.c`: sector/32K/64K/chip erase, `x_spiflash_erase_range` (block-optimized), `page_program` (page-bounded), **address-range `x_spiflash_write`** (page-split, no erase = littlefs prog path) + **`x_spiflash_read`** (fast-read, chunked), and L2 `x_spiflash_write_erase` (auto-erase, non-FS). Bounds-checked vs detected capacity. **Builds 0/0; bench-exercised at G12.** | D6, S2 |
 | G6 | 2 | ✅ | **DMA bulk path + pump + re-entrancy guard** — *subsumed by the architecture*: DMA + 16-byte threshold + re-entrancy guard live in the transport (G2); G5's read/program/erase use them automatically; idle pump runs in `wait_ready` between status polls (G3). *Device-level operation guard (WREN+op+wait) deferred until flash is exposed to re-entrant callers (menu/Berry).* | I2, I6, S4 |
-| G11 | 3 | 🔴 | **Partition module + default provisioning** (needs G4 geometry + G5 range R/W + the CRC util / `.ioc` CRC enable (I9); precedes all FS layers) — read/validate the sector-0 table (header magic+CRC32, slot 0); provision the default layout (I5 table: table / generic-data / nvmparams / reserved-A / 2×littlefs / reserved-B); enumerate + open-by-label → `spiflash_partition_t`. | I5, I4, I9 |
+| G11 | 3 | ✅ | **Partition module + provisioning** — `App/spiflash/spiflash_part.{c,h}` + the I9 CRC util (`App/Inc/crc32.h`, `App/Src/crc32.c`). Slot-0 header (magic+ver+CRC32) + 64-byte entries (flags union); RAM table context w/ per-entry **mounted guard**; load/validate, **provision_default** (I5 layout), format, **create** (spec struct, auto-place when start=0, dup/overlap/full checks), **delete** (compacts), **erase**, open/find by label, count/get + findfirst/findnext, largest-free, and partition-relative read/write/erase. **Builds 0/0; bench-exercised at G12.** | I5, I4, I9 |
 | G12 | 3 | 🔴 | **Debug-menu reorg — SPI Flash submenu** (`MENU_ITEM_SUBMENU`): a dedicated home for flash ops + tests. **Migrate `v_debug_quick_test_1/2` (G0/G2) into it** (frees the top-level quick-test slots); add device-op items as primitives land (JEDEC/ID, register dump, erase, hex-dump read/write); add a **partition map / "directory" listing** (per-entry label, type/subtype, offset, size, flags) once G11 lands. G9 later adds FS ops. | T1, G0, I5 |
 | G7 | 4 | 🔴 | **littlefs BD shim** (`read/prog/erase/sync` callbacks; `cfg.context` → partition handle) + `lfs_config` from runtime geometry. Per-partition — instantiated **twice** (two FSes). Depends on G11. | D2, I3, I5 |
 | G8 | 4 | 🔴 | **Mount / format / file-IO bench test** on **both** littlefs partitions (format, write, remount, read-back, verify) — exercises the partition API via two independent FS instances. | T1 |
@@ -373,11 +373,11 @@ Captured now so the migration agent has context (the driver is being built *for*
   templates + littlefs DESIGN/SPEC → `Docs/littlefs-extras/` (moved out of the build dir;
   `App/littlefs/` now holds only the built core + LICENSE/VENDOR).
 - **Plan status (2026-06-27):** Big Board — 22 🟢 · 1 🟡 (T1) · 0 🔵 · 0 🔴 —
-  no open user confirms. MSG — **7/13 (G0–G6 ✅)**; G7–G12 pending. Partition table promoted from W1
-  into v1 (I5/G11); two littlefs FSes are the partition-API test. **Bench facts banked:** wiring
-  solid to 42.5 MHz (I8); transport + device + geometry + erase/program/read (`App/spiflash/`) build
-  0/0; CRC IP enabled in `.ioc`. **Next suggested:** **G11** (partition module — needs the I9 CRC
-  util; `.ioc` CRC already on) → then **G12** (SPI Flash debug submenu, first on-hardware exercise).
-  *G9/G12 prereq:* add `App/spiflash` to the IDE include path before external files include its headers.
+  no open user confirms. MSG — **8/13 (G0–G6, G11 ✅)**; G7–G10, G12 pending. **Bench facts banked:**
+  wiring solid to 42.5 MHz (I8); full driver stack (transport → device → geometry → erase/program/read
+  → partitions + CRC util) builds 0/0; nothing yet exercised on hardware past G0. **Next suggested:**
+  **G12** (SPI Flash debug submenu — first on-hardware exercise of the whole stack: JEDEC/geometry,
+  provision, partition-map, erase/program/read), then **G7/G8** (two littlefs FSes).
+  **G12 prereq:** add `App/spiflash` to the IDE include path (external files will include its headers).
 
 **End of spiflash-driver-implementation-plan.md**

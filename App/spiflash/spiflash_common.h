@@ -33,7 +33,11 @@ typedef enum
     SPIFLASH_ERR_LOCK,          // could not acquire the shared-bus lock
     SPIFLASH_ERR_UNSUPPORTED,   // feature not supported by this backend
     SPIFLASH_ERR_NODEV,         // device not detected / bad JEDEC id
-    SPIFLASH_ERR_VERIFY,        // read-back / verify mismatch
+    SPIFLASH_ERR_VERIFY,        // read-back / verify / CRC mismatch
+    SPIFLASH_ERR_NOTFOUND,      // label / entry / provisioned table not found
+    SPIFLASH_ERR_EXISTS,        // a partition with that label already exists
+    SPIFLASH_ERR_FULL,          // no free partition-table entry slot
+    SPIFLASH_ERR_NOSPACE,       // no free flash region large enough
 }
 spiflash_err_t;
 
