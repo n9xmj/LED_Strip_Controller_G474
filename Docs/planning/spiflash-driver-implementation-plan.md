@@ -60,7 +60,7 @@ own**; SFUD / FAL / the legacy MX25R80 driver are **reference material only**.
 | Q1 | 🟢 | H723 board uses **OCTOSPI** for its W25Q64 (HOLD/WP bonded → full quad/octal there); TF-card slot is a **separate bus/IP** (no contention). Resolved 2026-06-27 → drives D4 / W3. |
 | I8 | 🟢 | **SPI clock (locked)** — keep the CubeMX default **10 MHz (/16)** for now (LCD + flash share it; bench proven clean to 42.5 MHz, so ample margin). Per-transaction prescaler switching deferred until a faster flash rate is wanted — trivial to add later (G2 proved runtime `HAL_SPI_Init` reconfig works). |
 | I9 | 🟢 | **CRC32 via the STM32 hardware CRC IP** (wrapped). On-chip CRC unit behind a thin `u32_crc32(buf,len)` util (cand. `App/Src/crc32.{c,h}`) shared by the partition table (I5) + nvmparams (W8) — one CRC path. Standard reflected CRC-32 / zlib (over CRC-16); **CPU-fed, DMA not warranted** (small buffers, no CRC DMA request line). Stateful peripheral → atomic use (cooperative, no ISR users); **util force-sets config (not `.ioc`-dependent)**, keeps layers portable. **Prereq: enable CRC in `.ioc` + regen** (at G11). |
-| T1 | 🟡 | **Bring-up + test plan:** JEDEC-ID read, register dump, erase/program/read-back, DMA path, littlefs mount/format/file-IO — exercised via debug-menu hooks (and later a PLAY/Berry tie-in). |
+| T1 | 🟢 | **Bring-up + test plan — realized.** Granular harness ops `S` (chip) / `T` (partition) / `M` (littlefs) the host composes, plus `scripts/spiflash_bench.py` (52-check driver+partition+littlefs HIL suite). JEDEC/geometry, register/WEL, erase/program/range-write/read, DMA-vs-polled, partition provision/CRC/create-corner-cases/mounted-guard, and littlefs mount/format/file-IO/persistence all validated on hardware (2026-06-28). |
 
 ---
 
@@ -74,10 +74,10 @@ own**; SFUD / FAL / the legacy MX25R80 driver are **reference material only**.
 |----|:---:|:------:|------|-----|
 | G0 | 0 | ✅ | **Bare-metal wiring smoke** — in `v_debug_quick_test_1()` (key **`1`**) + a bus-integrity stress test in `v_debug_quick_test_2()` (key **`2`**). Polled HAL, no driver. **Bench-verified 2026-06-27:** JEDEC `EF 40 18` (16 MB) clean ×4; WREN/WRDI **WEL** handshake VERIFIED (replaced an ambiguous QE volatile-toggle); G2 sector erase+write@10 MHz then read-verify sweep **PASS 0-errors at 5/10/21/42 MHz across 8 runs** (~6.5 MB). | T1, I8 |
 | G1 | 1 | ✅ | **Platform wiring** — CubeMX regen (`hdma_spi1_rx` + DMA2 clk/IRQ) done; `FLASH_SPI_HANDLE` + `FLASH_SELECT()/FLASH_DESELECT()` (PC3) added to `platform.h`. | D4, I2 |
-| G2 | 1 | ✅ | **Transport layer** — `App/spiflash/spiflash_ll.{c,h}` + `spiflash_common.h`: `spiflash_cmd_t` transaction model, CS control, polled + DMA data (threshold, fast-read via TxRx-DMA same-buf), per-phase line-width (single-wire backend), bus lock/unlock + idle hooks, re-entrancy guard, `spiflash_err_t`. **Builds 0/0; first bench-exercised at G3.** | D4, S5, S4, S3, I6 |
-| G3 | 1 | ✅ | **Device primitives + register layer** — `App/spiflash/spiflash.{c,h}`: `SPIFLASH_CMD_*` opcodes + `SPIFLASH_REG_*` ids (D7), SR1/2/3 bitfield unions + masks (datasheet-verified), `spiflash_device_t` handle (embeds transport), `read_reg`/`write_reg` (vol + non-vol), WREN/WRDI, `is_busy`/`wait_ready` (pumps idle between polls), JEDEC-ID read + NODEV sanity. Driver accepts any valid JEDEC part (the `EF 40 18` assert lives in bench tests, not the driver — S1). **Builds 0/0; bench-exercised when wired into the G12 menu.** | I1, D7, S1 |
-| G4 | 2 | ✅ | **SFDP detect → runtime `device_info`** — `spiflash_info_t` (capacity, sector_count, page/sector/block sizes, addr-bytes, erase opcodes, source). `x_spiflash_detect`: parse SFDP BFPT (density→capacity, addr-bytes, page size) → **JEDEC fallback table** (W25Q128/64) → standard defaults sized from `2^capacity_code`. Called by `init`. **Builds 0/0; bench-exercised at G12.** | S1, I7 |
-| G5 | 2 | ✅ | **Erase/program/read primitives** — `spiflash.c`: sector/32K/64K/chip erase, `x_spiflash_erase_range` (block-optimized), `page_program` (page-bounded), **address-range `x_spiflash_write`** (page-split, no erase = littlefs prog path) + **`x_spiflash_read`** (fast-read, chunked), and L2 `x_spiflash_write_erase` (auto-erase, non-FS). Bounds-checked vs detected capacity. **Builds 0/0; bench-exercised at G12.** | D6, S2 |
+| G2 | 1 | ✅ | **Transport layer** — `App/spiflash/spiflash_ll.{c,h}` + `spiflash_common.h`: `spiflash_cmd_t` transaction model, CS control, polled + DMA data (threshold, fast-read via TxRx-DMA same-buf), per-phase line-width (single-wire backend), bus lock/unlock + idle hooks, re-entrancy guard, `spiflash_err_t`. **HIL-validated 2026-06-28 (`S` suite incl. DMA-vs-polled).** | D4, S5, S4, S3, I6 |
+| G3 | 1 | ✅ | **Device primitives + register layer** — `App/spiflash/spiflash.{c,h}`: `SPIFLASH_CMD_*` opcodes + `SPIFLASH_REG_*` ids (D7), SR1/2/3 bitfield unions + masks (datasheet-verified), `spiflash_device_t` handle (embeds transport), `read_reg`/`write_reg` (vol + non-vol), WREN/WRDI, `is_busy`/`wait_ready` (pumps idle between polls), JEDEC-ID read + NODEV sanity. Driver accepts any valid JEDEC part (the `EF 40 18` assert lives in bench tests, not the driver — S1). **HIL-validated 2026-06-28 (`S id`/`rdsr`/`wren`).** | I1, D7, S1 |
+| G4 | 2 | ✅ | **SFDP detect → runtime `device_info`** — `spiflash_info_t` (capacity, sector_count, page/sector/block sizes, addr-bytes, erase opcodes, source). `x_spiflash_detect`: parse SFDP BFPT (density→capacity, addr-bytes, page size) → **JEDEC fallback table** (W25Q128/64) → standard defaults sized from `2^capacity_code`. Called by `init`. **HIL-validated 2026-06-28 (`S geom` reports src=SFDP on the W25Q128).** | S1, I7 |
+| G5 | 2 | ✅ | **Erase/program/read primitives** — `spiflash.c`: sector/32K/64K/chip erase, `x_spiflash_erase_range` (block-optimized), `page_program` (page-bounded), **address-range `x_spiflash_write`** (page-split, no erase = littlefs prog path) + **`x_spiflash_read`** (fast-read, chunked), and L2 `x_spiflash_write_erase` (auto-erase, non-FS). Bounds-checked vs detected capacity. **HIL-validated 2026-06-28 (`S` suite: erase/program/read, range-write page-split + no-wrap).** | D6, S2 |
 | G6 | 2 | ✅ | **DMA bulk path + pump + re-entrancy guard** — *subsumed by the architecture*: DMA + 16-byte threshold + re-entrancy guard live in the transport (G2); G5's read/program/erase use them automatically; idle pump runs in `wait_ready` between status polls (G3). *Device-level operation guard (WREN+op+wait) deferred until flash is exposed to re-entrant callers (menu/Berry).* | I2, I6, S4 |
 | G11 | 3 | ✅ | **Partition module + provisioning** — `App/spiflash/spiflash_part.{c,h}` + the I9 CRC util (`App/Inc/crc32.h`, `App/Src/crc32.c`). Slot-0 header (magic+ver+CRC32) + 64-byte entries (flags union); RAM table context w/ per-entry **mounted guard**; load/validate, **provision_default** (I5 layout), format, **create** (spec struct, auto-place when start=0, dup/overlap/full checks), **delete** (compacts), **erase**, open/find by label, count/get + findfirst/findnext, largest-free, and partition-relative read/write/erase. **HIL-validated on hardware 2026-06-28** (`spiflash_bench.py` `T` suite, 22 checks: backup/provision/load-CRC/default-layout/lfs-equal-split + create corner cases [auto-place first-fit/advance/no-fit, overlap, OOB, table-sector, zero-size, long-label, dup] + delete/mounted-guard + sector-0 backup→restore-verify). | I5, I4, I9 |
 | G12 | 3 | 🟡 | **Debug-menu reorg — SPI Flash submenu** (`MENU_ITEM_SUBMENU`): a dedicated home for flash ops + tests. **In progress (2026-06-28):** `[f]` submenu built; quick tests migrated (`[a]` access / `[s]` speed); `[i]` driver identify; shared bench module `App/spiflash_test.{c,h}` with **granular `S`/`T` test-harness ops** the host composes — `scripts/spiflash_bench.py` runs the 34-check driver+partition HIL suite (all green). **Remaining:** HuIL partition-map/utility menu items (create/del/list/reset/erase-sector); G9 adds FS ops once G7 mounts. | T1, G0, I5 |
@@ -101,10 +101,11 @@ own**; SFUD / FAL / the legacy MX25R80 driver are **reference material only**.
 | W7 | 🔵 | **Berry / PLAY tie-in** — expose flash + FS ops as script functions (depends on Berry W3 FS tie-in). |
 | W8 | 🔵 | **nvmparams integration** — port the lightweight ESP-NVS-inspired KV parameter manager (`Docs/Not-in-project-temp/nvmparams/`) and add a **`NVM_DEVICE_SPIFLASH`** backend so an nvmparams *pool* lives in a dedicated **spiflash partition** (whole-pool read = range-read; commit = erase+program the partition). A *second* consumer of the partition layer alongside littlefs — strengthens I5/W1. Project-specific slot IDs (`NVM_PARAM_*`/`NVM_CONFIG_*`) get replaced for this project. See detail note. |
 | W9 | 🔵 | **External-script / host littlefs access** — file upload/download, directory listing, rename, delete over the host protocol / **HIL test REPL**; complementary **Berry** tie-ins (with W7). Builds on the existing test-harness file-upload path (Berry W4). **W13** is the interactive host shell built on these ops. |
-| W10 | 🔵 | **littlefs ↔ C stdio retarget** — route newlib `<stdio.h>` (`fopen/fread/fwrite/fclose/fseek/…`) to littlefs by path prefix via the `_open/_read/_write/_close/_lseek/_fstat` syscalls (+ fd→`lfs_file_t` table). **newlib-nano is sufficient** (file I/O is in the syscalls, not the nano/full split); mind heap per `fopen` (FILE+buffer — use `setvbuf`). Makes any `fopen` code work, incl. Berry's stdio file plugin → **enables W7**. *Lighter Berry-only alt:* bind `be_port` file ops straight to `lfs_file_*`, skipping stdio. |
+| W10 | 🔵 | **littlefs ↔ C stdio retarget** — route newlib `<stdio.h>` (`fopen/fread/fwrite/fclose/fseek/…`) to littlefs by path prefix via the `_open/_read/_write/_close/_lseek/_fstat` syscalls (+ fd→`lfs_file_t` table). **newlib-nano is sufficient** (file I/O is in the syscalls, not the nano/full split); mind heap per `fopen` (FILE+buffer — use `setvbuf`). Makes any `fopen` code work, incl. Berry's stdio file plugin → **enables W7**. *Lighter Berry-only alt:* bind `be_port` file ops straight to `lfs_file_*`, skipping stdio. **Phase A done (2026-06-28):** the App-side VFS + fd table exist (see W12). **Phase B pending:** make `_open/_read/_write/_close/_lseek/_fstat` weak in `syscalls.c` + App overrides → VFS for fd≥3, console for fd 0/1/2. |
 | W11 | 🔵 | **Migrate SPI flash SPI1 → QUADSPI** — frees SPI1 for LCD-exclusive use; a dedicated flash bus retires the shared-bus lock (S5) and the dual-CS-power-up dance. Single-line (1-1-1) for cmd/program + **dual-line read** (`0x3B`, same pins) for ~2× read throughput; quad N/A (breakout + pin pressure). New D4 transport backend `spiflash_ll_qspi.c`, layers above unchanged — doubles as the W3 OCTOSPI dress rehearsal. **Pin-move prereq DONE** (USART3_TX/LED_STRIP_3 PB10→PB9, .ioc regen + rewire, 2026-06-28). See detail. |
-| W12 | 🔵 | **littlefs partition mount/unmount + label-prefixed unix paths** — address files `/<partition-label>/path/to/file` across the two FSes via C stdio. Mount/unmount is native littlefs (one `lfs_t` per partition); the label namespace is a thin mount-table router built into the W10 stdio retarget (or the lighter Berry-only `fs.*` binding). Depends on G7/G8 + W10. See detail. |
+| W12 | 🔵 | **littlefs partition mount/unmount + label-prefixed unix paths** — address files `/<partition-label>/path/to/file` across the two FSes via C stdio. Mount/unmount is native littlefs (one `lfs_t` per partition); the label namespace is a thin mount-table router built into the W10 stdio retarget (or the lighter Berry-only `fs.*` binding). Depends on G7/G8 + W10. **DONE 2026-06-28** — `App/vfs.{c,h}`: mount table {label→`lfs_t`} + fd table, resolves `/<label>/rel`; the `M` harness op routes through it (18-check littlefs suite re-validates). Path namespace complete; only the stdio *front door* (W10 Phase B) remains to expose it via `fopen`. See detail. |
 | W13 | 🔵 | **Host-side filesystem shell (interactive REPL)** — a Python shell over the device host-protocol giving reasonably complete remote FS access: `ls` / `cd` / `pwd`, `rm`, `rename`, `cp` / `mv`, plus `get` (copy-to-host) and `put` (upload-from-host). Unix-like, using the W12 `/<label>/...` path scheme across both littlefs partitions. The host-side **front-end** over the **W9** device fs ops (W9 = the primitives; W13 = the usable shell). Depends on W9 + G7/G8 (+ W12 paths). See detail. |
+| W14 | 🔵 | **Partition RO-flag enforcement + post-create flag mutation** (lower priority) — the `SPIFLASH_PART_FLAG_READONLY` bit is stored at create time but **unenforced** (the runtime handle carries no flags; partition R/W, VFS, and littlefs all ignore it) and **immutable after create** (only `set_mounted` exists). Add flags to the handle + RO rejection in `x_spiflash_part_write`/`erase_range`, a VFS write-intent reject on RO mounts, and a `set_flags`/`set_readonly` mutator (RAM edit + sector-0 commit). See detail. |
 
 ---
 
@@ -416,6 +417,25 @@ RAM never caps file size; a length/CRC check per transfer guards integrity.
 **Depends on:** W9 (device fs ops) + G7/G8 (mounted FSes) + W12 (label paths). Natural companion to
 the Berry `fs.*` tie-in (W7) — same device ops, two front-ends (interactive shell + scripting).
 
+### W14 — Partition RO-flag enforcement + post-create mutation
+**Status:** 🔵 (lower priority) · **Needs user:** no
+**Gap (confirmed 2026-06-28):** the RO flag (`SPIFLASH_PART_FLAG_READONLY` / the flags-union
+`b_readonly`) is written into the on-flash entry at create time but is **advisory only** — no layer
+honors it, and it cannot be changed after create:
+- `spiflash_partition_t` (the runtime handle) has **no flags field**; `open`/`find` drop them, so
+  `x_spiflash_part_write` / `x_spiflash_part_erase_range` cannot check RO (they only bounds-check).
+- `vfs.c` never consults flags; littlefs `prog` → `x_spiflash_part_write` would program an RO region.
+- the only entry mutator is `x_spiflash_part_set_mounted` (RAM guard); RO is settable only via the
+  `create` spec.
+**Fix (three parts):** (1) add `spiflash_part_flags_t x_flags` to the handle, populated by `open`/`find`;
+reject in `x_spiflash_part_write`/`erase_range` when `b_readonly` (new `SPIFLASH_ERR_READONLY`, or reuse
+`PARAM`) — enforces RO for every consumer at the partition layer. (2) VFS: `i_vfs_open` rejects
+write-intent opens (`O_WRONLY/O_RDWR/O_CREAT/O_TRUNC`) on an RO mount up front (→ `-EROFS`/`LFS_ERR_*`),
+so littlefs never attempts a write. (3) add `x_spiflash_part_set_flags(table, label, flags)` (or a
+`_set_readonly` convenience) — RAM edit + sector-0 commit + CRC refresh (same path as create/delete).
+HIL: a `T` set-flags verb + an `M` write-rejected-on-RO check. ~1 hour; decide whether set-flags
+requires the partition unmounted.
+
 ---
 
 ## H723 migration notes (forward-looking — for the future port session)
@@ -455,12 +475,13 @@ Captured now so the migration agent has context (the driver is being built *for*
   chip table + read/erase/write structure + lock hook → `Docs/Not-in-project-temp/SFUD/`; FS BD
   templates + littlefs DESIGN/SPEC → `Docs/littlefs-extras/` (moved out of the build dir;
   `App/littlefs/` now holds only the built core + LICENSE/VENDOR).
-- **Plan status (2026-06-27):** Big Board — 22 🟢 · 1 🟡 (T1) · 0 🔵 · 0 🔴 —
-  no open user confirms. MSG — **8/13 (G0–G6, G11 ✅)**; G7–G10, G12 pending. **Bench facts banked:**
-  wiring solid to 42.5 MHz (I8); full driver stack (transport → device → geometry → erase/program/read
-  → partitions + CRC util) builds 0/0; nothing yet exercised on hardware past G0. **Next suggested:**
-  **G12** (SPI Flash debug submenu — first on-hardware exercise of the whole stack: JEDEC/geometry,
-  provision, partition-map, erase/program/read), then **G7/G8** (two littlefs FSes).
-  **G12 prereq DONE (2026-06-27):** `App/spiflash` on the IDE include path; clean in-IDE build confirmed.
+- **Plan status (2026-06-28):** Big Board — 23 🟢 · 0 🟡 · 0 🔵 · 0 🔴 — no open items. MSG —
+  **10/13 (G0–G8, G11 ✅; G12 🟡 in progress)**; G9–G10 pending. **Validated on hardware:** the whole
+  stack — transport (polled+DMA) → device/registers → SFDP geometry → erase/program/range-write/read →
+  partition manager (provision/CRC/create corner-cases/mounted-guard) → **two littlefs FSes** — via
+  `scripts/spiflash_bench.py` (**52 checks**: 12 driver + 22 partition + 18 littlefs, all green), driven
+  by the harness `S`/`T`/`M` ops. **W10/W12 Phase A done** (label-routed VFS over littlefs, App-only);
+  **Phase B pending** (newlib stdio retarget → VFS, needs the `syscalls.c` weak-edit). **Next suggested:**
+  W10/W12 **Phase B**, then the G12 HuIL menu items + G9/G10 cleanup, then **W7** (Berry via stdio).
 
 **End of spiflash-driver-implementation-plan.md**
