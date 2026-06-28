@@ -304,7 +304,8 @@ Captured now so the migration agent has context (the driver is being built *for*
   for future diffs.
 - **Reference map:** legacy primitive shapes → `Docs/Not-in-project-temp/MX25R80.*`; SFDP detect +
   chip table + read/erase/write structure + lock hook → `Docs/Not-in-project-temp/SFUD/`; FS BD
-  templates → `App/littlefs/bd/`.
+  templates + littlefs DESIGN/SPEC → `Docs/littlefs-extras/` (moved out of the build dir;
+  `App/littlefs/` now holds only the built core + LICENSE/VENDOR).
 - **Plan status (2026-06-27):** Big Board — 14 🟢 · 5 🟡 (I5, I6, I7, I8, T1) · 0 🔵 · 0 🔴 —
   no open user confirms. MSG — **1/12 (G0 ✅)**; G1–G11 pending. Partition table promoted from W1
   into v1 (I5/G11); two littlefs FSes are the partition-API test. **Bench facts banked:** wiring

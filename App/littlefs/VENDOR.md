@@ -8,10 +8,12 @@
 
 ## Build status
 
-`App/littlefs/` is **excluded from the firmware build** (CubeIDE `.cproject`, Debug + Release)
-until the block-device shim lands (plan row G7). Only these four files are ever compiled into
-firmware: `lfs.c`, `lfs.h`, `lfs_util.c`, `lfs_util.h`. The upstream test/bench scaffolding
-(`runners/`, `tests/`, `benches/`, `scripts/`, `bd/`) is kept for reference but never built.
+`App/littlefs/` holds **only the files destined for the firmware build** — `lfs.c`, `lfs.h`,
+`lfs_util.c`, `lfs_util.h` (+ this `VENDOR.md` and `LICENSE.md`). It is currently **excluded from
+the build** (CubeIDE `.cproject`, Debug + Release) until the block-device shim lands (plan row G7).
+The upstream test/bench scaffolding and standalone docs (`bd/`, `runners/`, `tests/`, `benches/`,
+`scripts/`, `Makefile`, `README.md`, `DESIGN.md`, `SPEC.md`) were moved to
+`Docs/littlefs-extras/` — kept for reference, never built.
 
 ## Local-modification policy
 
