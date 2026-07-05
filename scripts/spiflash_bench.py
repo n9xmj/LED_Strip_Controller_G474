@@ -124,7 +124,7 @@ class Harness:
         """Send a one-frame op, return the last framed <HRN ...> line (or '')."""
         self.s.write((line + "\r").encode("ascii"))
         text = self._read_until(">", timeout_s)
-        m = re.findall(r"<HRN [STM] [^>]*>", text)  # S=spiflash T=partition M=littlefs
+        m = re.findall(r"<HRN [STMO] [^>]*>", text)  # S=spiflash T=partition M=littlefs O=stdio
         return m[-1] if m else ""
 
     def op_multi(self, line: str, end_token: str, timeout_s: float = 10.0) -> str:
@@ -405,6 +405,83 @@ def run_littlefs_suite(h: Harness) -> bool:
     return failed == 0
 
 
+def run_stdio_suite(h: Harness) -> bool:
+    """C stdio front door (W10/W12 Phase B): fopen/fwrite/fseek/ftell/fread/fclose
+    + stat()/remove() over the newlib syscall retarget, driven by the 'O' op on a
+    mounted lfs0. Bracketed by table backup/restore (FS content is scratch)."""
+    results: list[tuple[str, bool, str]] = []
+
+    def check(name: str, cond: bool, detail: str = "") -> None:
+        results.append((name, bool(cond), detail))
+        print(f"  [{'PASS' if cond else 'FAIL'}] {name:20} {detail}")
+
+    bk = kv(h.op("T backup", 5.0))
+    if bk.get("err") != "0":
+        check("backup", False, f"err={bk.get('err')} (aborting)")
+        print("\nSTDIO SUMMARY: aborted (backup failed)")
+        return False
+    check("backup", True, f"n={bk.get('n')} bytes")
+
+    label = "lfs0"
+    fname = "phaseb.txt"
+    payload_bytes = b"PhaseB stdio OK"
+    payload = payload_bytes.hex().upper()
+    nbytes = len(payload_bytes)
+
+    try:
+        pv = kv(h.op("T provision", 5.0))
+        check("provision", pv.get("err") == "0" and pv.get("count") == "6", f"count={pv.get('count')}")
+
+        fmt = kv(h.op(f"M format {label}", 15.0))
+        check("format", fmt.get("rc") == "0", f"rc={fmt.get('rc')}")
+        mnt = kv(h.op(f"M mount {label}", 10.0))
+        check("mount", mnt.get("rc") == "0", f"rc={mnt.get('rc')}")
+
+        # --- write -> readback round-trip (fopen/fwrite/fseek/ftell/fread/fclose) ---
+        # match=1 requires wn==rn==end==nbytes AND the read-back bytes equal what was
+        # written; end is ftell() after fseek(SEEK_END) -> exercises _lseek.
+        st = kv(h.op(f"O stdio {label} {fname} {payload}", 10.0))
+        check("stdio_roundtrip",
+              st.get("match") == "1" and st.get("wn") == str(nbytes)
+              and st.get("rn") == str(nbytes) and st.get("end") == str(nbytes)
+              and st.get("wclose") == "0" and st.get("rclose") == "0",
+              f"wn={st.get('wn')} rn={st.get('rn')} end={st.get('end')} "
+              f"match={st.get('match')} wclose={st.get('wclose')} rclose={st.get('rclose')}")
+
+        # --- stat() -> _stat -> i_vfs_stat: size + is-regular-file ---
+        stt = kv(h.op(f"O stat {label} {fname}"))
+        check("stat_size_reg",
+              stt.get("rc") == "0" and stt.get("size") == str(nbytes) and stt.get("reg") == "1",
+              f"rc={stt.get('rc')} size={stt.get('size')} reg={stt.get('reg')}")
+
+        # cross-check: the file written through stdio is visible to the littlefs ls
+        names = lfs_ls(h, label)
+        check("visible_in_ls", fname in names, f"names={names}")
+
+        # --- remove() -> _unlink -> i_vfs_remove, then stat() must report gone ---
+        rmv = kv(h.op(f"O rm {label} {fname}"))
+        check("remove", rmv.get("rc") == "0", f"rc={rmv.get('rc')}")
+        gone = kv(h.op(f"O stat {label} {fname}"))
+        check("stat_after_rm_gone", gone.get("rc") == "-1", f"rc={gone.get('rc')} (want -1 ENOENT)")
+
+        # --- negative: stdio on an unknown/unmounted label -> fopen fails (ENOENT) ---
+        neg = kv(h.op(f"O stdio nolabel {fname} AABBCC"))
+        check("unmounted_open_fails",
+              neg.get("match") == "0" and neg.get("wclose") == "-1",
+              f"match={neg.get('match')} wclose={neg.get('wclose')}")
+
+        h.op(f"M unmount {label}")
+    finally:
+        rs = kv(h.op("T restore", 5.0))
+        check("restore", rs.get("err") == "0" and rs.get("verify") == "1",
+              f"err={rs.get('err')} verify={rs.get('verify')}")
+
+    passed = sum(1 for _, ok, _ in results if ok)
+    failed = len(results) - passed
+    print(f"\nSTDIO SUMMARY: {passed} passed, {failed} failed")
+    return failed == 0
+
+
 def maybe_reset(args, defaults) -> None:
     sn = args.stlink_sn or defaults.get("stlink_sn")
     if not sn:
@@ -423,7 +500,7 @@ def main() -> int:
     ap.add_argument("--baud", type=int, default=defaults.get("baud", 921600))
     ap.add_argument("--stlink-sn", default=None)
     ap.add_argument("--reset", action="store_true", help="ST-Link reset before testing")
-    ap.add_argument("--suite", choices=["driver", "partition", "littlefs", "all"], default="all")
+    ap.add_argument("--suite", choices=["driver", "partition", "littlefs", "stdio", "all"], default="all")
     args = ap.parse_args()
 
     if args.reset:
@@ -445,6 +522,9 @@ def main() -> int:
         if args.suite in ("littlefs", "all"):
             print("\n== littlefs suite ==")
             ok &= run_littlefs_suite(h)
+        if args.suite in ("stdio", "all"):
+            print("\n== stdio suite ==")
+            ok &= run_stdio_suite(h)
     finally:
         try:
             h.quit()
