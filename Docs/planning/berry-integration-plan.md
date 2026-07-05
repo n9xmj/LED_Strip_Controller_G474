@@ -76,7 +76,7 @@ later-version work parked in the **Wishlist**.
 | ID | Status | Subject |
 |----|:------:|---------|
 | W1 | 🔵 | **Expose the PLAY interpreter as a Berry native function** (e.g. `play("cdefg")`) — the marquee post-v1.0 capability. |
-| W2 | 🔵 | Expose LED-strip / audio APIs as Berry native modules (script-driven lighting & tones). |
+| W2 | 🔵 | Expose LED-strip / audio APIs as Berry native modules (script-driven lighting & tones). **See the W2 addendum below** for a PLAY-style LED-control metalanguage idea (own planning session). |
 | W3 | 🔵 | **Filesystem tie-in via C stdio — NOW UNBLOCKED (2026-07-04); user wants this next.** Storage exists (W25Q128 + littlefs + label-routed VFS) and the newlib **stdio retarget is done** (spiflash plan W10/W12 Phase B — `fopen/fread/fwrite/fseek/ftell/fclose/stat/remove` route to the VFS via `App/Src/syscalls_vfs.c`, fd≥3). So the tie-in reduces to: **(1)** `BE_USE_FILE_SYSTEM 0→1` in `default/berry_conf.h`; **(2)** **coc regen** of `generate/be_const_strtab*.h` (the file class adds builtins `open/read/write/seek/close/…` that must be in the const table — the build gate); **(3)** replace the inert `default/be_port.c` file-op **stubs** with real libc calls — `be_fopen→fopen`, `be_fclose→fclose`, `be_fwrite→fwrite`, `be_fread→fread`, `be_fgets→fgets`, `be_fseek→fseek(fp,off,SEEK_SET)` (Berry seek is absolute), `be_ftell→ftell`, `be_fflush→fflush` — which then flow through the VFS. Berry paths are label-qualified (`open("/lfs0/x.be")`), so lfs0 must be mounted (manual now; automatic after spiflash **G13**). Scope **file ops first**; dir-traversal (`be_isdir`/`be_dirfirst`) + the `os` module are a follow-on. Then `load/save` Berry scripts works. **NB this is the raw stdio wiring — distinct from spiflash-plan W7** (a *flash-specific* Berry script API layered on top) **and from Berry W1** (PLAY-as-a-Berry-function, the synth tie-in). |
 | W4 | 🔵 | **Test-runner single-instance Berry:** external host script uploads a Berry script into RAM; one persistent embedded VM runs it to completion and exits. Realized via **I4's headless run front-end** (`be_loadbuffer` → `be_pcall`, already stubbed as `i_berry_run_buffer`). Depends on the cooperative pump (S2) to keep the polling task / job queue alive during the run. **Planned addition (2026-06-26, next session):** a generalized "file upload" — a means for a test/host to load arbitrary data into a static or malloc'd RAM buffer for use by *other* tests, **including** handing that buffer to a Berry VM to execute. Generalizes the upload-script-into-RAM path to arbitrary data buffers; builds on `i_berry_run_buffer(ptr,len)` + the W8 arena. |
 | W5 | 🔵 | **Graduate heap from libc `malloc` to a dedicated arena (target 8 KB).** *Current state (verified [`be_mem.c`](../../App/berry-lang/src/be_mem.c)):* no dedicated Berry heap — `be_realloc` keeps ≤32 B objects in per-VM bitmap pools (`gc16/gc32`) and routes larger allocs to `BE_EXPLICIT_MALLOC` = **libc malloc on the shared 20 KB linker heap** (`_Min_Heap_Size 0x5000`), **uncapped**, co-mingled with LED DMA buffers. *Target:* static `berry_arena[8192]` + small allocator, with `BE_EXPLICIT_MALLOC/REALLOC/FREE` pointed at it → bounds Berry to 8 KB and isolates it from the firmware heap. **Runtime-sized:** stock `be_vm_new(void)` has no size knob (allocator is compile-time, global), but the arena layer can take size as a param — fold a `berry_vm_create(size_t heap_bytes)` into `berry_app.c`. **Multi-VM:** Berry has no global mutable state (all state in `bvm`; const objects are read-only in flash) so multiple `bvm*` instances are safe; one shared 8 KB arena suffices in the cooperative model (REPL & headless never run concurrently). Concurrent side-by-side (RTOS) needs arena-per-VM **or** a mutex on the allocator, plus serialized console + per-VM REPL buffers. Also: GC cadence tuning. *Same 8 KB applies to the W4 test-runner VM.* **Preferred refinement → W8** (malloc'd-per-VM chunk freed on terminate, rather than a fixed static buffer). |
@@ -84,7 +84,36 @@ later-version work parked in the **Wishlist**.
 | E1 | 🔵 | Solidified (precompiled bytecode) scripts stored in flash — cut parse time + RAM. |
 | E2 | 🔵 | **CORDIC-accelerated bulk trig** via a native func (e.g. `wave.fill` over many LED/audio samples) — *not* generic scalar `math.sin`. Requires arbitrating the shared CORDIC with the synth's ISR usage (sticky SINE/Q1.31 config; synth is growing toward FM/polyphony on CORDIC+FMAC). Scalar math uses the FPU (I5); CORDIC stays reserved for streaming DSP. |
 | W7 | 🔵 | **Re-enable double-precision floats** (`BE_USE_SINGLE_FLOAT = 0`) **after the H723 (Cortex-M7) migration** — the M7 has a hardware double-precision FPU, so full-precision Berry `math` costs nothing there. Reverses the I5 single-float choice (a G474 M4F single-FPU optimization). |
+| W2a | 🔵 | **LED-control metalanguage** (addendum to W2) — a compact PLAY-style textual command language, driven from Berry, for the LED strip. **NEEDS ITS OWN PLANNING SESSION.** See the W2 addendum below. |
 | W8 | ✅ | **DONE 2026-06-26, bench-verified.** Per-VM TLSF heap arena. Vendored [`App/tlsf`](../../App/tlsf/) (mattconte v3.1, commit `deff9ab`, BSD-3); shim [`default/berry_heap.c`](../../App/berry-lang/default/berry_heap.c)/`.h` wires `BE_EXPLICIT_MALLOC/REALLOC/FREE` → a per-VM `tlsf_create_with_pool` chunk via a global active-arena pointer; [`berry_app.c`](../../App/berry-lang/default/berry_app.c) runs each VM in a sandboxed session (malloc chunk → VM inside it → run → delete → free chunk), default **8 KB** (`BERRY_DEFAULT_HEAP_BYTES`, runtime-overridable per the original goal). Exhaustion throws `BE_MALLOC_FAIL` → unwinds via `be_pcall` → `[berry] arena exhausted -- VM terminated`, menu survives (verified: `l=[]` / `while true l.push("0123456789") end` filled the 8 KB and terminated cleanly). REPL prints `[berry] arena: N bytes free at exit` (`sz_berry_heap_free_bytes`). *Original design (kept for reference):* caller-selected system-heap chunk freed on VM destroy; no vendor edits (all alloc funnels through `be_mem.c`); single active arena safe under the cooperative model; supersedes [[W5]]'s static buffer; arena-per-VM needed for any future RTOS concurrency. |
+
+---
+
+## W2 addendum — LED-control metalanguage (idea; needs its own planning session)
+
+*Captured 2026-07-04. **Not v1.0, not scheduled — a seed for a future planning session.** Recorded
+so it isn't lost; do not start without a dedicated design pass.*
+
+**Idea:** give the LED strip a compact **textual command language**, modeled on the existing
+**PLAY** metalanguage (see [`play-v1-implementation-plan.md`](play-v1-implementation-plan.md)),
+and drive it from Berry (the W2 LED-native-module tie-in). A script hands the interpreter a string;
+the interpreter renders it to the strip. Same spirit as PLAY doing music from a terse string —
+here for light.
+
+**Start simple (v1 of the metalanguage):** the whole strip specified as a **CSV list of 6-digit
+ASCII hex RRGGBB colors**, one per LED, left to right — e.g. `"FF80C0,00FF00,0000FF,..."`. Parse
+each field as a 24-bit color, write it to the corresponding pixel, latch. That alone gives
+script-authored static frames with zero new binding surface beyond "take a string, paint the strip."
+
+**Grow later (deferred ops):** richer control on top of the CSV base — e.g. run-length / repeat
+(`10*FF0000`), ranges/spans, brightness or fade/ramp ops, HSV entry, per-segment addressing,
+timed sequences / animation frames (a natural bridge back toward PLAY-like timing), named palettes.
+Each of these is a metalanguage-design decision for the dedicated session — **out of scope until
+then.**
+
+**Ties into:** W2 (LED native module — the C side that actually drives the strip), and conceptually
+the PLAY interpreter's parse/dispatch structure (reuse patterns, not code, unless it falls out
+cleanly). Tracked as **W2a** in the Wishlist.
 
 ---
 
