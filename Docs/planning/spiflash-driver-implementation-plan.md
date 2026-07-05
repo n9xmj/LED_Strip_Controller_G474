@@ -67,8 +67,9 @@ own**; SFUD / FAL / the legacy MX25R80 driver are **reference material only**.
 ## Must-Ship Gap (MSG) — v1 firmware
 
 *Append-only `G` IDs; mark ✅ when shipped (do not renumber). **Ord** = bring-up tier (1 before 2).*
-*Last audited: 2026-06-28 (**G1–G8 + G11 HIL-validated on hardware** via `scripts/spiflash_bench.py` —
-52 checks: 12 driver + 22 partition + 18 littlefs, all green; G12 in progress; G9, G10, G13 pending).*
+*Last audited: 2026-07-04 (**G1–G8 + G11 HIL-validated** via `scripts/spiflash_bench.py` — now
+63 checks: 12 driver + 22 partition + 18 littlefs + **11 stdio (`O` op, W10 Phase B)**, all green;
+G12 in progress; G9, G10, G13 pending).*
 
 | ID | Ord | Status | Item | Ref |
 |----|:---:|:------:|------|-----|
@@ -102,11 +103,12 @@ own**; SFUD / FAL / the legacy MX25R80 driver are **reference material only**.
 | W7 | 🔵 | **Berry / PLAY tie-in** — expose flash + FS ops as script functions (depends on Berry W3 FS tie-in). |
 | W8 | 🔵 | **nvmparams integration** — port the lightweight ESP-NVS-inspired KV parameter manager (`Docs/Not-in-project-temp/nvmparams/`) and add a **`NVM_DEVICE_SPIFLASH`** backend so an nvmparams *pool* lives in a dedicated **spiflash partition** (whole-pool read = range-read; commit = erase+program the partition). A *second* consumer of the partition layer alongside littlefs — strengthens I5/W1. Project-specific slot IDs (`NVM_PARAM_*`/`NVM_CONFIG_*`) get replaced for this project. Consumes **`SPIFLASH_PART_TYPE_NVM`** partition(s); an eventual **follow-up to G13** boot-init but **independent** (stands on its own). Also includes a **partial nvmparams refactor** — tighter encapsulation + portability. See detail note. |
 | W9 | 🔵 | **External-script / host littlefs access** — file upload/download, directory listing, rename, delete over the host protocol / **HIL test REPL**; complementary **Berry** tie-ins (with W7). Builds on the existing test-harness file-upload path (Berry W4). **W13** is the interactive host shell built on these ops. |
-| W10 | 🔵 | **littlefs ↔ C stdio retarget** — route newlib `<stdio.h>` (`fopen/fread/fwrite/fclose/fseek/…`) to littlefs by path prefix via the `_open/_read/_write/_close/_lseek/_fstat` syscalls (+ fd→`lfs_file_t` table). **newlib-nano is sufficient** (file I/O is in the syscalls, not the nano/full split); mind heap per `fopen` (FILE+buffer — use `setvbuf`). Makes any `fopen` code work, incl. Berry's stdio file plugin → **enables W7**. *Lighter Berry-only alt:* bind `be_port` file ops straight to `lfs_file_*`, skipping stdio. **Phase A done (2026-06-28):** the App-side VFS + fd table exist (see W12). **Phase B pending:** make `_open/_read/_write/_close/_lseek/_fstat` weak in `syscalls.c` + App overrides → VFS for fd≥3, console for fd 0/1/2. |
+| W10 | 🟢 | **littlefs ↔ C stdio retarget — DONE 2026-07-04.** newlib `<stdio.h>` (`fopen/fread/fwrite/fclose/fseek/stat/remove/…`) routes to littlefs via the `_open/_read/_write/_close/_lseek/_fstat/_isatty/_stat/_unlink` syscalls (fd≥3 → VFS fd table, fd 0/1/2 → console). **Phase A** (2026-06-28): App-side VFS + fd table (see W12). **Phase B** (2026-07-04): those syscalls made weak in `Core/Src/syscalls.c`; App override `App/Src/syscalls_vfs.c` does the fd-split + `LFS_ERR_*→errno` map; `_fstat` reports `S_IFREG`+`st_size`(`z_vfs_fsize`)+`st_blksize`(`VFS_STDIO_BLKSIZE`=256); stderr on its own `__io_putchar_stderr` seam (→ W15). **HIL-validated** via the `O` harness op (`scripts/spiflash_bench.py --suite stdio`, 11 checks: round-trip/`_lseek`/`stat`/`remove`/ENOENT). newlib-nano sufficient. **Enables W7** (Berry via stdio). |
 | W11 | 🔵 | **Migrate SPI flash SPI1 → QUADSPI** — frees SPI1 for LCD-exclusive use; a dedicated flash bus retires the shared-bus lock (S5) and the dual-CS-power-up dance. Single-line (1-1-1) for cmd/program + **dual-line read** (`0x3B`, same pins) for ~2× read throughput; quad N/A (breakout + pin pressure). New D4 transport backend `spiflash_ll_qspi.c`, layers above unchanged — doubles as the W3 OCTOSPI dress rehearsal. **Pin-move prereq DONE** (USART3_TX/LED_STRIP_3 PB10→PB9, .ioc regen + rewire, 2026-06-28). See detail. |
-| W12 | 🔵 | **littlefs partition mount/unmount + label-prefixed unix paths** — address files `/<partition-label>/path/to/file` across the two FSes via C stdio. Mount/unmount is native littlefs (one `lfs_t` per partition); the label namespace is a thin mount-table router built into the W10 stdio retarget (or the lighter Berry-only `fs.*` binding). Depends on G7/G8 + W10. **DONE 2026-06-28** — `App/vfs.{c,h}`: mount table {label→`lfs_t`} + fd table, resolves `/<label>/rel`; the `M` harness op routes through it (18-check littlefs suite re-validates). Path namespace complete; only the stdio *front door* (W10 Phase B) remains to expose it via `fopen`. See detail. |
+| W12 | 🟢 | **littlefs partition mount/unmount + label-prefixed unix paths — DONE 2026-06-28.** Address files `/<partition-label>/path/to/file` across the two FSes. Mount/unmount is native littlefs (one `lfs_t` per partition); the label namespace is a thin mount-table router. `App/vfs.{c,h}`: mount table {label→`lfs_t`} + fd table, resolves `/<label>/rel`; the `M` harness op routes through it (18-check littlefs suite re-validates). The stdio *front door* over these paths (via `fopen`) landed with **W10 Phase B** (2026-07-04). See detail. |
 | W13 | 🔵 | **Host-side filesystem shell (interactive REPL)** — a Python shell over the device host-protocol giving reasonably complete remote FS access: `ls` / `cd` / `pwd`, `rm`, `rename`, `cp` / `mv`, plus `get` (copy-to-host) and `put` (upload-from-host). Unix-like, using the W12 `/<label>/...` path scheme across both littlefs partitions. The host-side **front-end** over the **W9** device fs ops (W9 = the primitives; W13 = the usable shell). Depends on W9 + G7/G8 (+ W12 paths). See detail. |
 | W14 | 🔵 | **Partition RO-flag enforcement + post-create flag mutation** (lower priority) — the `SPIFLASH_PART_FLAG_READONLY` bit is stored at create time but **unenforced** (the runtime handle carries no flags; partition R/W, VFS, and littlefs all ignore it) and **immutable after create** (only `set_mounted` exists). Add flags to the handle + RO rejection in `x_spiflash_part_write`/`erase_range`, a VFS write-intent reject on RO mounts, and a `set_flags`/`set_readonly` mutator (RAM edit + sector-0 commit). See detail. |
+| W15 | 🔵 | **VFS char/tty device class + ARM semihosting console backend** — generalize console fds 0/1/2 into a tty/char-device class with pluggable backends (UART now; semihosting via `SYS_WRITE0`/`SYS_WRITE`/`SYS_READC`). stderr already has its own `__io_putchar_stderr` seam (W10 Phase B). Char/tty is the right model (semihosting is a byte stream, not block). See detail. |
 
 ---
 
@@ -445,6 +447,20 @@ so littlefs never attempts a write. (3) add `x_spiflash_part_set_flags(table, la
 HIL: a `T` set-flags verb + an `M` write-rejected-on-RO check. ~1 hour; decide whether set-flags
 requires the partition unmounted.
 
+### W15 — VFS character/tty device class + ARM semihosting console backend
+**Status:** 🔵 · **Needs user:** no
+**What:** generalize the console fds (0/1/2) from the hardcoded `__io_putchar`/`__io_getchar`
+special-cases in `syscalls_vfs.c` into a small **tty/char-device class** in the VFS with pluggable
+backends (UART console now; **ARM semihosting** via `SYS_WRITE0`/`SYS_WRITE`/`SYS_READC`). stderr is the
+first consumer, already carved out on its own `__io_putchar_stderr` weak seam (W10 Phase B), so it can
+move to semihosting without disturbing stdout. **tty/char is the right model** — semihosting is a byte
+stream (no block geometry / erase), so a block-device abstraction would be wrong. **Caveats for the
+experiment:** (1) semihosting needs a debugger attached — the `BKPT 0xAB` traps to the host and
+hard-faults/hangs without one, so it's debug-build-only; (2) **don't link `rdimon.specs`** — its
+`_write`/`_read` collide with our custom `syscalls.c` + `syscalls_vfs.c`; hand-roll a tiny `SYS_WRITE`
+helper (inline `BKPT`) called from the `__io_putchar_stderr` seam instead. Origin: 2026-07-04 Phase-B
+discussion.
+
 ---
 
 ## H723 migration notes (forward-looking — for the future port session)
@@ -484,13 +500,14 @@ Captured now so the migration agent has context (the driver is being built *for*
   chip table + read/erase/write structure + lock hook → `Docs/Not-in-project-temp/SFUD/`; FS BD
   templates + littlefs DESIGN/SPEC → `Docs/littlefs-extras/` (moved out of the build dir;
   `App/littlefs/` now holds only the built core + LICENSE/VENDOR).
-- **Plan status (2026-06-28):** Big Board — 23 🟢 · 0 🟡 · 0 🔵 · 0 🔴 — no open items. MSG —
-  **10/14 (G0–G8, G11 ✅; G12 🟡 in progress)**; G9, G10, G13 pending. **Validated on hardware:** the whole
-  stack — transport (polled+DMA) → device/registers → SFDP geometry → erase/program/range-write/read →
-  partition manager (provision/CRC/create corner-cases/mounted-guard) → **two littlefs FSes** — via
-  `scripts/spiflash_bench.py` (**52 checks**: 12 driver + 22 partition + 18 littlefs, all green), driven
-  by the harness `S`/`T`/`M` ops. **W10/W12 Phase A done** (label-routed VFS over littlefs, App-only);
-  **Phase B pending** (newlib stdio retarget → VFS, needs the `syscalls.c` weak-edit). **Next suggested:**
-  W10/W12 **Phase B**, then the G12 HuIL menu items + G9/G10 cleanup, then **W7** (Berry via stdio).
+- **Plan status (2026-07-04):** Big Board — 23 🟢 · 0 🟡 · 0 🔵 · 0 🔴 — no open items. MSG —
+  **10/14 (G0–G8, G11 ✅; G12 🟡 in progress)**; G9, G10, G13 pending. Wishlist done: **W10 🟢 + W12 🟢**
+  (label-routed VFS + full newlib stdio retarget). **Validated on hardware:** the whole stack — transport
+  (polled+DMA) → device/registers → SFDP geometry → erase/program/range-write/read → partition manager
+  (provision/CRC/create corner-cases/mounted-guard) → **two littlefs FSes** → **C stdio front door**
+  (`fopen/fread/fwrite/fseek/stat/remove`) — via `scripts/spiflash_bench.py` (**63 checks**: 12 driver +
+  22 partition + 18 littlefs + 11 stdio, all green), driven by the harness `S`/`T`/`M`/`O` ops. **Next
+  suggested:** **G13** (boot-time type-driven mount in `v_system_init`), then the G12 HuIL menu items +
+  G9/G10 cleanup, then **W7** (Berry via stdio, now unblocked) and the **W13** host-shell planning session.
 
 **End of spiflash-driver-implementation-plan.md**
