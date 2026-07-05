@@ -10,10 +10,11 @@
 #include "spiflash_test.h"
 #include "vfs.h"            // label-routed VFS over littlefs (M op) -> pulls spiflash_lfs.h
 
-#include <stdio.h>          // printf, snprintf
+#include <stdio.h>          // printf, snprintf, fopen/fread/fwrite/fclose (O op)
 #include <stdlib.h>         // strtoul, atoi
-#include <string.h>         // strcmp
+#include <string.h>         // strcmp, memcmp
 #include <fcntl.h>          // O_* flags for i_vfs_open (POSIX)
+#include <sys/stat.h>       // struct stat + S_ISREG (O stat verb)
 
 #include "platform.h"       // FLASH_SPI_HANDLE, FLASH_CS_*
 #include "utils.h"          // v_app_polling_task (idle pump)
@@ -655,5 +656,125 @@ void v_spiflash_test_harness_op_lfs(const char *pc_arg)
     else
     {
         printf("<HRN M ERR verb=%s>\r\n", ac_verb);
+    }
+}
+
+//------------------------------------------------------------------------------
+// Test-harness 'O' op — C stdio front door (W10/W12 Phase B newlib retarget)
+//
+// Unlike 'M' (which drives the VFS directly), 'O' goes through newlib stdio:
+// fopen -> _open -> i_vfs_open, fwrite/fread -> _write/_read -> z_vfs_*, etc.
+// The label must already be mounted (host does 'M mount <label>' first). Exercises
+// the whole retarget: _open/_read/_write/_lseek/_close/_fstat + stat()/remove().
+//------------------------------------------------------------------------------
+
+void v_spiflash_test_harness_op_stdio(const char *pc_arg)
+{
+    char        ac_verb[12];
+    char        ac_lab[20];
+    char        ac_name[32];
+    char        ac_path[64];
+    const char *pc;
+
+    pc = pc_next_tok(pc_arg, ac_verb, (uint32_t)sizeof(ac_verb));
+    if (ac_verb[0] == '\0') { printf("<HRN O ERR noverb>\r\n"); return; }
+
+    if (x_spiflash_test_ensure_init() != SPIFLASH_OK) { printf("<HRN O ERR init>\r\n"); return; }
+    v_vfs_attach(&s_x_parts);       // VFS opens partitions from this table
+
+    if (strcmp(ac_verb, "stdio") == 0)
+    {
+        const char    *pc_hex;
+        static uint8_t au8_wr[256];
+        static uint8_t au8_rd[256];
+        uint32_t       u32_n;
+        size_t         sz_wn    = 0u;
+        size_t         sz_rn    = 0u;
+        long           l_end    = -1;
+        int            i_match  = 0;
+        int            i_wclose = -1;
+        int            i_rclose = -1;
+        FILE          *p_fp;
+
+        pc     = pc_next_tok(pc, ac_lab,  (uint32_t)sizeof(ac_lab));
+        pc_hex = pc_next_tok(pc, ac_name, (uint32_t)sizeof(ac_name));
+        if ((ac_lab[0] == '\0') || (ac_name[0] == '\0'))
+        {
+            printf("<HRN O stdio rc=-1 badargs>\r\n");
+            return;
+        }
+        u32_n = u32_hex_to_bytes(pc_hex, au8_wr, (uint32_t)sizeof(au8_wr));
+        if (u32_n == 0u)
+        {
+            printf("<HRN O stdio rc=-1 badhex>\r\n");
+            return;
+        }
+        (void)snprintf(ac_path, sizeof(ac_path), "/%s/%s", ac_lab, ac_name);
+
+        /* write phase: fopen(wb) -> _open, fwrite -> _write, fclose flushes+commits */
+        p_fp = fopen(ac_path, "wb");
+        if (p_fp != NULL)
+        {
+            sz_wn    = fwrite(au8_wr, 1u, (size_t)u32_n, p_fp);
+            i_wclose = fclose(p_fp);
+        }
+
+        /* read phase: seek to end (ftell -> _lseek SEEK_END), rewind, fread back */
+        p_fp = fopen(ac_path, "rb");
+        if (p_fp != NULL)
+        {
+            if (fseek(p_fp, 0L, SEEK_END) == 0) { l_end = ftell(p_fp); }
+            (void)fseek(p_fp, 0L, SEEK_SET);
+            sz_rn    = fread(au8_rd, 1u, (size_t)u32_n, p_fp);
+            i_rclose = fclose(p_fp);
+        }
+
+        if ((sz_wn == (size_t)u32_n) && (sz_rn == (size_t)u32_n)
+            && (l_end == (long)u32_n)
+            && (memcmp(au8_wr, au8_rd, u32_n) == 0))
+        {
+            i_match = 1;
+        }
+        printf("<HRN O stdio label=%s name=%s wn=%lu rn=%lu end=%ld match=%d wclose=%d rclose=%d>\r\n",
+               ac_lab, ac_name, (unsigned long)sz_wn, (unsigned long)sz_rn,
+               l_end, i_match, i_wclose, i_rclose);
+    }
+    else if (strcmp(ac_verb, "stat") == 0)
+    {
+        struct stat x_st;
+        int         i_rc;
+
+        pc = pc_next_tok(pc, ac_lab, (uint32_t)sizeof(ac_lab));
+        (void)pc_next_tok(pc, ac_name, (uint32_t)sizeof(ac_name));
+        if ((ac_lab[0] == '\0') || (ac_name[0] == '\0'))
+        {
+            printf("<HRN O stat rc=-1 badargs>\r\n");
+            return;
+        }
+        (void)snprintf(ac_path, sizeof(ac_path), "/%s/%s", ac_lab, ac_name);
+        memset(&x_st, 0, sizeof(x_st));
+        i_rc = stat(ac_path, &x_st);        // -> _stat -> i_vfs_stat
+        printf("<HRN O stat label=%s name=%s rc=%d size=%lu reg=%d>\r\n",
+               ac_lab, ac_name, i_rc, (unsigned long)x_st.st_size,
+               S_ISREG(x_st.st_mode) ? 1 : 0);
+    }
+    else if (strcmp(ac_verb, "rm") == 0)
+    {
+        int i_rc;
+
+        pc = pc_next_tok(pc, ac_lab, (uint32_t)sizeof(ac_lab));
+        (void)pc_next_tok(pc, ac_name, (uint32_t)sizeof(ac_name));
+        if ((ac_lab[0] == '\0') || (ac_name[0] == '\0'))
+        {
+            printf("<HRN O rm rc=-1 badargs>\r\n");
+            return;
+        }
+        (void)snprintf(ac_path, sizeof(ac_path), "/%s/%s", ac_lab, ac_name);
+        i_rc = remove(ac_path);             // -> _unlink -> i_vfs_remove
+        printf("<HRN O rm label=%s name=%s rc=%d>\r\n", ac_lab, ac_name, i_rc);
+    }
+    else
+    {
+        printf("<HRN O ERR verb=%s>\r\n", ac_verb);
     }
 }

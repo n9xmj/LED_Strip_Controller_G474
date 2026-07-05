@@ -561,6 +561,7 @@ static const harness_op_t s_ax_harness_ops[] =
     { 'S', "storage: S <verb> [args] — id|geom|rdsr|wren|wrdi|erase|prog|write|read", v_spiflash_test_harness_op },
     { 'T', "partition: T <verb> [args] — backup|restore|provision|format|load|list|create|del|erase|mount|free", v_spiflash_test_harness_op_part },
     { 'M', "littlefs: M <verb> <label> [args] — format|mount|unmount|write|read|ls|rm ('L' is the list builtin)", v_spiflash_test_harness_op_lfs },
+    { 'O', "stdio: O <verb> <label> <name> [hex] — stdio|stat|rm (newlib fopen/stat/remove retarget)", v_spiflash_test_harness_op_stdio },
 };
 
 //------------------------------------------------------------------------------

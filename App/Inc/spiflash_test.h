@@ -40,10 +40,20 @@ extern void v_spiflash_test_harness_op(const char *pc_arg);
  * mount <label> <0|1>, free. */
 extern void v_spiflash_test_harness_op_part(const char *pc_arg);
 
-/* Test-harness 'L' op dispatcher (littlefs). Frames <HRN L ...> lines. All verbs
- * take a partition label first: format <label>, mount <label>, unmount <label>,
- * write <label> <name> <hex>, read <label> <name> <declen>, ls <label>,
- * rm <label> <name>. Up to two FS instances are bound on demand (lfs0/lfs1). */
+/* Test-harness 'M' op dispatcher (littlefs; 'L' is the harness list builtin).
+ * Frames <HRN M ...> lines. All verbs take a partition label first:
+ * format <label>, mount <label>, unmount <label>, write <label> <name> <hex>,
+ * read <label> <name> <declen>, ls <label>, rm <label> <name>. Routes through
+ * the VFS, which owns the mounted FS instances (lfs0/lfs1). */
 extern void v_spiflash_test_harness_op_lfs(const char *pc_arg);
+
+/* Test-harness 'O' op dispatcher (C stdio front door — the W10/W12 Phase B newlib
+ * retarget). Exercises fopen/fwrite/fread/fseek/ftell/fclose + stat()/remove() on
+ * a mounted "/<label>/<name>" path. Verbs (the label must already be M-mounted):
+ *   stdio <label> <name> <hex>  — write-then-readback round-trip, verify match;
+ *   stat  <label> <name>        — stat() -> size + is-regular;
+ *   rm    <label> <name>        — remove() the file.
+ * Frames <HRN O ...> lines. */
+extern void v_spiflash_test_harness_op_stdio(const char *pc_arg);
 
 #endif /* SPIFLASH_TEST_H */

@@ -258,6 +258,13 @@ lfs_soff_t z_vfs_lseek(int i_fd, lfs_soff_t i_off, int i_whence)
     return lfs_file_seek(p_x_s->p_x_lfs, &p_x_s->x_file, i_off, i_whence);
 }
 
+lfs_soff_t z_vfs_fsize(int i_fd)
+{
+    vfs_fd_t *p_x_s = p_x_fd_slot(i_fd);
+    if (p_x_s == NULL) { return LFS_ERR_INVAL; }
+    return lfs_file_size(p_x_s->p_x_lfs, &p_x_s->x_file);
+}
+
 int i_vfs_stat(const char *psz_path, struct lfs_info *p_x_info)
 {
     const char *pc_rel = "/";
