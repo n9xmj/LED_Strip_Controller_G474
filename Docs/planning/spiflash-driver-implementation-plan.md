@@ -67,9 +67,9 @@ own**; SFUD / FAL / the legacy MX25R80 driver are **reference material only**.
 ## Must-Ship Gap (MSG) — v1 firmware
 
 *Append-only `G` IDs; mark ✅ when shipped (do not renumber). **Ord** = bring-up tier (1 before 2).*
-*Last audited: 2026-07-04 (**G1–G8 + G11 HIL-validated** via `scripts/spiflash_bench.py` — now
-63 checks: 12 driver + 22 partition + 18 littlefs + **11 stdio (`O` op, W10 Phase B)**, all green;
-G12 in progress; G9, G10, G13 pending).*
+*Last audited: 2026-07-04 (**G1–G8, G11, G13 HIL-validated** via `scripts/spiflash_bench.py` — now
+74 checks: 12 driver + 21 partition + 19 littlefs + 11 stdio + **11 berry (`Y` op)**, all green;
+G12 in progress; G9, G10 pending).*
 
 | ID | Ord | Status | Item | Ref |
 |----|:---:|:------:|------|-----|
@@ -564,15 +564,15 @@ Captured now so the migration agent has context (the driver is being built *for*
   chip table + read/erase/write structure + lock hook → `Docs/Not-in-project-temp/SFUD/`; FS BD
   templates + littlefs DESIGN/SPEC → `Docs/littlefs-extras/` (moved out of the build dir;
   `App/littlefs/` now holds only the built core + LICENSE/VENDOR).
-- **Plan status (2026-07-04):** Big Board — 23 🟢 · 0 🟡 · 0 🔵 · 0 🔴 — no open items. MSG —
-  **10/14 (G0–G8, G11 ✅; G12 🟡 in progress)**; G9, G10, G13 pending. Wishlist done: **W10 🟢 + W12 🟢**
+- **Plan status (2026-07-04, PM):** Big Board — 23 🟢 · 0 🟡 · 0 🔵 · 0 🔴 — no open items. MSG —
+  **11/14 (G0–G8, G11, G13 ✅; G12 🟡 in progress)**; G9, G10 pending. Wishlist done: **W10 🟢 + W12 🟢**
   (label-routed VFS + full newlib stdio retarget). **Validated on hardware:** the whole stack — transport
   (polled+DMA) → device/registers → SFDP geometry → erase/program/range-write/read → partition manager
-  (provision/CRC/create corner-cases/mounted-guard) → **two littlefs FSes** → **C stdio front door**
-  (`fopen/fread/fwrite/fseek/stat/remove`) — via `scripts/spiflash_bench.py` (**63 checks**: 12 driver +
-  22 partition + 18 littlefs + 11 stdio, all green), driven by the harness `S`/`T`/`M`/`O` ops. **Next
-  suggested (user-directed order 2026-07-04):** **G13** (boot-time type-driven mount in `v_system_init`)
-  **first**, then the **Berry FS tie-in via stdio** (Berry plan **W3**, now unblocked) **immediately after**;
-  then the G12 HuIL menu items + G9/G10 cleanup and the **W13** host-shell planning session.
+  (provision/CRC/create corner-cases/mounted-guard) → **two littlefs FSes** → **C stdio front door** →
+  **boot-time init (G13)** → **Berry FS tie-in (Berry W3)** — via `scripts/spiflash_bench.py` (**74 checks**:
+  12 driver + 21 partition + 19 littlefs + 11 stdio + 11 berry, all green), driven by the harness
+  `S`/`T`/`M`/`O`/`Y` ops + the `@tr_` scratch preflight. **Next suggested (user-directed order 2026-07-04):**
+  **W8** (nvmparams on the `nvm` partition) **first**, then **W9** (device host-protocol FS ops + binary-packet
+  transport); then the G12 HuIL menu items + G9/G10 cleanup and the **W13** host-shell planning session.
 
 **End of spiflash-driver-implementation-plan.md**

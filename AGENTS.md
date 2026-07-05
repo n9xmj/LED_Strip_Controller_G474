@@ -129,14 +129,27 @@ relies on `_open/_close/_lseek/_fstat/_isatty/_stat/_unlink` being marked **`__a
 **`Core/Src/syscalls.c`** (`_read`/`_write` already weak). A CubeMX/`.ioc` "Generate Code" *could* revert
 those weak markers (they're outside USER CODE) — **re-verify after any regen**, or stdio silently falls back
 to the console-only stubs. `VFS_STDIO_BLKSIZE`=256 (a stdio buffer knob, not the SFDP page size).
+**Boot init (G13):** [`App/Src/filesystem.c`](App/Src/filesystem.c) owns the production device handle +
+partition table; `x_fs_system_init(true)` in `v_system_init()` brings the device up, loads the table
+(provisions the default layout **only if blank/NOTFOUND** — never auto-wipes a present-but-corrupt table),
+and mounts every `SPIFLASH_PART_TYPE_LITTLEFS` partition via the VFS. **Invariant:** `v_app_polling_task()`
+is gated behind a system-ready flag set just before the main loop, so no background work (jobs/PLAY/synth)
+runs during boot; the flash idle-pump is a safe no-op until then.
+**Default layout (2026-07-04):** `spiflash0`(table, sec 0) / `nvm`(1-2) / `data`(3-15) / `lfs0`,`lfs1`
+(2024 sectors each) / **top 32 sectors = UNMAPPED test-runner scratch**. Tests own partitions there via the
+reserved label prefix **`@tr_`**; the HIL runner's **preflight** reclaims `@tr_` leftovers but ABORTS if a
+foreign (non-`@tr_`) partition overlaps scratch — a run cannot clobber real data. **Never let a suite touch
+`lfs0`/`lfs1`/`data`.**
 **Testing:** granular harness ops (enter `0xDA`, then) `S` (chip), `T` (partition), `M` (littlefs), `O`
-(C stdio) — the host composes them; `scripts/spiflash_bench.py` is the HIL runner
-(`--suite driver|partition|littlefs|stdio|all`).
-**Status (2026-07-04):** G1–G8 + G11 **HIL-validated**, **W10/W12 done** (label VFS + full stdio retarget) —
-**63 checks green** (12 driver + 22 partition + 18 littlefs + 11 stdio); G12 in progress; **next: G13**
-(boot-time mount in `v_system_init`) then Berry FS tie-in (Berry plan W3). Authoritative state:
+(C stdio), `Y` (**headless Berry run** via `i_berry_run_buffer` — no line editor; the W4 mechanism) — the
+host composes them; `scripts/spiflash_bench.py` is the HIL runner
+(`--suite driver|partition|littlefs|stdio|berry|all`, plus `--provision`).
+**Status (2026-07-04):** G1–G8, G11, **G13 done + HIL-validated**; **W10/W12 done**; **Berry W3 done** (file
+ops → stdio → VFS + per-VM `chdir`/`getcwd`). **74 checks green** (12 driver + 21 partition + 19 littlefs +
+11 stdio + 11 berry). G12 (HuIL menu) + G9/G10 pending. **Next: spiflash W8** (nvmparams integration), then
+W9. Authoritative state:
 [`Docs/planning/spiflash-driver-implementation-plan.md`](Docs/planning/spiflash-driver-implementation-plan.md)
-+ newest `.grok/memory/session-handoff-2026-07-04-spiflash-stdio-phaseb.md`.
++ newest `.grok/memory/session-handoff-2026-07-04-g13-berry-w3.md`.
 
 ### When to Introduce RTOS (FreeRTOS)
 - Current super-loop + blocking debug menu is sufficient for bring-up and static tests.
