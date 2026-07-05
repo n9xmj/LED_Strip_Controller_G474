@@ -4,8 +4,11 @@ spiflash_bench.py - drive the SPI-NOR HIL 'S' ops over the test-harness REPL.
 
 The device exposes granular storage primitives (S id|geom|rdsr|wren|wrdi|
 erase|prog|read); this host script composes them into driver-validation tests
-and does the read-back comparison itself. Destructive ops target scratch
-sector 1 (0x1000) only; sector 0 (partition table) is device-guarded.
+and does the read-back comparison itself. Destructive driver-suite ops target the
+unmapped scratch region (top 32 sectors, 0xFE0000) only; higher suites create
+their own "@tr_"-prefixed partitions there. Sector 0 (partition table) is
+device-guarded, and a preflight refuses to run if a foreign partition sits in
+scratch (see the I5 "scratch region + test-runner contract").
 
   enter harness (0xDA) -> "S <verb> [args]\\r" -> read framed <HRN S ...> -> quit (0xA5)
 
@@ -35,7 +38,13 @@ BENCH_LOCAL = REPO_ROOT / "scripts" / "bench.defaults.local.json"
 HARNESS_ENTER = b"\xDA"
 HARNESS_EXIT = b"\xA5"
 
-SCRATCH_ADDR = 0x1000           # sector 1 — scratch generic-data region (I5)
+# Raw-device scratch address for the driver suite: base of the unmapped test
+# scratch region (top 32 sectors), NOT a partition — so raw erase/prog/read here
+# never clobbers a real partition. Concrete for the 16 MB W25Q128 (I5 layout).
+SCRATCH_ADDR = 0xFE0000
+SCRATCH_SECTORS = 32            # unmapped test-runner scratch (I5); keep in sync with spiflash_part.c
+OWNED_PREFIX = "@tr_"          # labels the runner owns in scratch; foreign ones abort the run (I5)
+
 FRAME_RE = re.compile(r"<HRN S [^>]*>")
 TPART_RE = re.compile(r"<HRN T part [^>]*>")
 LENT_RE = re.compile(r"<HRN M ent [^>]*>")
@@ -46,15 +55,18 @@ ERR_BUSY = "4"
 ERR_EXISTS = "10"
 ERR_NOSPACE = "12"
 
-# Default layout provision_default() writes on the 16 MB W25Q128 (spiflash_part.c):
-# label -> (type, offset, size_bytes)
+# spiflash_part_type_e (App/spiflash/spiflash_part.h)
+TYPE_DATA, TYPE_NVM, TYPE_LITTLEFS, TYPE_RESERVED = 1, 2, 3, 4
+
+# Default layout provision_default() writes (spiflash_part.c, revised 2026-07-04),
+# concrete for the 16 MB W25Q128 (N=4096). label -> (type, offset, size_bytes).
+# The top 32 sectors (0xFE0000..0xFFFFFF) are unmapped scratch (no entry).
 EXPECT_LAYOUT = {
-    "data":  (1, 0x001000, 12288),
-    "nvm":   (2, 0x004000, 8192),
-    "rsvdA": (4, 0x006000, 16384),
-    "lfs0":  (3, 0x00A000, 8364032),
-    "lfs1":  (3, 0x804000, 8364032),
-    "rsvdB": (4, 0xFFE000, 8192),
+    "spiflash0": (TYPE_RESERVED, 0x000000, 4096),
+    "nvm":       (TYPE_NVM,      0x001000, 8192),
+    "data":      (TYPE_DATA,     0x003000, 53248),
+    "lfs0":      (TYPE_LITTLEFS, 0x010000, 8290304),
+    "lfs1":      (TYPE_LITTLEFS, 0x7F8000, 8290304),
 }
 
 
@@ -231,6 +243,44 @@ def part_list(h: Harness) -> dict:
     return ents
 
 
+def preflight_scratch(h: Harness) -> bool:
+    """Ownership preflight for the test scratch region (I5 contract). The top 32
+    sectors are the runner's sandbox: reclaim our own leftovers (label prefix
+    '@tr_') from a prior failed run, but ABORT the whole run if any *foreign*
+    partition overlaps scratch -- the runner must never delete what it does not own.
+    Runs once, before any suite touches the flash."""
+    ents = part_list(h)
+    if "lfs1" not in ents:
+        print("PREFLIGHT ABORT: no 'lfs1' partition in table -- layout unprovisioned or "
+              "unexpected. Reprovision (T format then reboot, or T provision) first.")
+        return False
+
+    cap = int(kv(h.op("S geom")).get("cap", "0"))
+    lfs1 = ents["lfs1"]
+    scratch_base = int(lfs1["off"], 16) + int(lfs1["size"])   # derived; no magic constant
+
+    foreign: list[tuple[str, int, int]] = []
+    for lab, e in ents.items():
+        off, sz = int(e["off"], 16), int(e["size"])
+        if (off < cap) and (off + sz > scratch_base):         # overlaps scratch
+            if lab.startswith(OWNED_PREFIX):
+                h.op(f"M unmount {lab}")                       # drop any VFS mount first
+                d = kv(h.op(f"T del {lab}"))
+                print(f"  preflight: reclaimed owned scratch leftover '{lab}' (del err={d.get('err')})")
+            else:
+                foreign.append((lab, off, sz))
+
+    if foreign:
+        print(f"PREFLIGHT ABORT: scratch [0x{scratch_base:06X}..0x{cap:06X}) is not free -- "
+              "refusing to run any tests.")
+        for lab, off, sz in foreign:
+            print(f"    foreign partition '{lab}' at 0x{off:06X} size {sz} overlaps scratch")
+        print(f"  Not owned by the test runner (prefix '{OWNED_PREFIX}'). Remove them "
+              "(or restore your data) before running tests.")
+        return False
+    return True
+
+
 def run_partition_suite(h: Harness) -> bool:
     results: list[tuple[str, bool, str]] = []
 
@@ -249,12 +299,12 @@ def run_partition_suite(h: Harness) -> bool:
 
     try:
         pv = kv(h.op("T provision", 5.0))
-        check("provision", pv.get("err") == "0" and pv.get("count") == "6",
+        check("provision", pv.get("err") == "0" and pv.get("count") == "5",
               f"count={pv.get('count')} err={pv.get('err')}")
 
         # reload from flash -> validates the CRC round-trip (provision wrote it)
         ld = kv(h.op("T load"))
-        check("load_crc_ok", ld.get("valid") == "1" and ld.get("count") == "6",
+        check("load_crc_ok", ld.get("valid") == "1" and ld.get("count") == "5",
               f"valid={ld.get('valid')} count={ld.get('count')} err={ld.get('err')}")
 
         ents = part_list(h)
@@ -264,63 +314,67 @@ def run_partition_suite(h: Harness) -> bool:
             if (not e or int(e["type"]) != ty or int(e["off"], 16) != off or int(e["size"]) != sz):
                 bad = f"{lab} -> {e}"
                 break
-        check("default_layout", not bad and len(ents) == 6, bad or f"{len(ents)} entries OK")
+        check("default_layout", not bad and len(ents) == 5, bad or f"{len(ents)} entries OK")
         check("lfs_equal_split",
               ents.get("lfs0", {}).get("size") == ents.get("lfs1", {}).get("size"),
               f"lfs0={ents.get('lfs0', {}).get('size')} lfs1={ents.get('lfs1', {}).get('size')}")
 
-        # Free two holes for the placement tests: rsvdA (0x6000, 16 KB) and
-        # rsvdB (0xFFE000, 8 KB). After this the only free space is those two.
-        check("del_rsvdA", kv(h.op("T del rsvdA")).get("err") == "0")
-        check("del_rsvdB", kv(h.op("T del rsvdB")).get("err") == "0")
+        # All create/placement tests run in the unmapped scratch tail (above lfs1),
+        # using @tr_-prefixed labels — never the real partitions below it.
+        cap = int(kv(h.op("S geom")).get("cap", "0"))
+        scr = int(ents["lfs1"]["off"], 16) + int(ents["lfs1"]["size"])   # scratch base (0xFE0000)
 
-        # explicit placement into a known hole
-        cr = kv(h.op("T create tst 1 2000 FFE000"))
+        # auto-place (start=0): first-fit into scratch (the only hole), then advance
+        ap = kv(h.op(f"T create {OWNED_PREFIX}ap {TYPE_DATA} 2000 0"))    # 8 KB
+        check("autoplace_first_fit",
+              ap.get("err") == "0" and int(ap.get("off", "0"), 16) == scr,
+              f"off={ap.get('off')} (want 0x{scr:06X}) err={ap.get('err')}")
+        ap2 = kv(h.op(f"T create {OWNED_PREFIX}ap2 {TYPE_DATA} 2000 0"))  # advances past ap
+        check("autoplace_advance",
+              ap2.get("err") == "0" and int(ap2.get("off", "0"), 16) == scr + 0x2000,
+              f"off={ap2.get('off')} (want 0x{scr + 0x2000:06X}) err={ap2.get('err')}")
+
+        # explicit placement into a known scratch hole (past ap/ap2)
+        ex_off = scr + 0x4000
+        cr = kv(h.op(f"T create {OWNED_PREFIX}ex {TYPE_DATA} 2000 {ex_off:X}"))
         check("create_explicit",
-              cr.get("err") == "0" and int(cr.get("off", "0"), 16) == 0xFFE000 and cr.get("size") == "8192",
+              cr.get("err") == "0" and int(cr.get("off", "0"), 16) == ex_off and cr.get("size") == "8192",
               f"off={cr.get('off')} size={cr.get('size')} err={cr.get('err')}")
 
         # --- create corner cases (all must be rejected) ---
-        ov = kv(h.op("T create ov 1 1000 A000"))        # start inside lfs0 @0xA000
+        ov = kv(h.op(f"T create {OWNED_PREFIX}ov {TYPE_DATA} 1000 010000"))  # start inside lfs0
         check("overlap_reject", ov.get("err") == ERR_NOSPACE, f"err={ov.get('err')} (want {ERR_NOSPACE} NOSPACE)")
-        ob = kv(h.op("T create ob 1 2000 FFF000"))      # end 0x1001000 > 16 MB
+        ob = kv(h.op(f"T create {OWNED_PREFIX}ob {TYPE_DATA} 2000 FFF000"))  # end 0x1001000 > 16 MB
         check("oob_reject", ob.get("err") == ERR_NOSPACE, f"err={ob.get('err')} (want {ERR_NOSPACE} NOSPACE)")
-        tb = kv(h.op("T create tbl 1 1000 800"))        # rounds down into the table sector
+        tb = kv(h.op(f"T create {OWNED_PREFIX}tb {TYPE_DATA} 1000 800"))     # rounds into table sector 0
         check("table_sector_reject", tb.get("err") == ERR_PARAM, f"err={tb.get('err')} (want {ERR_PARAM} PARAM)")
-        zs = kv(h.op("T create zs 1 0 0"))              # zero size
+        zs = kv(h.op(f"T create {OWNED_PREFIX}zs {TYPE_DATA} 0 0"))         # zero size
         check("zerosize_reject", zs.get("err") == ERR_PARAM, f"err={zs.get('err')} (want {ERR_PARAM} PARAM)")
-        ll = kv(h.op("T create 0123456789ABCDEF 1 1000 0"))   # 16-char label > 15 max
+        ll = kv(h.op(f"T create @tr_0123456789AB {TYPE_DATA} 1000 0"))      # 16-char label > 15 max
         check("longlabel_reject", ll.get("err") == ERR_PARAM, f"err={ll.get('err')} (want {ERR_PARAM} PARAM)")
-        dup = kv(h.op("T create tst 1 1000 0"))         # duplicate label
+        dup = kv(h.op(f"T create {OWNED_PREFIX}ap {TYPE_DATA} 1000 0"))     # duplicate label
         check("dup_reject", dup.get("err") == ERR_EXISTS, f"err={dup.get('err')} (want {ERR_EXISTS} EXISTS)")
-
-        # --- auto-place (start=0): first-fit into the lowest hole, then advance ---
-        ap = kv(h.op("T create ap 1 2000 0"))           # 8 KB -> first hole 0x6000 (old rsvdA)
-        check("autoplace_first_fit",
-              ap.get("err") == "0" and int(ap.get("off", "0"), 16) == 0x6000,
-              f"off={ap.get('off')} (want 0x6000) err={ap.get('err')}")
-        ap2 = kv(h.op("T create ap2 1 2000 0"))         # next 8 KB -> 0x8000 (advanced past ap)
-        check("autoplace_advance",
-              ap2.get("err") == "0" and int(ap2.get("off", "0"), 16) == 0x8000,
-              f"off={ap2.get('off')} (want 0x8000) err={ap2.get('err')}")
 
         ents = part_list(h)
         check("creates_listed",
-              {"tst", "ap", "ap2"} <= set(ents) and "rsvdA" not in ents and "rsvdB" not in ents,
+              {f"{OWNED_PREFIX}ap", f"{OWNED_PREFIX}ap2", f"{OWNED_PREFIX}ex"} <= set(ents),
               f"labels={sorted(ents)}")
 
-        # map is now gap-free (sectors 1..n all allocated) -> auto-place finds no hole
-        nf = kv(h.op("T create nf 1 2000 0"))
+        # fill the remaining scratch, then auto-place must fail (no hole anywhere)
+        rest = (cap - scr) - 0x6000            # minus ap + ap2 + ex (3 x 8 KB)
+        fl = kv(h.op(f"T create {OWNED_PREFIX}fill {TYPE_DATA} {rest:X} 0"))
+        check("fill_scratch", fl.get("err") == "0", f"err={fl.get('err')} rest=0x{rest:X}")
+        nf = kv(h.op(f"T create {OWNED_PREFIX}nf {TYPE_DATA} 1000 0"))
         check("autoplace_nospace", nf.get("err") == ERR_NOSPACE, f"err={nf.get('err')} (want {ERR_NOSPACE} NOSPACE)")
 
         # mounted guard: a mounted partition refuses delete (BUSY) until unmounted
-        h.op("T mount tst 1")
-        d1 = kv(h.op("T del tst"))
+        h.op(f"T mount {OWNED_PREFIX}ap 1")
+        d1 = kv(h.op(f"T del {OWNED_PREFIX}ap"))
         check("mounted_blocks_del", d1.get("err") == ERR_BUSY, f"err={d1.get('err')} (want {ERR_BUSY} BUSY)")
-        h.op("T mount tst 0")
-        d2 = kv(h.op("T del tst"))
+        h.op(f"T mount {OWNED_PREFIX}ap 0")
+        d2 = kv(h.op(f"T del {OWNED_PREFIX}ap"))
         check("unmount_then_del", d2.get("err") == "0", f"err={d2.get('err')}")
-        check("tst_removed", "tst" not in part_list(h), "")
+        check("ap_removed", f"{OWNED_PREFIX}ap" not in part_list(h), "")
 
     finally:
         rs = kv(h.op("T restore", 5.0))
@@ -346,8 +400,8 @@ def run_littlefs_suite(h: Harness) -> bool:
         results.append((name, bool(cond), detail))
         print(f"  [{'PASS' if cond else 'FAIL'}] {name:16} {detail}")
 
-    # littlefs lives on the lfs0/lfs1 partitions, so provision the table first;
-    # back it up and restore it around the run (the FS *content* is scratch).
+    # littlefs is exercised on the runner's OWN scratch partitions (@tr_lfs0/1),
+    # never the real lfs0/lfs1. Back up + restore sector 0 (we add/remove entries).
     bk = kv(h.op("T backup", 5.0))
     if bk.get("err") != "0":
         check("backup", False, f"err={bk.get('err')} (aborting)")
@@ -355,15 +409,18 @@ def run_littlefs_suite(h: Harness) -> bool:
         return False
     check("backup", True, f"n={bk.get('n')} bytes")
 
+    a, b = f"{OWNED_PREFIX}lfs0", f"{OWNED_PREFIX}lfs1"
+    # distinct payloads per FS: "Hello, tr0" / "Hello, tr1"
+    payloads = {a: "48656C6C6F2C20747230", b: "48656C6C6F2C20747231"}
+    made: list[str] = []
     try:
-        pv = kv(h.op("T provision", 5.0))
-        check("provision", pv.get("err") == "0" and pv.get("count") == "6", f"count={pv.get('count')}")
+        # two scratch littlefs partitions, 8 sectors (0x8000) each, auto-placed
+        for lab in (a, b):
+            cr = kv(h.op(f"T create {lab} {TYPE_LITTLEFS} 8000 0"))
+            check(f"{lab}_create", cr.get("err") == "0", f"off={cr.get('off')} err={cr.get('err')}")
+            if cr.get("err") == "0":
+                made.append(lab)
 
-        # distinct payloads per FS: "Hello, lfs0" / "Hello, lfs1"
-        payloads = {
-            "lfs0": "48656C6C6F2C206C667330",
-            "lfs1": "48656C6C6F2C206C667331",
-        }
         for lab, payload in payloads.items():
             nbytes = len(payload) // 2
             fmt = kv(h.op(f"M format {lab}", 15.0))
@@ -388,14 +445,13 @@ def run_littlefs_suite(h: Harness) -> bool:
             check(f"{lab}_persist", rd2.get("data", "").upper() == payload.upper(), f"data={rd2.get('data')}")
 
         # two independent FS instances hold distinct content concurrently
-        d0 = kv(h.op("M read lfs0 greet.txt 64")).get("data", "").upper()
-        d1 = kv(h.op("M read lfs1 greet.txt 64")).get("data", "").upper()
-        check("fs_independent", bool(d0) and bool(d1) and d0 != d1, f"lfs0={d0} lfs1={d1}")
-
-        h.op("M unmount lfs0")
-        h.op("M unmount lfs1")
+        d0 = kv(h.op(f"M read {a} greet.txt 64")).get("data", "").upper()
+        d1 = kv(h.op(f"M read {b} greet.txt 64")).get("data", "").upper()
+        check("fs_independent", bool(d0) and bool(d1) and d0 != d1, f"{a}={d0} {b}={d1}")
     finally:
-        rs = kv(h.op("T restore", 5.0))
+        for lab in made:
+            h.op(f"M unmount {lab}")          # free the VFS slot before the table reset
+        rs = kv(h.op("T restore", 5.0))       # drops our scratch entries, restores real table
         check("restore", rs.get("err") == "0" and rs.get("verify") == "1",
               f"err={rs.get('err')} verify={rs.get('verify')}")
 
@@ -422,15 +478,18 @@ def run_stdio_suite(h: Harness) -> bool:
         return False
     check("backup", True, f"n={bk.get('n')} bytes")
 
-    label = "lfs0"
+    label = f"{OWNED_PREFIX}stdio"
     fname = "phaseb.txt"
     payload_bytes = b"PhaseB stdio OK"
     payload = payload_bytes.hex().upper()
     nbytes = len(payload_bytes)
+    made = False
 
     try:
-        pv = kv(h.op("T provision", 5.0))
-        check("provision", pv.get("err") == "0" and pv.get("count") == "6", f"count={pv.get('count')}")
+        # own scratch littlefs partition (never the real lfs0), auto-placed
+        cr = kv(h.op(f"T create {label} {TYPE_LITTLEFS} 8000 0"))
+        check("create", cr.get("err") == "0", f"off={cr.get('off')} err={cr.get('err')}")
+        made = cr.get("err") == "0"
 
         fmt = kv(h.op(f"M format {label}", 15.0))
         check("format", fmt.get("rc") == "0", f"rc={fmt.get('rc')}")
@@ -470,9 +529,10 @@ def run_stdio_suite(h: Harness) -> bool:
               neg.get("match") == "0" and neg.get("wclose") == "-1",
               f"match={neg.get('match')} wclose={neg.get('wclose')}")
 
-        h.op(f"M unmount {label}")
     finally:
-        rs = kv(h.op("T restore", 5.0))
+        if made:
+            h.op(f"M unmount {label}")        # free the VFS slot before the table reset
+        rs = kv(h.op("T restore", 5.0))       # drops our scratch entry, restores real table
         check("restore", rs.get("err") == "0" and rs.get("verify") == "1",
               f"err={rs.get('err')} verify={rs.get('verify')}")
 
@@ -500,6 +560,8 @@ def main() -> int:
     ap.add_argument("--baud", type=int, default=defaults.get("baud", 921600))
     ap.add_argument("--stlink-sn", default=None)
     ap.add_argument("--reset", action="store_true", help="ST-Link reset before testing")
+    ap.add_argument("--provision", action="store_true",
+                    help="(re)provision the default partition layout and exit (no tests)")
     ap.add_argument("--suite", choices=["driver", "partition", "littlefs", "stdio", "all"], default="all")
     args = ap.parse_args()
 
@@ -513,6 +575,18 @@ def main() -> int:
         if not h.enter():
             print("Harness not ready (<HRN v1 RDY> missing)", file=sys.stderr)
             return 2
+        # Maintenance: (re)provision the default layout, then stop (no preflight,
+        # no tests). Reboot afterwards so G13 mounts the new littlefs partitions.
+        if args.provision:
+            pv = kv(h.op("T provision", 5.0))
+            print(f"provision: err={pv.get('err')} count={pv.get('count')} "
+                  f"({'OK' if pv.get('err') == '0' else 'FAILED'})")
+            print("  reboot the board (or --reset next run) so the new layout is mounted.")
+            return 0 if pv.get("err") == "0" else 1
+        # Ownership guard: refuse to run if a foreign partition sits in scratch.
+        if args.suite in ("partition", "littlefs", "stdio", "all"):
+            if not preflight_scratch(h):
+                return 3
         if args.suite in ("driver", "all"):
             print("== driver suite ==")
             ok &= run_driver_suite(h)

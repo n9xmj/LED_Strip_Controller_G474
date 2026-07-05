@@ -80,6 +80,11 @@
 #define LOG_PLAY_TAG                    "PLAY"
 #define LOG_PLAY_COLOR                  LOGC_CYAN
 
+// File system operations
+#define LOG_FILESYSTEM                  1
+#define LOG_FILESYSTEM_TAG              "FILESYS"
+#define LOG_FILESYSTEM_COLOR            LOGC_BRIGHT_BLUE
+
 #endif  // DEBUG_LOGGING
 
 //------------------------------------------------------------------------------

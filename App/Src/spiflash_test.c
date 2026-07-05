@@ -9,6 +9,7 @@
 
 #include "spiflash_test.h"
 #include "vfs.h"            // label-routed VFS over littlefs (M op) -> pulls spiflash_lfs.h
+#include "filesystem.h"     // shared production device handle + partition table (G13)
 
 #include <stdio.h>          // printf, snprintf, fopen/fread/fwrite/fclose (O op)
 #include <stdlib.h>         // strtoul, atoi
@@ -20,15 +21,18 @@
 #include "utils.h"          // v_app_polling_task (idle pump)
 
 //------------------------------------------------------------------------------
-// Bench device handle. TEMPORARY lazy-init home (moves to v_system_init()).
+// Shared production state now lives in filesystem.c (plan G13): the one device
+// handle + RAM partition table are brought up at boot by x_fs_system_init(). The
+// bench ops below operate on those shared instances; these aliases keep the op
+// bodies unchanged (each resolves to the filesystem.c accessor).
 //------------------------------------------------------------------------------
 
-static spiflash_device_t     s_x_flash;
-static bool                  s_b_ready;
-static spiflash_part_table_t s_x_parts;       // RAM partition-table context
+#define s_x_flash  (*p_x_fs_device())     // production spiflash_device_t
+#define s_x_parts  (*p_x_fs_table())      // production RAM partition table
+
 static uint8_t              *s_pu8_backup;     // malloc'd sector-0 backup (NULL = none held)
-/* littlefs instances are owned by the VFS module now (the 'M' op routes through
- * it); the VFS opens partitions from the s_x_parts table via v_vfs_attach(). */
+/* littlefs instances are owned by the VFS module (the 'M' op routes through it);
+ * the VFS opens partitions from the shared table via v_vfs_attach(). */
 
 /* Frame-data caps: one page for a program, a bounded chunk for a framed read
  * (the host chunks anything larger via repeated read ops). */
@@ -38,27 +42,12 @@ static uint8_t              *s_pu8_backup;     // malloc'd sector-0 backup (NULL
 
 spiflash_err_t x_spiflash_test_ensure_init(void)
 {
-    spiflash_err_t x_err;
-
-    if (s_b_ready)
-    {
-        return SPIFLASH_OK;
-    }
-
-    x_err = x_spiflash_init(&s_x_flash, &FLASH_SPI_HANDLE,
-                            FLASH_CS_GPIO_Port, FLASH_CS_Pin);
-    if (x_err != SPIFLASH_OK)
-    {
-        return x_err;
-    }
-
-    /* Cooperative idle pump for long status-poll waits (S4): pumped only between
-     * transactions with CS deasserted, so the shared SPI1/LCD bus stays sane. */
-    v_spiflash_transport_set_idle_cb(p_x_spiflash_transport(&s_x_flash),
-                                     v_app_polling_task);
-
-    s_b_ready = true;
-    return SPIFLASH_OK;
+    /* The device handle belongs to filesystem.c now and is normally brought up
+     * at boot by x_fs_system_init(). For a bench run that reaches these ops
+     * without that (or before it), x_fs_device_init() lazily brings the device
+     * online (idempotent, device-only). The partition table is managed by the
+     * individual T ops, exactly as before. */
+    return x_fs_device_init();
 }
 
 //------------------------------------------------------------------------------

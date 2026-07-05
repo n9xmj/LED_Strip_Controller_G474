@@ -152,13 +152,14 @@ int i_vfs_unmount(const char *psz_label)
     {
         if (s_ax_mount[i].b_used && (strcmp(s_ax_mount[i].c_label, psz_label) == 0))
         {
-            int i_rc = 0;
             if (s_ax_mount[i].b_mounted)
             {
-                i_rc = i_spiflash_lfs_unmount(&s_ax_mount[i].x_fs);
-                if (i_rc == 0) { s_ax_mount[i].b_mounted = false; }
+                int i_rc = i_spiflash_lfs_unmount(&s_ax_mount[i].x_fs);
+                if (i_rc != 0) { return i_rc; }        // stay mounted on failure
+                s_ax_mount[i].b_mounted = false;
             }
-            return i_rc;
+            s_ax_mount[i].b_used = false;              // release the slot for reuse
+            return 0;
         }
     }
     return 0;       // unknown / not mounted

@@ -86,7 +86,7 @@ G12 in progress; G9, G10, G13 pending).*
 | G8 | 4 | ✅ | **Mount / format / file-IO bench test** on **both** littlefs partitions — `spiflash_bench.py` `littlefs` suite (18 checks): per-FS format/mount/write/readback/`ls`/unmount→remount→**persist**, plus two **independent** FS instances holding distinct content concurrently, bracketed by table backup/restore. Driven by the harness **`M`** op (`L` is the list builtin). **All green 2026-06-28.** | T1 |
 | G9 | 5 | 🔴 | **Extend the SPI Flash submenu (G12)** with filesystem ops once G7 mounts: **directory listing for both littlefs partitions** + format / cat / put — the higher-level bring-up surface. (Partition-map listing already added at G12.) | T1, I5 |
 | G10 | 6 | 🔴 | **Final cleanup (LAST step)** — archive the original bare-metal G0/G2 snippets to `Docs/Not-in-project-temp/` for reference; the live tests persist (migrated) under the G12 submenu. Remove any remaining throwaway top-level scaffolding. | G0, G12 |
-| G13 | 7 | 🔴 | **Boot-time storage init in `v_system_init()`** (after Phase B; necessary) — wire `app_main.c`'s `v_system_init()` to bring the flash filesystem **live for the app**: `x_spiflash_init` → load partition table (provision default if absent) → **enumerate the table and mount *every* partition of type `SPIFLASH_PART_TYPE_LITTLEFS` via the VFS** (by its label, format-on-first-boot) → so `fopen("/<label>/...")` / VFS access works immediately post-init. **Type-driven, not hardcoded `lfs0`/`lfs1`** (ESP-IDF-style: `type` selects what the kernel layer mounts; `u8_subtype` reserved for finer FS-format distinction, unused today). **NB `VFS_MAX_MOUNTS` must cover the littlefs-partition count.** (NVM-type partitions are brought up separately by **W8**'s nvmparams init — *not* part of G13.) Lifts the lazy/bench init out of the test path into startup; the test ops then reference the already-initialised globals. | W10, G7, G11 |
+| G13 | 7 | ✅ | **DONE + HIL-validated 2026-07-04.** Boot-time storage init in `v_system_init()` — new [`App/Src/filesystem.c`](../../App/Src/filesystem.c)/[`.h`](../../App/Inc/filesystem.h) owns the production device handle + partition table and exposes `x_fs_system_init(bool)` (device init → load table → provision-if-**blank** [NOTFOUND only; corrupt tables are never auto-wiped] → attach VFS → mount every littlefs partition, type-driven, format-on-first-boot) + `x_fs_device_init()` (device-only, idempotent — what the bench needs) + accessors. `app_main.c` calls `x_fs_system_init(true)` in `v_system_init` and gates `v_app_polling_task()` behind a `s_b_system_ready` flag (background work stays off during boot; the flash idle-pump becomes a safe no-op). `spiflash_test.c` drops its statics and aliases to the accessors. `VFS_MAX_MOUNTS` 2→4 (+ overflow-skip). Bench proof: boot log `mounted littlefs 'lfs0'/'lfs1'`; HIL suite **63/63 green** (littlefs/stdio suites now unmount before format, since boot pre-mounts). Original plan text: wire `app_main.c`'s `v_system_init()` to bring the flash filesystem **live for the app**: `x_spiflash_init` → load partition table (provision default if absent) → **enumerate the table and mount *every* partition of type `SPIFLASH_PART_TYPE_LITTLEFS` via the VFS** (by its label, format-on-first-boot) → so `fopen("/<label>/...")` / VFS access works immediately post-init. **Type-driven, not hardcoded `lfs0`/`lfs1`** (ESP-IDF-style: `type` selects what the kernel layer mounts; `u8_subtype` reserved for finer FS-format distinction, unused today). **NB `VFS_MAX_MOUNTS` must cover the littlefs-partition count.** (NVM-type partitions are brought up separately by **W8**'s nvmparams init — *not* part of G13.) Lifts the lazy/bench init out of the test path into startup; the test ops then reference the already-initialised globals. | W10, G7, G11 |
 
 ---
 
@@ -224,23 +224,39 @@ typedef struct {
 Validity check: read slot 0, verify `u32_table_magic` + version, then CRC32 over slots 1…N. An
 empty entry slot is still `u16_magic == 0xFFFF` (erased flash). On NOR every table edit rewrites the
 whole sector, so recomputing the header CRC each time is free.
-**Default layout (provisioned at runtime; `N` = sector count = capacity / 4 KB, SFDP-detected;
-last index `n = N-1`). Concrete values shown for the 16 MB W25Q128 (N = 4096, n = 4095):**
+**Default layout (revised 2026-07-04; provisioned at runtime; `N` = sector count = capacity / 4 KB,
+SFDP-detected; last index `n = N-1`). Concrete values for the 16 MB W25Q128 (N = 4096, n = 4095):**
 
-| Sectors        | Bytes (16 MB)        | Region        | Purpose |
-|----------------|----------------------|---------------|---------|
-| `0`            | 0x000000–0x000FFF    | table         | header (magic+ver+CRC32) + entry array |
-| `1..3`         | 0x001000–0x003FFF    | generic data  | scratch R/W; **hosts the R/W-speed stress test** (migrated G2) — 3 sectors |
-| `4..5`         | 0x004000–0x005FFF    | nvmparams     | KV pool (W8) |
-| `6..9`         | 0x006000–0x009FFF    | reserved-A    | partition create/delete testing |
-| `10..n-2`      | 0x00A000–0xFFDFFF    | littlefs ×2   | two **equal** partitions (no gap) |
-| `n-1..n`       | 0xFFE000–0xFFFFFF    | reserved-B    | partition create/delete testing (last 2 sectors) |
+| Sectors        | Bytes (16 MB)        | Label       | Type     | Purpose |
+|----------------|----------------------|-------------|----------|---------|
+| `0`            | 0x000000–0x000FFF    | `spiflash0` | RESERVED | partition table (header + entry array); a reserved entry marks the table's own sector so it lists (sector 0 is already auto-place-protected) |
+| `1..2`         | 0x001000–0x002FFF    | `nvm`       | NVM      | nvmparams KV pool (W8) — 2 sectors |
+| `3..15`        | 0x003000–0x00FFFF    | `data`      | DATA     | generic R/W playground; **off-limits to the test runner** — 13 sectors |
+| `16..2039`     | 0x010000–0x7F7FFF    | `lfs0`      | LITTLEFS | littlefs — 2024 sectors |
+| `2040..4063`   | 0x7F8000–0xFDFFFF    | `lfs1`      | LITTLEFS | littlefs — 2024 sectors |
+| `4064..4095`   | 0xFE0000–0xFFFFFF    | *(none)*    | —        | **test-runner scratch** — 32 sectors, **unmapped** (not a partition) |
 
-- The fixed regions total **12 sectors** (table 1 + generic 3 + nvmparams 2 + reserved-A 4 +
-  reserved-B 2) — **even** — so the littlefs region `10 .. N-3` = `N-12` sectors splits **exactly in
-  two, no leftover** for any even N (true of every 2^k-MB part): 16 MB → 4084 → **2042 + 2042**
-  (LFS_A `10..2051`, LFS_B `2052..4093`); W25Q64 (N=2048) → 2036 → **1018 + 1018**. Geometry is
-  runtime, so one provisioning routine covers both parts.
+- Fixed low regions total **16 sectors** (table 1 + nvm 2 + data 13); **scratch** is the top **32**
+  sectors, left *unmapped*. The littlefs region = sectors `16 .. N-33` = `N-48` sectors, split in two
+  (odd remainder → `lfs1`, so scratch stays exactly 32): 16 MB → 4048 → **2024 + 2024**. Geometry is
+  runtime, so one provisioning routine covers any part (min `N ≥ 64`).
+
+**Scratch region + test-runner contract (2026-07-04).** The top 32 sectors are a deliberately
+*unallocated* sandbox for the HIL runner (`spiflash_bench.py`): tests create/format/delete their **own**
+partitions there and never touch `lfs0`/`lfs1`/`data`, so a run cannot destroy real data. Ownership is
+by a **reserved label prefix `@tr_`** (the `@` makes an accidental collision with a user label
+essentially impossible). Contract, enforced host-side as a **preflight** before any mutation:
+- Derive the scratch window from the table itself (`scratch_base = lfs1.off + lfs1.size` .. capacity) —
+  no magic constant, so a future layout tweak can't desync the guard.
+- Any partition overlapping scratch whose label starts with `@tr_` is a prior-run leftover → the runner
+  unmounts + deletes it (it owns those).
+- Any **other** partition overlapping scratch is **foreign** → the runner **aborts before doing
+  anything**, reports "scratch not free," and runs zero tests — it must never delete what it doesn't
+  own. Clearing a foreign partition out of scratch is the user's responsibility.
+
+This lets the user park experiments in scratch (just avoid the `@tr_` prefix) without the runner
+clobbering them, at the cost of the runner refusing to run until scratch is clear. Whole-device
+imaging (`backup-all`/`restore-all`, **W13**) is the belt-and-suspenders before destructive runs.
 **API:** validate/read table, provision-default (format), enumerate, open-by-label →
 `spiflash_partition_t`. ESP-*conceptual*, minus bootloader baggage (no fixed 0x8000, no 0xC00 cap).
 FAL is the reference; the legacy MX25R80 "directory" is the primitive ancestor.
@@ -426,6 +442,22 @@ and chunked-transfer loops live host-side, and the device stays a thin op server
 **Transfer detail:** `get`/`put` stream in bounded chunks through the harness framing (read/write N
 bytes at offset), reusing the test-harness file-upload buffer path (Berry W4) where it fits, so device
 RAM never caps file size; a length/CRC check per transfer guards integrity.
+**Image backup / restore (host↔host-file, user request 2026-07-04):** beyond per-file `get`/`put`, the
+shell should offer **coarser-grained imaging** to a host file:
+- **Whole-partition** `backup <label> <hostfile>` / `restore <label> <hostfile>` — stream a partition's
+  *raw bytes* (via the partition-relative read/write ops, **not** the FS layer, so it captures the exact
+  on-flash image incl. littlefs metadata / an nvmparams pool / a raw DATA region) to/from a host file.
+  Size = the partition's `u32_size`; a length + CRC32 check guards the round-trip. `restore` must reject
+  a size mismatch and refuse a **mounted** target (unmount first) to avoid a live-FS tear.
+- **Entire-device** `backup-all <hostfile>` / `restore-all <hostfile>` — a full chip image (sector 0
+  partition table + every partition + gaps), for a one-shot "snapshot the whole flash before I
+  experiment" / "put it back" workflow. Effectively a raw `0..capacity` read/write in chunks; the
+  partition table travels with it, so a restore-all reproduces the exact layout. (A `restore-all`
+  naturally also repairs a clobbered table — a heavier alternative to reprovision.)
+These build on the same chunked-transfer + CRC machinery as `get`/`put`, just addressing raw
+flash/partition ranges instead of FS files. Useful for debugging (capture-a-repro), and pairs with the
+test-runner scratch contract (I5) — a `backup-all` is the belt-and-suspenders before running destructive
+HIL suites.
 **Depends on:** W9 (device fs ops) + G7/G8 (mounted FSes) + W12 (label paths). Natural companion to
 the Berry `fs.*` tie-in (W7) — same device ops, two front-ends (interactive shell + scripting).
 

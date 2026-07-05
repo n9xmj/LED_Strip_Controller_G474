@@ -201,27 +201,43 @@ static void v_add_default(spiflash_part_table_t *p_x_t, const char *psz_label, u
     p_x_t->u16_count++;
 }
 
+/* Default-layout fixed regions (sectors). See the plan I5 "Default layout" +
+ * "scratch region + test-runner contract". The top SCRATCH sectors are left
+ * UNMAPPED as the HIL test-runner sandbox; tests own partitions there via the
+ * "@tr_" label prefix and must never touch the mapped partitions below. */
+#define SPIFLASH_PART_LOW_SECTORS      16u   /* table(1) + nvm(2) + data(13)   */
+#define SPIFLASH_PART_SCRATCH_SECTORS  32u   /* top, unmapped test scratch     */
+
 spiflash_err_t x_spiflash_part_provision_default(spiflash_part_table_t *p_x_t)
 {
-    uint32_t u32_ssize, u32_n, u32_half;
+    uint32_t u32_ssize, u32_n, u32_lfs_region, u32_half, u32_lfs0_start;
 
     if ((p_x_t == NULL) || (p_x_t->p_x_dev == NULL)) return SPIFLASH_ERR_PARAM;
 
     u32_ssize = p_x_t->p_x_dev->x_info.u16_sector_size;
     u32_n     = p_x_t->p_x_dev->x_info.u32_sector_count;
-    if ((u32_ssize == 0u) || (u32_n < 16u)) return SPIFLASH_ERR_UNSUPPORTED;
+    if ((u32_ssize == 0u) ||
+        (u32_n < (SPIFLASH_PART_LOW_SECTORS + SPIFLASH_PART_SCRATCH_SECTORS + 2u)))
+    {
+        return SPIFLASH_ERR_UNSUPPORTED;
+    }
 
-    u32_half = (u32_n - 12u) / 2u;          // fixed regions = 12 sectors (even) -> exact split
+    /* littlefs fills everything between the fixed low regions and the scratch
+     * tail; any odd remainder goes to lfs1 so scratch stays exactly SCRATCH. */
+    u32_lfs_region = u32_n - SPIFLASH_PART_LOW_SECTORS - SPIFLASH_PART_SCRATCH_SECTORS;
+    u32_half       = u32_lfs_region / 2u;
+    u32_lfs0_start = SPIFLASH_PART_LOW_SECTORS;                 /* sector 16 */
 
     p_x_t->u16_count = 0u;
     memset(p_x_t->ab_in_use, 0, sizeof(p_x_t->ab_in_use));
 
-    v_add_default(p_x_t, "data",  (uint8_t)SPIFLASH_PART_TYPE_DATA,     1u,            3u,       u32_ssize);
-    v_add_default(p_x_t, "nvm",   (uint8_t)SPIFLASH_PART_TYPE_NVM,      4u,            2u,       u32_ssize);
-    v_add_default(p_x_t, "rsvdA", (uint8_t)SPIFLASH_PART_TYPE_RESERVED, 6u,            4u,       u32_ssize);
-    v_add_default(p_x_t, "lfs0",  (uint8_t)SPIFLASH_PART_TYPE_LITTLEFS, 10u,           u32_half, u32_ssize);
-    v_add_default(p_x_t, "lfs1",  (uint8_t)SPIFLASH_PART_TYPE_LITTLEFS, 10u + u32_half, u32_half, u32_ssize);
-    v_add_default(p_x_t, "rsvdB", (uint8_t)SPIFLASH_PART_TYPE_RESERVED, u32_n - 2u,    2u,       u32_ssize);
+    /*            label          type                                  start                       count                      ssize */
+    v_add_default(p_x_t, "spiflash0", (uint8_t)SPIFLASH_PART_TYPE_RESERVED, 0u,                         1u,                        u32_ssize);
+    v_add_default(p_x_t, "nvm",       (uint8_t)SPIFLASH_PART_TYPE_NVM,      1u,                         2u,                        u32_ssize);
+    v_add_default(p_x_t, "data",      (uint8_t)SPIFLASH_PART_TYPE_DATA,     3u,                         13u,                       u32_ssize);
+    v_add_default(p_x_t, "lfs0",      (uint8_t)SPIFLASH_PART_TYPE_LITTLEFS, u32_lfs0_start,             u32_half,                  u32_ssize);
+    v_add_default(p_x_t, "lfs1",      (uint8_t)SPIFLASH_PART_TYPE_LITTLEFS, u32_lfs0_start + u32_half,  u32_lfs_region - u32_half, u32_ssize);
+    /* sectors [N-SCRATCH .. N-1] intentionally left UNMAPPED (test scratch). */
 
     return x_table_save(p_x_t);
 }

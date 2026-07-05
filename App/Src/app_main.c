@@ -14,6 +14,7 @@
 #include "synth_engine.h"
 #include "play.h"
 #include "uart_stream.h"
+#include "filesystem.h"     // x_fs_system_init (boot-time SPI-NOR / littlefs bring-up, G13)
 
 #include "debug_config.h"   // for RPRINTF + logging tags (banner uses RPRINTF)
 
@@ -28,6 +29,13 @@ job_queue_t gx_job_queue;
 //------------------------------------------------------------------------------
 
 static job_t x_job_queue_buffer[JOB_QUEUE_SIZE];
+
+/* Cooperative-task gate. The polling task runs background work (jobs, PLAY poll,
+ * synth service) that must NOT execute until the whole system is initialized --
+ * v_system_init() runs before it, and flash bring-up pumps the idle hook during
+ * boot. app_main sets this true just before entering the main loop. Same idea as
+ * an OS deferring user/background work until kernel init completes. */
+static volatile bool s_b_system_ready = false;
 
 static uint8_t u8_debug_uart_rx_buf[512];
 static uint8_t u8_debug_uart_tx_buf[1024];
@@ -282,6 +290,13 @@ static void v_system_init(void)
     v_synth_engine_init();
 
     v_play_init();
+
+    // Bring the SPI-NOR filesystem online: init the device, load/provision the
+    // partition table, and mount every littlefs partition via the VFS so
+    // fopen("/<label>/...") works app-wide (plan G13). Best-effort: storage is
+    // non-critical, so a failure here logs and boot continues. Pass `true` to
+    // provision the default layout on a blank device (one-liner to disable).
+    (void)x_fs_system_init(true);
 }
 
 /******************************************************************************
@@ -331,6 +346,12 @@ void v_process_next_job(void)
 
 void v_app_polling_task(void)
 {
+    // Do nothing until the system is fully initialized. During v_system_init()
+    // (esp. flash bring-up, which pumps this via the SPI idle hook) the system
+    // is not yet ready for background tasks; app_main releases the gate just
+    // before the main loop. Nothing in v_system_init depends on this pumping.
+    if (!s_b_system_ready) { return; }
+
     // INVARIANT: nothing pumped here may consume the debug-UART RX ring.
     // __wrap_fflush() pumps this during a console flush; if a task drained RX it
     // could swallow a terminal cursor-position (CPR) reply mid query. Console
@@ -353,6 +374,10 @@ NEVER_RETURNS void v_app_main(void)
 
     v_newline();
     LOGCT(LOG_SYSTEM, "Initialization complete. Starting main task loop");
+
+    // System is fully initialized: release the cooperative polling task so
+    // background work (jobs, PLAY, synth) begins running in the main loop.
+    s_b_system_ready = true;
 
     while (1)
     {

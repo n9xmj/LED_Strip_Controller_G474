@@ -19,7 +19,7 @@
 #include "spiflash_lfs.h"       // spiflash_lfs_t + lfs types
 #include "spiflash_part.h"      // spiflash_part_table_t
 
-#define VFS_MAX_MOUNTS  2u      // lfs0 / lfs1 (extensible)
+#define VFS_MAX_MOUNTS  4u      // lfs0 / lfs1 today, with headroom (G13 type-driven mount)
 #define VFS_MAX_OPEN    4u      // concurrent open files
 #define VFS_FD_BASE     3       // 0/1/2 reserved for stdin/stdout/stderr
 

@@ -1,17 +1,16 @@
 /******************************************************************************
  * spiflash_test.h
  *
- * Bench / HIL test surface for the SPI-NOR flash stack. Owns the bench device
- * handle (lazy-init) and exposes:
+ * Bench / HIL test surface for the SPI-NOR flash stack. Exposes:
  *   - the debug-menu identify helper  ('f' -> 'i');
- *   - the test-harness 'S' op          — granular storage primitives the host
+ *   - the test-harness 'S'/'T'/'M'/'O' ops — granular storage primitives the host
  *     composes into HIL tests (see scripts/spiflash_bench.py).
  *
- * TEMPORARY ownership: x_spiflash_test_ensure_init() lazily inits a bench device
- * handle; once the stack is validated this init moves to v_system_init() and the
- * handle/lazy-init lift out of here. The granular ops and the debug item stay.
- *
- * The partition-table context + the 'T' (partition) op land here in a later step.
+ * Ownership (as of G13): the production device handle + partition table now live
+ * in filesystem.c and are brought up at boot by x_fs_system_init(). The ops here
+ * operate on those shared instances (via the filesystem.c accessors);
+ * x_spiflash_test_ensure_init() just delegates to x_fs_device_init() for a bench
+ * run that reaches an op before boot init has completed.
  ******************************************************************************/
 
 #ifndef SPIFLASH_TEST_H
