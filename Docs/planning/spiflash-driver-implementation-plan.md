@@ -539,8 +539,8 @@ Captured now so the migration agent has context (the driver is being built *for*
   (provision/CRC/create corner-cases/mounted-guard) → **two littlefs FSes** → **C stdio front door**
   (`fopen/fread/fwrite/fseek/stat/remove`) — via `scripts/spiflash_bench.py` (**63 checks**: 12 driver +
   22 partition + 18 littlefs + 11 stdio, all green), driven by the harness `S`/`T`/`M`/`O` ops. **Next
-  suggested:** **G13** (boot-time type-driven mount in `v_system_init`), then the G12 HuIL menu items +
-  G9/G10 cleanup, then the **Berry FS tie-in via stdio** (Berry plan **W3**, now unblocked) and the
-  **W13** host-shell planning session.
+  suggested (user-directed order 2026-07-04):** **G13** (boot-time type-driven mount in `v_system_init`)
+  **first**, then the **Berry FS tie-in via stdio** (Berry plan **W3**, now unblocked) **immediately after**;
+  then the G12 HuIL menu items + G9/G10 cleanup and the **W13** host-shell planning session.
 
 **End of spiflash-driver-implementation-plan.md**

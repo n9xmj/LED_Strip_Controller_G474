@@ -32,6 +32,10 @@ Works. Supersedes [session-handoff-2026-06-28-spiflash-vfs.md](session-handoff-2
   stat-after-rm `-1` (ENOENT); unmounted-label negative; ls cross-check (stdio write visible to littlefs).
 
 ## Still open / next steps
+**Next-session order — user-directed (2026-07-04):** do **(1) G13 first** (item 1 below; should be quick),
+then **(2) the Berry FS-via-stdio tie-in immediately after** (item 3 below = Berry plan **W3**). Everything
+else (W13, W15, G12/G9/G10, W8) follows those two.
+
 1. **G13** — boot-time storage init in `v_system_init()`: `x_spiflash_init` → load/provision table →
    **mount every `SPIFLASH_PART_TYPE_LITTLEFS` partition via the VFS** (type-driven; `VFS_MAX_MOUNTS` must
    cover the count). Lifts the lazy bench init (`x_spiflash_test_ensure_init`) into startup. **Now unblocked** (Phase B done).
@@ -65,8 +69,10 @@ Works. Supersedes [session-handoff-2026-06-28-spiflash-vfs.md](session-handoff-2
 
 ## Suggested opener (next session)
 ```
-/read-the-docs G13 boot-time storage init — read the newest .grok/memory handoff + the spiflash plan.
-Phase B (stdio→VFS) is done + HIL-validated (63 checks). Next is G13: wire v_system_init() to init the
-device, load/provision the partition table, and mount every LITTLEFS-type partition via the VFS.
+/read-the-docs G13 + Berry FS-via-stdio — read the newest .grok/memory handoff + the spiflash & berry plans.
+Phase B (stdio→VFS) is done + HIL-validated (63 checks). This session, in order: (1) G13 — wire
+v_system_init() to init the device, load/provision the table, and mount every LITTLEFS-type partition via
+the VFS; then (2) Berry FS tie-in (Berry plan W3) — BE_USE_FILE_SYSTEM=1 + coc regen + wire be_port.c file
+ops → stdio, so open("/lfs0/x.be") works in the [b] REPL.
 ```
-Or, for the shell work: open a **W13 planning session** (FS shell executive ops + Python REPL; cwd host-side).
+(W13 shell planning + W15 semihosting are separate, later sessions.)

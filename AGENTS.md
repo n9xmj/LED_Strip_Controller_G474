@@ -114,7 +114,7 @@ Working end-to-end on the bench (mic → DMA → job queue → main-context hand
 - **`r`** — DMA stream bench: prints `chunks/ac/pk` once per second to confirm the stream + job path are alive.
 - Sensitivity note: INMP441 is a fixed-gain digital mic (sens −26 dBFS @ 94 dB SPL, SNR ~61 dB, overload ~120 dB SPL). Ambient sound is small in *linear* terms but well above the noise floor — meter/DSP should work in **dB** and apply digital gain/AGC. 16-bit truncation is fine (mic SNR fits in 16 bits).
 
-### SPI NOR flash + partitions + littlefs (`App/spiflash/`, `App/Src/vfs.c`, in progress)
+### SPI NOR flash + partitions + littlefs + C stdio (`App/spiflash/`, `App/Src/vfs.c`, `App/Src/syscalls_vfs.c`)
 W25Q128 SPI-NOR driver, layered (D4): `spiflash_ll` (bus transport) → `spiflash` (device +
 registers + **SFDP runtime geometry** + erase/program/read) → `spiflash_part` (partition manager,
 sector-0 table) → littlefs (vendored `App/littlefs/`, **now built in**) via `spiflash_lfs` (BD shim)
@@ -122,13 +122,21 @@ sector-0 table) → littlefs (vendored `App/littlefs/`, **now built in**) via `s
 standard reflected CRC-32 over the HW CRC IP). **SPI1 is shared with the LCD** (`FLASH_CS`=PC3,
 `LCD_CS`=PC0, both run /16 ≈ 10 MHz); SPI1_RX DMA on DMA2_Ch1. Geometry is auto-detected so one binary
 fits the W25Q128 (bench) and W25Q64 (future H723).
-**Testing:** granular harness ops (enter `0xDA`, then) `S` (chip), `T` (partition), `M` (littlefs) — the
-host composes them; `scripts/spiflash_bench.py` is the HIL runner (`--suite driver|partition|littlefs|all`).
-**Status (2026-06-28):** G1–G8 + G11 **HIL-validated** (52 checks green); G12 in progress; W10/W12
-**Phase A** (the `vfs` module) done — Phase B (newlib stdio→VFS retarget; needs a `syscalls.c` weak-edit)
-pending. Authoritative state:
+**C stdio front door (W10/W12 Phase B):** newlib `fopen/fread/fwrite/fseek/fclose/stat/remove` on a
+`/<label>/...` path route to the VFS via `App/Src/syscalls_vfs.c` (fd 0/1→console, fd 2→`__io_putchar_stderr`
+seam, fd≥3→VFS; `LFS_ERR_*→errno`). **Invariant (regen-fragile, like the `--wrap=fflush` note above):** this
+relies on `_open/_close/_lseek/_fstat/_isatty/_stat/_unlink` being marked **`__attribute__((weak))`** in
+**`Core/Src/syscalls.c`** (`_read`/`_write` already weak). A CubeMX/`.ioc` "Generate Code" *could* revert
+those weak markers (they're outside USER CODE) — **re-verify after any regen**, or stdio silently falls back
+to the console-only stubs. `VFS_STDIO_BLKSIZE`=256 (a stdio buffer knob, not the SFDP page size).
+**Testing:** granular harness ops (enter `0xDA`, then) `S` (chip), `T` (partition), `M` (littlefs), `O`
+(C stdio) — the host composes them; `scripts/spiflash_bench.py` is the HIL runner
+(`--suite driver|partition|littlefs|stdio|all`).
+**Status (2026-07-04):** G1–G8 + G11 **HIL-validated**, **W10/W12 done** (label VFS + full stdio retarget) —
+**63 checks green** (12 driver + 22 partition + 18 littlefs + 11 stdio); G12 in progress; **next: G13**
+(boot-time mount in `v_system_init`) then Berry FS tie-in (Berry plan W3). Authoritative state:
 [`Docs/planning/spiflash-driver-implementation-plan.md`](Docs/planning/spiflash-driver-implementation-plan.md)
-+ newest `.grok/memory/session-handoff-2026-06-28-spiflash-vfs.md`.
++ newest `.grok/memory/session-handoff-2026-07-04-spiflash-stdio-phaseb.md`.
 
 ### When to Introduce RTOS (FreeRTOS)
 - Current super-loop + blocking debug menu is sufficient for bring-up and static tests.
