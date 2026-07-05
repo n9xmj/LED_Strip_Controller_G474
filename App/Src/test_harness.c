@@ -23,6 +23,7 @@
 #include "debug_menu.h"     /* b_debug_play_feed_string (P op) */
 #include "uart_stream.h"    /* tx-ring status (used by the 'F' flush op) */
 #include "spiflash_test.h"  /* S op — granular SPI-NOR storage primitives */
+#include "berry_app.h"      /* Y op — headless Berry script run (i_berry_run_buffer) */
 
 /* Defined in app_main.c — the debug-console uart_stream handle, so the flush op
  * can observe TX-ring drain state directly. */
@@ -41,6 +42,8 @@ extern uart_stream_h_t x_app_debug_console_handle(void);
 #define HARNESS_LINE_MAX            512u
 /** Long command lines (P op hex = 2× PLAY_HARNESS_LINE_MAX); static, not on stack. */
 #define HARNESS_CMD_LINE_MAX        ((PLAY_HARNESS_LINE_MAX * 2u) + 16u)
+/** Y op: max decoded Berry script bytes (hex on the wire is 2×); static buffer. */
+#define HARNESS_BERRY_SCRIPT_MAX    2048u
 #define HARNESS_LINE_HUIL_MAX       121u   /* 120 entry chars + NUL */
 #define HARNESS_LINE_HUIL_HIST_SIZE 1024u  /* [l] history pool (static; not on stack) */
 #define HARNESS_FIELD_WIDTH         21u    /* [f] on-screen viewport width */
@@ -548,6 +551,28 @@ static void v_harness_op_flush(const char *pc_arg)
            (unsigned) u16_used_after, i_busy_after, (unsigned long) u32_ms);
 }
 
+/* Y <hex> : decode a Berry script from hex and run it headlessly through the
+ * embedded VM (i_berry_run_buffer) -- the automation front door for Berry, with
+ * NO line editor (this is the W4 test-runner mechanism). The script self-checks
+ * via assert(); rc=0 means the whole buffer ran to completion, rc!=0 = exception
+ * or error. Any print()/traceback output flows to the console before the frame. */
+static void v_harness_op_berry(const char *pc_arg)
+{
+    static uint8_t au8_script[HARNESS_BERRY_SCRIPT_MAX];
+    uint16_t u16_len = u16_harness_hex_to_bytes(pc_arg, au8_script,
+                                                (uint16_t) sizeof(au8_script));
+    int i_rc;
+
+    if (u16_len == 0u)
+    {
+        printf("<HRN Y ERR badhex>\r\n");
+        return;
+    }
+
+    i_rc = i_berry_run_buffer((const char *) au8_script, (size_t) u16_len);
+    printf("<HRN Y done rc=%d len=%u>\r\n", i_rc, (unsigned) u16_len);
+}
+
 static const harness_op_t s_ax_harness_ops[] =
 {
     { 'K', "decode key burst <hex> (e.g. K 1B5B41)",        v_harness_op_key         },
@@ -562,6 +587,7 @@ static const harness_op_t s_ax_harness_ops[] =
     { 'T', "partition: T <verb> [args] — backup|restore|provision|format|load|list|create|del|erase|mount|free", v_spiflash_test_harness_op_part },
     { 'M', "littlefs: M <verb> <label> [args] — format|mount|unmount|write|read|ls|rm ('L' is the list builtin)", v_spiflash_test_harness_op_lfs },
     { 'O', "stdio: O <verb> <label> <name> [hex] — stdio|stat|rm (newlib fopen/stat/remove retarget)", v_spiflash_test_harness_op_stdio },
+    { 'Y', "berry: run script <hex> headless via i_berry_run_buffer, frame rc", v_harness_op_berry },
 };
 
 //------------------------------------------------------------------------------

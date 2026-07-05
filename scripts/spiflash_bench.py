@@ -136,7 +136,8 @@ class Harness:
         """Send a one-frame op, return the last framed <HRN ...> line (or '')."""
         self.s.write((line + "\r").encode("ascii"))
         text = self._read_until(">", timeout_s)
-        m = re.findall(r"<HRN [STMO] [^>]*>", text)  # S=spiflash T=partition M=littlefs O=stdio
+        # S=spiflash T=partition M=littlefs O=stdio Y=berry
+        m = re.findall(r"<HRN [STMOY] [^>]*>", text)
         return m[-1] if m else ""
 
     def op_multi(self, line: str, end_token: str, timeout_s: float = 10.0) -> str:
@@ -542,6 +543,78 @@ def run_stdio_suite(h: Harness) -> bool:
     return failed == 0
 
 
+def berry_run(h: Harness, script: str) -> dict:
+    """Hex-encode a Berry script and run it headlessly via the 'Y' harness op
+    (i_berry_run_buffer). Returns the framed result: rc=0 => ran to completion,
+    rc!=0 => exception/error. No line editor involved (W4 mechanism)."""
+    hexs = script.encode("utf-8").hex().upper()
+    return kv(h.op(f"Y {hexs}", 10.0))
+
+
+def run_berry_suite(h: Harness) -> bool:
+    """Berry FS-via-stdio tie-in (Berry W3): scripts run through the Y op open/
+    write/read a file on a scratch @tr_ littlefs partition, proving be_port.c file
+    ops route through the newlib stdio -> VFS retarget. Self-checked via assert()."""
+    results: list[tuple[str, bool, str]] = []
+
+    def check(name: str, cond: bool, detail: str = "") -> None:
+        results.append((name, bool(cond), detail))
+        print(f"  [{'PASS' if cond else 'FAIL'}] {name:20} {detail}")
+
+    bk = kv(h.op("T backup", 5.0))
+    if bk.get("err") != "0":
+        check("backup", False, f"err={bk.get('err')} (aborting)")
+        print("\nBERRY SUMMARY: aborted (backup failed)")
+        return False
+    check("backup", True, f"n={bk.get('n')} bytes")
+
+    label = f"{OWNED_PREFIX}berry"          # @tr_berry
+    path = f"/{label}/bt.be"
+    made = False
+    try:
+        cr = kv(h.op(f"T create {label} {TYPE_LITTLEFS} 8000 0"))
+        check("create", cr.get("err") == "0", f"off={cr.get('off')} err={cr.get('err')}")
+        made = cr.get("err") == "0"
+        fmt = kv(h.op(f"M format {label}", 15.0))
+        check("format", fmt.get("rc") == "0", f"rc={fmt.get('rc')}")
+        mnt = kv(h.op(f"M mount {label}", 10.0))
+        check("mount", mnt.get("rc") == "0", f"rc={mnt.get('rc')}")
+
+        # 1. write -> close -> reopen -> read -> assert equal (open()/write()/read())
+        r1 = berry_run(h,
+            f'f = open("{path}", "w")\n'
+            f'f.write("hello from berry W3")\n'
+            f'f.close()\n'
+            f'g = open("{path}", "r")\n'
+            f's = g.read()\n'
+            f'g.close()\n'
+            f'assert(s == "hello from berry W3")\n')
+        check("fs_roundtrip", r1.get("rc") == "0", f"rc={r1.get('rc')} len={r1.get('len')}")
+
+        # 2. size() reflects the 19 bytes just written (exercises be_fsize/seek)
+        r2 = berry_run(h, f'g = open("{path}", "r")\nn = g.size()\ng.close()\nassert(n == 19)\n')
+        check("fs_size", r2.get("rc") == "0", f"rc={r2.get('rc')}")
+
+        # 3. negative: a failing assert must surface as rc != 0 (proves rc plumbing)
+        r3 = berry_run(h, 'assert(1 == 2)\n')
+        check("assert_fails_nonzero", r3.get("rc") not in ("0", None), f"rc={r3.get('rc')}")
+
+        # 4. negative: opening an unmounted label raises io_error -> rc != 0
+        r4 = berry_run(h, 'open("/nolabel/x", "r")\n')
+        check("bad_open_nonzero", r4.get("rc") not in ("0", None), f"rc={r4.get('rc')}")
+    finally:
+        if made:
+            h.op(f"M unmount {label}")
+        rs = kv(h.op("T restore", 5.0))
+        check("restore", rs.get("err") == "0" and rs.get("verify") == "1",
+              f"err={rs.get('err')} verify={rs.get('verify')}")
+
+    passed = sum(1 for _, ok, _ in results if ok)
+    failed = len(results) - passed
+    print(f"\nBERRY SUMMARY: {passed} passed, {failed} failed")
+    return failed == 0
+
+
 def maybe_reset(args, defaults) -> None:
     sn = args.stlink_sn or defaults.get("stlink_sn")
     if not sn:
@@ -562,7 +635,9 @@ def main() -> int:
     ap.add_argument("--reset", action="store_true", help="ST-Link reset before testing")
     ap.add_argument("--provision", action="store_true",
                     help="(re)provision the default partition layout and exit (no tests)")
-    ap.add_argument("--suite", choices=["driver", "partition", "littlefs", "stdio", "all"], default="all")
+    ap.add_argument("--suite",
+                    choices=["driver", "partition", "littlefs", "stdio", "berry", "all"],
+                    default="all")
     args = ap.parse_args()
 
     if args.reset:
@@ -584,7 +659,7 @@ def main() -> int:
             print("  reboot the board (or --reset next run) so the new layout is mounted.")
             return 0 if pv.get("err") == "0" else 1
         # Ownership guard: refuse to run if a foreign partition sits in scratch.
-        if args.suite in ("partition", "littlefs", "stdio", "all"):
+        if args.suite in ("partition", "littlefs", "stdio", "berry", "all"):
             if not preflight_scratch(h):
                 return 3
         if args.suite in ("driver", "all"):
@@ -599,6 +674,9 @@ def main() -> int:
         if args.suite in ("stdio", "all"):
             print("\n== stdio suite ==")
             ok &= run_stdio_suite(h)
+        if args.suite in ("berry", "all"):
+            print("\n== berry suite ==")
+            ok &= run_berry_suite(h)
     finally:
         try:
             h.quit()

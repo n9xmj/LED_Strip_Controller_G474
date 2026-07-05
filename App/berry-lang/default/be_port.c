@@ -88,76 +88,108 @@ BERRY_API char* be_readstring(char *buffer, size_t size)
 }
 
 /* ----------------------------------------------------------------------------
- * File system (stubbed -- no storage yet, plan I3/W3)
+ * File system (plan Berry W3)
  * ----------------------------------------------------------------------------
- * BE_USE_FILE_SYSTEM is 0, so the directory-traversal API (be_isdir, be_dirfirst
- * ...) is not compiled. The byte-stream file ops are still referenced by the
- * always-compiled loader paths in src/be_exec.c, so they must exist as symbols.
- * They are inert at runtime except for the std stream handles, which keep
- * print()/input() working.
+ * Berry's file class (open()/read()/write()/seek()/...) and the loader paths in
+ * src/be_exec.c reach storage through these byte-stream hooks. They now route to
+ * newlib <stdio.h>, which the firmware retargets (fd >= 3) to the label-routed
+ * littlefs VFS (spiflash W10/W12 Phase B, App/Src/syscalls_vfs.c) -- so
+ * open("/lfs0/x.be") works once lfs0 is mounted (automatic at boot, G13).
+ *
+ * The std stream handles (stdin/stdout/stderr) still flow to the console so
+ * print()/input() keep working. File writes are byte-exact: the LF->CRLF console
+ * translation lives in be_writebuffer (the print path), never here.
+ *
+ * Directory traversal (be_isdir/be_dirfirst/...) stays uncompiled -- it is pulled
+ * only by the `os` module, which remains off (a W3 follow-on).
  */
 
 void* be_fopen(const char *filename, const char *modes)
 {
-    (void) filename; (void) modes;
-    return NULL;   /* no filesystem */
+    if (filename == NULL || modes == NULL) {
+        return NULL;
+    }
+    return fopen(filename, modes);              /* -> _open -> VFS (fd >= 3) */
 }
 
 int be_fclose(void *hfile)
 {
-    (void) hfile;
-    return 0;
+    if (hfile == NULL || hfile == stdin || hfile == stdout || hfile == stderr) {
+        return 0;                              /* never close the console streams */
+    }
+    return fclose((FILE *) hfile);
 }
 
 size_t be_fwrite(void *hfile, const void *buffer, size_t length)
 {
-    if (hfile == stdout || hfile == stderr) {
-        return fwrite(buffer, 1, length, hfile);
+    /* Raw bytes for files AND the console (stdout/stderr); no CRLF translation. */
+    if (hfile == NULL) {
+        return 0;
     }
-    (void) buffer;
-    return 0;
+    return fwrite(buffer, 1, length, (FILE *) hfile);
 }
 
 size_t be_fread(void *hfile, void *buffer, size_t length)
 {
-    (void) hfile; (void) buffer; (void) length;
-    return 0;
+    if (hfile == NULL) {
+        return 0;
+    }
+    return fread(buffer, 1, length, (FILE *) hfile);
 }
 
 char* be_fgets(void *hfile, void *buffer, int size)
 {
     if (hfile == stdin) {
-        return be_readstring(buffer, (size_t) size);
+        return be_readstring(buffer, (size_t) size);   /* console line editor */
     }
-    (void) buffer; (void) size;
-    return NULL;
+    if (hfile == NULL || buffer == NULL || size <= 0) {
+        return NULL;
+    }
+    return fgets((char *) buffer, size, (FILE *) hfile);
 }
 
 int be_fseek(void *hfile, long offset)
 {
-    (void) hfile; (void) offset;
-    return -1;
+    if (hfile == NULL) {
+        return -1;
+    }
+    return fseek((FILE *) hfile, offset, SEEK_SET);    /* Berry seeks are absolute */
 }
 
 long int be_ftell(void *hfile)
 {
-    (void) hfile;
-    return -1;
+    if (hfile == NULL) {
+        return -1;
+    }
+    return ftell((FILE *) hfile);
 }
 
 long int be_fflush(void *hfile)
 {
-    if (hfile == stdout || hfile == stderr) {
-        return fflush(hfile);
+    if (hfile == NULL) {
+        return 0;
     }
-    (void) hfile;
-    return 0;
+    return fflush((FILE *) hfile);
 }
 
 size_t be_fsize(void *hfile)
 {
-    (void) hfile;
-    return 0;
+    /* Total size: remember the cursor, seek to end, read the offset, restore. */
+    FILE *fp = (FILE *) hfile;
+    long  cur, end;
+
+    if (fp == NULL) {
+        return 0;
+    }
+    cur = ftell(fp);
+    if (fseek(fp, 0, SEEK_END) != 0) {
+        return 0;
+    }
+    end = ftell(fp);
+    if (cur >= 0) {
+        (void) fseek(fp, cur, SEEK_SET);       /* restore the caller's position */
+    }
+    return (end > 0) ? (size_t) end : 0u;
 }
 
 /* ----------------------------------------------------------------------------

@@ -141,8 +141,10 @@
  * will not be used.
  * Default: 0
  **/
-/* No filesystem on the G474 yet (plan I3 / W3). Off until storage lands. */
-#define BE_USE_FILE_SYSTEM              0
+/* Storage landed (SPI-NOR + littlefs + label-routed VFS + newlib stdio retarget,
+ * spiflash W10/W12 + G13). Berry file ops route through libc stdio -> the VFS in
+ * be_port.c, so open("/lfs0/x.be") works (plan Berry W3). */
+#define BE_USE_FILE_SYSTEM              1
 
 /* Macro: BE_USE_SCRIPT_COMPILER
  * Enable compiler when BE_USE_SCRIPT_COMPILER is not 0, otherwise
