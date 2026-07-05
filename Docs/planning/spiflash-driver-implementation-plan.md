@@ -109,6 +109,7 @@ G12 in progress; G9, G10, G13 pending).*
 | W13 | 🔵 | **Host-side filesystem shell (interactive REPL)** — a Python shell over the device host-protocol giving reasonably complete remote FS access: `ls` / `cd` / `pwd`, `rm`, `rename`, `cp` / `mv`, plus `get` (copy-to-host) and `put` (upload-from-host). Unix-like, using the W12 `/<label>/...` path scheme across both littlefs partitions. The host-side **front-end** over the **W9** device fs ops (W9 = the primitives; W13 = the usable shell). Depends on W9 + G7/G8 (+ W12 paths). See detail. |
 | W14 | 🔵 | **Partition RO-flag enforcement + post-create flag mutation** (lower priority) — the `SPIFLASH_PART_FLAG_READONLY` bit is stored at create time but **unenforced** (the runtime handle carries no flags; partition R/W, VFS, and littlefs all ignore it) and **immutable after create** (only `set_mounted` exists). Add flags to the handle + RO rejection in `x_spiflash_part_write`/`erase_range`, a VFS write-intent reject on RO mounts, and a `set_flags`/`set_readonly` mutator (RAM edit + sector-0 commit). See detail. |
 | W15 | 🔵 | **VFS char/tty device class + ARM semihosting console backend** — generalize console fds 0/1/2 into a tty/char-device class with pluggable backends (UART now; semihosting via `SYS_WRITE0`/`SYS_WRITE`/`SYS_READC`). stderr already has its own `__io_putchar_stderr` seam (W10 Phase B). Char/tty is the right model (semihosting is a byte stream, not block). See detail. |
+| W16 | 🔵 | **Multi-device partition manager + VFS — `/device/partition/file` namespace** — support >1 physical storage device concurrently under one FS namespace by adding a **device level** to the path (e.g. H723's W25Q64 + a micro-SD/TF card). The partition manager is *already* per-device (each `spiflash_part_table_t` binds its own `spiflash_device_t`), so the SPI-NOR side is a bounded **VFS** refactor (device registry + 3-level path parse). The real cost is **SD**: it needs a block-device driver (W6) and, for PC interop, FatFs — which forces the VFS to become **FS-polymorphic** (per-mount FS vtable: littlefs *or* FatFs). Depends on W3 (OCTOSPI, H723 NOR) + W6 (SD). See detail. |
 
 ---
 
@@ -460,6 +461,37 @@ hard-faults/hangs without one, so it's debug-build-only; (2) **don't link `rdimo
 `_write`/`_read` collide with our custom `syscalls.c` + `syscalls_vfs.c`; hand-roll a tiny `SYS_WRITE`
 helper (inline `BKPT`) called from the `__io_putchar_stderr` seam instead. Origin: 2026-07-04 Phase-B
 discussion.
+
+### W16 — Multi-device partition manager + VFS (`/device/partition/file`)
+**Status:** 🔵 · **Needs user:** no (feasibility captured 2026-07-04)
+**What:** let >1 physical storage device be live under one FS namespace by promoting the path to three
+levels — `/<device>/<partition>/<rel>` (e.g. `/nor0/lfs0/log.txt`, `/sd0/DCIM/img.jpg`). Motivating case
+= the H723 board: a **W25Q64 on OCTOSPI** *and* a **micro-SD/TF card**, both mountable at once (plus any
+future device). ESP-IDF's VFS (`/spiflash/...`, `/sdcard/...`) is the reference design; our `vfs` module
+is already "a thin mount-table router," so this is its natural evolution.
+**Difficulty — tiered (the honest split):**
+- **Tier 1 — N SPI-NOR devices, all littlefs: LOW–MODERATE.** The two-tier handle model (D5) + per-device
+  partition table (I5) were *built* for this: the partition manager and the littlefs shim need **zero**
+  change (offsets are already device-relative; each table binds its own device). The work is contained in
+  `vfs.c`: (a) replace the single `s_p_parts` with a small **device registry** `{name → (device*, table*)}`;
+  (b) extend `p_x_vfs_resolve` to strip **two** leading components instead of one; (c) thread a device
+  selector through `i_vfs_mount`/`_format`/`_unmount`; (d) grow `VFS_MAX_MOUNTS`. Labels then only need to
+  be unique *per device*. Back-comfort: keep the old 2-level `/<label>/` form as a default-device alias if
+  wanted. Est. ~1–2 focused days incl. HIL. On the current bench a second NOR would just need a second CS
+  (SPI-HAL backend already supports it); different buses need their transport backend (W3/W11), orthogonal.
+- **Tier 2 — add SD/TF: MODERATE–HIGH, and the cost is NOT the path work.** SD doesn't use our sector-0
+  partition scheme (it's MBR/GPT) or littlefs — normal use wants **FatFs** over a **512 B-LBA block driver**
+  (W6, SPI or SDIO mode). Two forks: **(a)** to keep PC interop ("pop the card in a laptop"), the card must
+  be FAT → the VFS must become **FS-polymorphic**: each `vfs_mount_t` carries an **FS vtable**
+  (open/read/write/close/stat/readdir) dispatching to littlefs *or* FatFs, and `vfs_fd_t` holds a
+  union/`void*` handle + its vtable (again the ESP-IDF model). That's a real abstraction lift but
+  well-trodden. **(b)** if you're willing to run **littlefs on a raw SD region** (no FAT, no PC interop),
+  the SD collapses to "just another block device under littlefs" and Tier 2 nearly reduces to Tier 1 — much
+  cheaper, at the cost of the removable-media use case.
+**Takeaway:** the *device-namespace* itself is inexpensive and the architecture already leans this way; the
+expense is specifically **SD's foreign filesystem (FAT)**, which is what forces VFS FS-polymorphism. Decide
+the SD-FAT-vs-littlefs question first — it dominates the estimate. **Depends on:** W3 (OCTOSPI for the H723
+NOR) + W6 (SD block driver); pairs with W13 (the shell's `/<device>/<part>/` paths) and W15 (device class).
 
 ---
 
