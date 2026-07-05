@@ -27,8 +27,12 @@
 #include <string.h>
 #include <sys/time.h>
 
-#include "main.h"   /* HAL_GetTick(), Error_Handler() */
-#include "term.h"   /* x_term_getline_editor() for line input (plan D5) */
+#include "main.h"      /* HAL_GetTick(), Error_Handler() */
+#include "term.h"      /* x_term_getline_editor() for line input (plan D5) */
+#include "berry_app.h" /* pc_berry_active_cwd() -- per-VM cwd for relative opens (W3) */
+
+/* Max joined path (cwd + '/' + relative name) for a cwd-relative open. */
+#define BERRY_FOPEN_PATH_MAX  256
 
 /* ----------------------------------------------------------------------------
  * Standard input and output
@@ -108,6 +112,22 @@ void* be_fopen(const char *filename, const char *modes)
 {
     if (filename == NULL || modes == NULL) {
         return NULL;
+    }
+
+    /* Relative path + a set per-VM cwd -> resolve against it (Berry W3). Absolute
+     * paths ("/...") ignore cwd (POSIX); littlefs resolves '.'/'..' below the
+     * label itself. cwd is "" by default, so relative opens fail until chdir(). */
+    if (filename[0] != '/') {
+        const char *pc_cwd = pc_berry_active_cwd();
+        if (pc_cwd[0] != '\0') {
+            static char ac_path[BERRY_FOPEN_PATH_MAX];
+            const char *pc_sep = (pc_cwd[strlen(pc_cwd) - 1u] == '/') ? "" : "/";
+            int i_n = snprintf(ac_path, sizeof(ac_path), "%s%s%s", pc_cwd, pc_sep, filename);
+            if (i_n <= 0 || (size_t) i_n >= sizeof(ac_path)) {
+                return NULL;                    /* joined path too long */
+            }
+            return fopen(ac_path, modes);       /* -> _open -> VFS (fd >= 3) */
+        }
     }
     return fopen(filename, modes);              /* -> _open -> VFS (fd >= 3) */
 }

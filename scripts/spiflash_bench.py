@@ -602,6 +602,22 @@ def run_berry_suite(h: Harness) -> bool:
         # 4. negative: opening an unmounted label raises io_error -> rc != 0
         r4 = berry_run(h, 'open("/nolabel/x", "r")\n')
         check("bad_open_nonzero", r4.get("rc") not in ("0", None), f"rc={r4.get('rc')}")
+
+        # 5. per-VM cwd: chdir(), then a RELATIVE open resolves against it
+        r5 = berry_run(h,
+            f'chdir("/{label}")\n'
+            f'f = open("rel.txt", "w")\n'          # -> /{label}/rel.txt
+            f'f.write("via cwd")\n'
+            f'f.close()\n'
+            f'assert(getcwd() == "/{label}")\n'
+            f'g = open("rel.txt", "r")\n'          # relative -> resolves via cwd
+            f'assert(g.read() == "via cwd")\n'
+            f'g.close()\n')
+        check("cwd_relative_open", r5.get("rc") == "0", f"rc={r5.get('rc')}")
+
+        # 6. per-VM isolation: a fresh VM (new Y run) starts with an empty cwd
+        r6 = berry_run(h, 'assert(getcwd() == "")\n')
+        check("cwd_fresh_vm_empty", r6.get("rc") == "0", f"rc={r6.get('rc')}")
     finally:
         if made:
             h.op(f"M unmount {label}")

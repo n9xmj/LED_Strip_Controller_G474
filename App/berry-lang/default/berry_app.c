@@ -28,6 +28,9 @@
 #ifndef BERRY_DEFAULT_HEAP_BYTES
 #define BERRY_DEFAULT_HEAP_BYTES  8192u  /* per-VM sandbox size (W8); ~TLSF overhead off the top */
 #endif
+#ifndef BERRY_CWD_MAX
+#define BERRY_CWD_MAX             128u   /* per-VM working-directory buffer (Berry W3 cwd) */
+#endif
 
 /* ===========================================================================
  * Shared VM core
@@ -65,15 +68,64 @@ static void berry_heartbeat(bvm *vm, int event, ...)
 typedef struct {
     bvm                *vm;
     berry_heap_arena_t *arena;
-    berry_heap_arena_t *prev;   /* active arena to restore on close (nesting) */
+    berry_heap_arena_t *prev;      /* active arena to restore on close (nesting) */
+    char                ac_cwd[BERRY_CWD_MAX];  /* per-VM working dir; "" = none (W3) */
+    char               *prev_cwd;  /* active-cwd to restore on close (nesting) */
 } berry_session_t;
+
+/* ---- per-VM current working directory (Berry W3) --------------------------
+ * The file ops (be_port.c: be_fopen) are VM-less, so a relative path is resolved
+ * against a global "active cwd" pointer that is swapped to the running session's
+ * buffer on open/close -- the SAME mechanism as the W8 heap arena's active-arena
+ * pointer, and with the same caveat:
+ *
+ *   >>> RTOS MIGRATION POINT <<<  Under a preemptive RTOS (VMs on separate
+ *   tasks), this single global must become thread-local / per-task -- exactly
+ *   like px_berry_heap_set_active() (W8); do both in one pass. Cooperative
+ *   interleaving only needs the scheduler to swap it at each context switch.
+ *   Every reader/writer goes through the accessor + the set/restore below, so
+ *   the change stays localized here.
+ */
+static char *s_pc_active_cwd = NULL;
+
+const char *pc_berry_active_cwd(void)
+{
+    return (s_pc_active_cwd != NULL) ? s_pc_active_cwd : "";
+}
+
+/* chdir(path) -> bool : set THIS VM's working directory (recorded verbatim, no
+ * existence check -- a bad path just fails later at open). Relative opens then
+ * resolve against it (be_fopen). */
+static int l_berry_chdir(bvm *vm)
+{
+    if ((s_pc_active_cwd != NULL) && (be_top(vm) >= 1) && be_isstring(vm, 1)) {
+        const char *pc = be_tostring(vm, 1);
+        size_t      sz = strlen(pc);
+        if (sz >= BERRY_CWD_MAX) { sz = BERRY_CWD_MAX - 1u; }
+        memcpy(s_pc_active_cwd, pc, sz);
+        s_pc_active_cwd[sz] = '\0';
+        be_pushbool(vm, 1);
+    } else {
+        be_pushbool(vm, 0);
+    }
+    be_return(vm);
+}
+
+/* getcwd() -> string : THIS VM's working directory ("" if none set). */
+static int l_berry_getcwd(bvm *vm)
+{
+    be_pushstring(vm, pc_berry_active_cwd());
+    be_return(vm);
+}
 
 /* Open a session: malloc a `heap_bytes` arena, make it active, build the VM
  * inside it, register the S2 heartbeat. false on OOM (arena or VM). */
 static bool b_berry_session_open(berry_session_t *px, size_t heap_bytes)
 {
-    px->vm    = NULL;
-    px->prev  = NULL;
+    px->vm        = NULL;
+    px->prev      = NULL;
+    px->prev_cwd  = NULL;
+    px->ac_cwd[0] = '\0';
     px->arena = px_berry_heap_create(heap_bytes ? heap_bytes : BERRY_DEFAULT_HEAP_BYTES);
     if (px->arena == NULL) {
         return false;
@@ -89,8 +141,16 @@ static bool b_berry_session_open(berry_session_t *px, size_t heap_bytes)
     }
 
     be_set_obs_hook(px->vm, berry_heartbeat);
-    /* Native module/function registration (PLAY, LED, audio ...) lands here in
-     * later versions (W1/W2) -- the shared seam for both front-ends. */
+
+    /* Per-VM cwd: a fresh VM starts empty; make this session's buffer the active
+     * one and expose the script-facing setter/getter as globals (like open()). */
+    px->prev_cwd    = s_pc_active_cwd;
+    s_pc_active_cwd = px->ac_cwd;
+    be_regfunc(px->vm, "chdir",  l_berry_chdir);
+    be_regfunc(px->vm, "getcwd", l_berry_getcwd);
+
+    /* Further native module/function registration (PLAY, LED, audio ...) lands
+     * here in later versions (W1/W2) -- the shared seam for both front-ends. */
     return true;
 }
 
@@ -110,6 +170,7 @@ static void v_berry_session_close(berry_session_t *px)
         v_berry_heap_destroy(px->arena);
         px->arena = NULL;
     }
+    s_pc_active_cwd = px->prev_cwd;   /* restore the active cwd (nesting) */
 }
 
 /*

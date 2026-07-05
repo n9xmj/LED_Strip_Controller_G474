@@ -39,6 +39,16 @@ void v_berry_repl_run(void);
  */
 int i_berry_run_buffer(const char *pc_script, size_t sz_len);
 
+/**
+ * @brief The active VM's current working directory (Berry W3), or "" if none.
+ *
+ * Read by the VM-less file ops (be_port.c: be_fopen) to resolve relative paths.
+ * Points at the running session's per-VM buffer, swapped on session open/close
+ * (same pattern as the W8 heap arena; see the RTOS migration note in berry_app.c).
+ * Never NULL.
+ */
+const char *pc_berry_active_cwd(void);
+
 #ifdef __cplusplus
 }
 #endif
