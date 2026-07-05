@@ -39,7 +39,14 @@ Works. Supersedes [session-handoff-2026-06-28-spiflash-vfs.md](session-handoff-2
    harness ops (`ls/cwd/cp/mv/cat/more/mount`) + a Python REPL front-end. Design decisions parked:
    **cwd lives host-side** (device stays fully-qualified `/<label>/...`); the **`toupper()` namespace**
    question (keep case-fold vs UPPER=test/lower=shell) — audit script consumers before any change.
-3. **W7** Berry FS via stdio (now that W10 is done). **W8** nvmparams (independent G13 sibling).
+3. **Berry FS tie-in via stdio (Berry plan W3) — user explicitly wants this next.** Wire Berry file ops
+   through our stdio retarget: `BE_USE_FILE_SYSTEM 0→1` (`berry_conf.h`) → **coc regen** of
+   `generate/be_const_strtab*.h` (file-class builtins) → replace the inert `default/be_port.c` file-op
+   stubs with real `fopen/fread/fwrite/fseek/ftell/fclose` (route through the VFS, fd≥3). Then
+   `open("/lfs0/x.be")` works (lfs0 must be mounted — manual now, automatic after G13). See
+   [`berry-integration-plan.md`](../../Docs/planning/berry-integration-plan.md) **W3** (updated 2026-07-04).
+   **NOT** spiflash-W7 (a flash-specific script API on top) or Berry W1 (PLAY-as-a-Berry-func, the synth tie-in).
+   **W8** (spiflash) nvmparams is an independent G13 sibling.
 4. **W15** semihosting tty device (user wants to experiment; debug-build only, no `rdimon.specs`).
 5. **G12 remainder** (HuIL menu items), **G9/G10** cleanup.
 
