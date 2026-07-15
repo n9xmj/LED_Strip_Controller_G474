@@ -6,9 +6,10 @@
 - Existing host/HIL patterns: [`scripts/spiflash_bench.py`](../../scripts/spiflash_bench.py), [`App/Src/test_harness.c`](../../App/Src/test_harness.c)
 - Newest FS handoff: [`.grok/memory/session-handoff-2026-07-04-g13-berry-w3.md`](../../.grok/memory/session-handoff-2026-07-04-g13-berry-w3.md)
 
-**Branch:** `main` · **Status:** PLANNING  
+**Branch:** `main` · **Status:** IMPLEMENTING (V1 code on `main`; harden + smoke)  
 **Language:** Python host tool (author need not write Python to *use* the shell)  
-**Depends on:** spiflash **W9** device primitives (not started); G13 boot FS + VFS paths already shipped
+**Depends on:** G13 boot FS + VFS shipped; device harness **`R`** + host `scripts/fs_shell` landed (see handoff)  
+**Session handoff:** [host-fs-shell-session-handoff-2026-07-15.md](host-fs-shell-session-handoff-2026-07-15.md)
 
 > **Brief:** A classic **text command-line REPL on the PC** that manipulates the
 > device’s littlefs volumes (and optionally the host filesystem) over the serial
@@ -24,7 +25,7 @@
 **How to read:** (1) Open decisions → (2) Big Board → (3) § MSG → (4) Wish list →
 (5) Command keywords table → (6) LOCKED CONTEXT + detail stubs.
 
-**Last audited:** 2026-07-15 (impl phase: harness **R** ops + binary PU/GT device-side; build OK)
+**Last audited:** 2026-07-15 (wrapup: fileops REPL, host shell, smoke pattern, handoff)
 
 ---
 
@@ -32,9 +33,9 @@
 
 | ID | Status | Subject | Notes |
 |----|--------|---------|--------|
-| *(none blocking V1)* | — | — | **Part admin** specs → **V2 baseline** (below). Exact **F** mnemonics = implementer table. |
+| *(none blocking V1)* | — | — | Harden smoke; optional V2 part admin. Mnemonics: LS ST RM MD RN MO UM FM PU GT NOP. |
 
-*Planning gate: **cleared for V1 implementation** (core file ops + mount/get/put). Partition table management is **not** a V1 gate.*
+*V1 code on main — continue via [host-fs-shell-session-handoff-2026-07-15.md](host-fs-shell-session-handoff-2026-07-15.md). Part admin = V2.*
 
 ---
 
