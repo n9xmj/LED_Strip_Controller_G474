@@ -41,10 +41,12 @@ def ptk_style():
     return Style.from_dict(
         {
             # Input text (default class for the buffer)
+            # Note: prompt_toolkit accepts ansibright{red,green,...cyan} but NOT
+            # ansibrightwhite — use ansiwhite (or a hex) for "bright" white.
             "": "ansibrightyellow",
             "prompt-local": "ansigreen bold",
             "prompt-remote": "ansicyan bold",
-            "prompt-none": "ansibrightwhite bold",
+            "prompt-none": "ansiwhite bold",
         }
     )
 

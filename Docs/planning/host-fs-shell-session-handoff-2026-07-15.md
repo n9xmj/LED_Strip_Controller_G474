@@ -18,13 +18,13 @@
 ## Suggested opener (next session)
 
 ```
-/read-the-docs host FS shell — continue from handoff 2026-07-15 and commit ec6307b.
+/read-the-docs host FS shell — continue from handoff 2026-07-15 (pushed wrapup).
 Plan: Docs/planning/host-fs-shell-plan.md
 Handoff: Docs/planning/host-fs-shell-session-handoff-2026-07-15.md
 Smoke: python scripts/fs_shell.py --reset -y --host-cwd test-sandbox scripts/fs_shell_smoke.txt
 (seed test-sandbox/smoke_payload.txt first)
-Uncommitted: App/nvmparams/ (WIP), App/Src/app_main.c (LED blink experiment).
-Focus: <stabilize put/get edge cases | automated smoke suite | V2 part admin | nvmparams W8>
+Uncommitted (leave alone): App/nvmparams/ (WIP), App/Src/app_main.c (LED blink experiment).
+Focus pick: (a) ls/dir footer summary W15, (b) harden automated smoke, (c) V2 part admin, (d) nvmparams W8
 ```
 
 ## Architecture (locked in code)
@@ -54,22 +54,38 @@ debug menu  →  harness (0xDA)  →  fileops REPL (bare R)
 - Headless: `python scripts/fs_shell.py [--reset] [-y] [--host-cwd DIR] script.txt`
 - Prefer **`test-sandbox/`** (gitignored) as `--host-cwd`, not `scripts/`.
 
+## Fixed after first wrapup (same day, true wrapup)
+
+| Item | Detail |
+|------|--------|
+| **Interactive crash** | `python fs_shell.py` → `ValueError: Wrong color format 'ansibrightwhite'`. prompt_toolkit accepts `ansibright{black…cyan}` but **not** `ansibrightwhite`. Fix: [`scripts/fs_shell/style_out.py`](../../scripts/fs_shell/style_out.py) → `ansiwhite bold` for `prompt-none`. |
+
 ## Shipped (pushed)
 
 | Commit | Summary |
 |--------|---------|
 | [ec6307b](https://github.com/n9xmj/LED_Strip_Controller_G474/commit/ec6307b15a138369646b54a06c1998025e1017f0) | feat(fs-shell): host REPL + device R fileops |
 | [e1b1e63](https://github.com/n9xmj/LED_Strip_Controller_G474/commit/e1b1e63) | docs: host FS shell decision-log plan |
+| [953b319](https://github.com/n9xmj/LED_Strip_Controller_G474/commit/953b319) | docs: first handoff (no push) |
+| *(this wrapup)* | fix ptk `ansibrightwhite`; handoff + plan **W15** ls footer |
 
-**Branch:** `main` (pushed to origin through `ec6307b` before wrapup).
+**Branch:** `main` — true wrapup **commits and pushes**.
 
 ## Still open / next work
 
-1. **Harden automated smoke** — seed `test-sandbox/smoke_payload.txt`; assert exit code + grep markers; optional CI-local script.
-2. **MSG polish** — mark G1/G3/G4/H\* ✅ in plan after a clean re-smoke checklist.
-3. **Edge cases** — put/get large files, empty files, ARF multi-glob, more robust binary if issues recur.
-4. **V2** — partition admin (list/create/delete/default) per plan W13 baseline.
-5. **Unrelated WIP (do not lose):** `App/nvmparams/` untracked; `App/Src/app_main.c` LED blink uncommitted.
+1. **W15 — `ls` / `dir` summary footer** (spec locked; **impl deferred**, any session):
+   - After listing, print one summary line with:
+     - **`# files`** — count of files **listed** (this listing only; not whole-tree inventory).
+     - **`# bytes used`** — used space for the **entire** partition/filesystem (not just listed files).
+     - **`# bytes free`** — free space for the **entire** partition/filesystem.
+   - Applies to remote listing (and host `-L` if natural: host “used/free” = volume/drive stats).
+   - Likely needs a device-side **statfs / df** style op if not already exposed (`lfs_fs_size` / VFS wrapper) — survey before inventing a new harness opcode.
+   - Plan wishlist: **W15** in [host-fs-shell-plan.md](host-fs-shell-plan.md).
+2. **Harden automated smoke** — seed `test-sandbox/smoke_payload.txt`; assert exit code + grep markers; optional CI-local script.
+3. **MSG polish** — mark G1/G3/G4/H\* ✅ in plan after a clean re-smoke checklist.
+4. **Edge cases** — put/get large files, empty files, ARF multi-glob, more robust binary if issues recur.
+5. **V2** — partition admin (list/create/delete/default) per plan W13 baseline.
+6. **Unrelated WIP (do not lose):** `App/nvmparams/` untracked; `App/Src/app_main.c` LED blink uncommitted — **leave alone**.
 
 ## Bugs fixed this session (remember)
 
@@ -79,6 +95,7 @@ debug menu  →  harness (0xDA)  →  fileops REPL (bare R)
 | `ls` rc=-1 empty frames | Host stopped at first `>` (ENT frames) | Wait for ` end>` |
 | put `send failed seq=0` | RX leftovers after `ready`; getchar 0 = empty | Drain + GO; **uart_stream** binary |
 | No overwrite prompt | `stat` took trailing `<HRN R FS>` | Pick frame with `R ST` + `rc=` |
+| Interactive REPL crash on start | `Style.from_dict` / `ansibrightwhite` invalid in prompt_toolkit | `ansiwhite bold` in `style_out.py` |
 
 ## Smoke (known-good pattern)
 
@@ -89,23 +106,24 @@ New-Item -ItemType Directory -Force test-sandbox | Out-Null
 # copy or write test-sandbox\smoke_payload.txt
 python scripts/fs_shell.py --reset -y --host-cwd test-sandbox scripts/fs_shell_smoke.txt
 # PowerShell: no stdin < redirect; use script file arg
+# Interactive (should reach prompt after color fix):
+# python scripts/fs_shell.py
 ```
 
 ## Known doc drift
 
 - Plan header still says “PLANNING” / “W9 not started” in places while code is mid-implementation — handoff is authoritative for resume.
-- MEMORY index may still say “F ops” in one line; corrected at wrapup to **R**.
 - Spiflash plan W13 still describes older get/put wording; host-fs-shell plan is detailed source.
 
-## Git note (after wrapup commit)
+## Git note (after true wrapup)
 
 - Branch: `main`
-- Wrapup commit: 07ec2a697b5047356477492cee8965f376e389aa
-- Push: **no** (wrapup default)
+- Wrapup: commit + **push** (user-requested true wrapup)
 - Uncommitted left: `App/Src/app_main.c`, `App/nvmparams/`
 
 ## Next suggested prompt
 
 ```
-/read-the-docs host FS shell handoff 2026-07-15. Re-run smoke with test-sandbox; then either (a) tighten automated smoke assertions, or (b) start V2 part list baseline, or (c) nvmparams W8.
+/read-the-docs host FS shell handoff 2026-07-15. Interactive should work (ansiwhite fix).
+Pick: (a) implement W15 ls/dir footer (#files listed, partition used/free), (b) automated smoke asserts, (c) V2 part list, or (d) nvmparams W8.
 ```

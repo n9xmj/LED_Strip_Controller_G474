@@ -131,6 +131,7 @@ Firmware gaps use **G**; host-tool gaps use **H**. Ord = bring-up order (lower f
 | **W12** | 🔵 | **`edit` via host-native editor** — spawn process (Notepad/vim/nano/…); path from env var (e.g. `FS_SHELL_EDITOR` / `$EDITOR`). Remote: get→tempfile→edit→put on exit. Not a v1 gate. See detail. |
 | **W13** | 🔵 | **Partition table admin shell** — `part list/create/delete/default`, holes, summaries; baseline below (user 2026-07-15). **Not V1.** Own planning session OK before implement. |
 | **W14** | 🔵 | **`format <label>`** — wipe littlefs partition only if type is littlefs; related to part admin / mount (**S3**). May ride with V1 mount or wait with **W13**. |
+| **W15** | 🔵 | **`ls` / `dir` summary footer** — after listing: **`# files`** (count of **listed** entries only), **`# bytes used`**, **`# bytes free`**. Used/free are for the **entire** partition/filesystem (remote: littlefs mount; host `-L`: volume/drive). Spec locked 2026-07-15; **impl deferred**. May need device statfs/df (`lfs_fs_size` or VFS wrapper) if not already exposed. |
 
 ---
 
@@ -141,7 +142,7 @@ Status: 🟢 decided · 🟡 leaning · 🔴 unresolved · 🔵 deferred
 
 | Canonical | Aliases | World | Status | Notes |
 |-----------|---------|-------|--------|-------|
-| `ls` | `dir` | both | 🟢 | Listing; long-form flags TBD |
+| `ls` | `dir` | both | 🟢 | Listing; long-form flags TBD. Footer summary (**W15**): listed file count + partition used/free |
 | `cd` | `chdir`, `rcd` | both | 🟢 | `cd` remote / `cd -L` host (**S5**); does not change prompt (**D3**) |
 | `pwd` | `rpwd` | both | 🟢 | `pwd` / `pwd -L`; print only — **does not** change prompt (**D3**) |
 | `prompt` | | — | 🟢 | **Sole** control of prompt world: `local` \| `remote` \| `none` (**D3**) |
