@@ -23,6 +23,7 @@
 #include "debug_menu.h"     /* b_debug_play_feed_string (P op) */
 #include "uart_stream.h"    /* tx-ring status (used by the 'F' flush op) */
 #include "spiflash_test.h"  /* S op — granular SPI-NOR storage primitives */
+#include "fs_shell_hrn.h"   /* R op — remote FS shell (W9; F is flush) */
 #include "berry_app.h"      /* Y op — headless Berry script run (i_berry_run_buffer) */
 
 /* Defined in app_main.c — the debug-console uart_stream handle, so the flush op
@@ -583,6 +584,7 @@ static const harness_op_t s_ax_harness_ops[] =
     { 'X', "size: inject 18t reply <hex>, run get_size_direct", v_harness_op_size_direct },
     { 'Z', "size: inject CPR reply <hex>, run get_size_cpr",   v_harness_op_size_cpr    },
     { 'F', "flush: fill TX ring <n=256>, fflush(stdout), report drain", v_harness_op_flush },
+    { 'R', "remote FS: bare R=fileops REPL; or R <MN> [args] one-shot LS|ST|RM|MD|RN|MO|UM|FM|PU|GT", v_fs_shell_hrn_op },
     { 'S', "storage: S <verb> [args] — id|geom|rdsr|wren|wrdi|erase|prog|write|read", v_spiflash_test_harness_op },
     { 'T', "partition: T <verb> [args] — backup|restore|provision|format|load|list|create|del|erase|mount|free", v_spiflash_test_harness_op_part },
     { 'M', "littlefs: M <verb> <label> [args] — format|mount|unmount|write|read|ls|rm ('L' is the list builtin)", v_spiflash_test_harness_op_lfs },

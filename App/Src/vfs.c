@@ -281,3 +281,26 @@ int i_vfs_remove(const char *psz_path)
     if (p_x_lfs == NULL) { return LFS_ERR_NOENT; }
     return lfs_remove(p_x_lfs, pc_rel);
 }
+
+int i_vfs_mkdir(const char *psz_path)
+{
+    const char *pc_rel = "/";
+    lfs_t      *p_x_lfs = p_x_vfs_resolve(psz_path, &pc_rel);
+    if (p_x_lfs == NULL) { return LFS_ERR_NOENT; }
+    return lfs_mkdir(p_x_lfs, pc_rel);
+}
+
+int i_vfs_rename(const char *psz_old, const char *psz_new)
+{
+    const char *pc_rel_old = "/";
+    const char *pc_rel_new = "/";
+    lfs_t      *p_x_old;
+    lfs_t      *p_x_new;
+
+    p_x_old = p_x_vfs_resolve(psz_old, &pc_rel_old);
+    p_x_new = p_x_vfs_resolve(psz_new, &pc_rel_new);
+    if ((p_x_old == NULL) || (p_x_new == NULL)) { return LFS_ERR_NOENT; }
+    /* littlefs rename is single-FS; refuse cross-volume. */
+    if (p_x_old != p_x_new) { return LFS_ERR_INVAL; }
+    return lfs_rename(p_x_old, pc_rel_old, pc_rel_new);
+}

@@ -2,8 +2,8 @@
  * @file platform.h
  * @author Mark Schultz (n9xmj@yahoo.com)
  * @brief Platform-specific definitions and macros
- * @version 0.2
- * @date 2026-05-31
+ * @version 0.5.0
+ * @date 2026-07-05
  * 
  * @copyright None/TBD/whatever
  * 
@@ -14,10 +14,10 @@
 #include "stm32g4xx_hal.h"
 #include "main.h"
 
-#define PROJECT_NAME    "LED_Strip_Controller_G476"
-#define TARGET_MCU      "STM32G474RE"
-#define FIRMWARE_VERSION "3.0.7"
-#define BUILD_NUMBER "11"
+#define PROJECT_NAME        "LED_Strip_Controller_G476"
+#define TARGET_MCU          "STM32G474RE"
+#define FIRMWARE_VERSION    "0.5.0"
+#define BUILD_NUMBER "12"
 
  //------------------------------------------------------------------------------
  // Stringification
@@ -141,6 +141,7 @@ do { \
 #define NUCLEO_LED_ON()             HAL_GPIO_WritePin(NUCLEO_LED_GPIO_Port, NUCLEO_LED_Pin, 1)
 #define NUCLEO_LED_OFF()            HAL_GPIO_WritePin(NUCLEO_LED_GPIO_Port, NUCLEO_LED_Pin, 0)
 #define NUCLEO_LED_SET(level)       HAL_GPIO_WritePin(NUCLEO_LED_GPIO_Port, NUCLEO_LED_Pin, (level))
+#define NUCLEO_LED_TOGGLE()         HAL_GPIO_TogglePin(NUCLEO_LED_GPIO_Port, NUCLEO_LED_Pin)
 
 // Read the state of the user button on STM32 Nucleo board
 #define NUCLEO_BUTTON_PRESSED()    (HAL_GPIO_ReadPin(NUCLEO_BUTTON_GPIO_Port, NUCLEO_BUTTON_Pin) == 0)

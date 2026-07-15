@@ -33,3 +33,10 @@ scripts/bench.defaults.local.json
 
 # Last /playstr body for play_bench.py replay (machine-local)
 scripts/.play_bench_last
+
+# Host FS shell sandbox + local smoke artifacts (not in-repo content)
+/test-sandbox/
+scripts/fs_shell_smoke_out.txt
+scripts/fs_shell_smoke_err.txt
+scripts/fs_shell_smoke_roundtrip.txt
+scripts/berrytest*.txt

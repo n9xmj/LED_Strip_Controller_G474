@@ -61,5 +61,7 @@ extern lfs_soff_t  z_vfs_fsize(int i_fd);
 /* Path-based helpers. */
 extern int i_vfs_stat(const char *psz_path, struct lfs_info *p_x_info);
 extern int i_vfs_remove(const char *psz_path);
+extern int i_vfs_mkdir(const char *psz_path);
+extern int i_vfs_rename(const char *psz_old, const char *psz_new);
 
 #endif /* VFS_H */
