@@ -54,7 +54,7 @@ void MX_GPIO_Init(void)
   HAL_GPIO_WritePin(GPIOC, LCD_CS_Pin|FLASH_CS_Pin, GPIO_PIN_RESET);
 
   /*Configure GPIO pin Output Level */
-  HAL_GPIO_WritePin(NUCLEO_LED_GPIO_Port, NUCLEO_LED_Pin, GPIO_PIN_RESET);
+  HAL_GPIO_WritePin(DEBUG_LED_GPIO_Port, DEBUG_LED_Pin, GPIO_PIN_RESET);
 
   /*Configure GPIO pin : NUCLEO_BUTTON_Pin */
   GPIO_InitStruct.Pin = NUCLEO_BUTTON_Pin;
@@ -69,12 +69,12 @@ void MX_GPIO_Init(void)
   GPIO_InitStruct.Speed = GPIO_SPEED_FREQ_LOW;
   HAL_GPIO_Init(GPIOC, &GPIO_InitStruct);
 
-  /*Configure GPIO pin : NUCLEO_LED_Pin */
-  GPIO_InitStruct.Pin = NUCLEO_LED_Pin;
+  /*Configure GPIO pin : DEBUG_LED_Pin */
+  GPIO_InitStruct.Pin = DEBUG_LED_Pin;
   GPIO_InitStruct.Mode = GPIO_MODE_OUTPUT_PP;
   GPIO_InitStruct.Pull = GPIO_NOPULL;
   GPIO_InitStruct.Speed = GPIO_SPEED_FREQ_LOW;
-  HAL_GPIO_Init(NUCLEO_LED_GPIO_Port, &GPIO_InitStruct);
+  HAL_GPIO_Init(DEBUG_LED_GPIO_Port, &GPIO_InitStruct);
 
 }
 

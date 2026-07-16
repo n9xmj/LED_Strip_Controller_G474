@@ -36,13 +36,38 @@ def normalize_host_path(s: str) -> Path:
     return Path(s)
 
 
+def normalize_remote(path: str) -> str:
+    """Collapse ``.`` / ``..`` and duplicate slashes; keep absolute VFS form.
+
+    PurePosixPath does not resolve ``..`` (``/lfs0/test/..`` stays literal).
+    VFS paths are absolute ``/<label>/...``; climbing past root stays ``/``.
+    """
+    path = path.replace("\\", "/")
+    if not path.startswith("/"):
+        path = "/" + path
+    parts: list[str] = []
+    for part in path.split("/"):
+        if part == "" or part == ".":
+            continue
+        if part == "..":
+            if parts:
+                parts.pop()
+            continue
+        parts.append(part)
+    if not parts:
+        return "/"
+    return "/" + "/".join(parts)
+
+
 def join_remote(cwd: str, token: str) -> str:
-    """Join remote relative token to cwd; return absolute /label/... form."""
+    """Join remote relative token to cwd; return normalized absolute /label/... form."""
     token = token.replace("\\", "/")
     if token.startswith("/"):
-        return str(PurePosixPath(token))
-    base = PurePosixPath(cwd if cwd.startswith("/") else "/" + cwd)
-    return str((base / token).as_posix())
+        joined = token
+    else:
+        base = cwd if cwd.startswith("/") else "/" + cwd
+        joined = str((PurePosixPath(base) / token).as_posix())
+    return normalize_remote(joined)
 
 
 def join_host(cwd: Path, token: str) -> Path:
@@ -53,6 +78,7 @@ def join_host(cwd: Path, token: str) -> Path:
 
 
 def parent_remote(path: str) -> str:
+    path = normalize_remote(path)
     p = PurePosixPath(path)
     parent = p.parent
     s = str(parent.as_posix())
@@ -60,7 +86,7 @@ def parent_remote(path: str) -> str:
 
 
 def basename_remote(path: str) -> str:
-    return PurePosixPath(path).name
+    return PurePosixPath(normalize_remote(path)).name
 
 
 def is_glob(token: str) -> bool:

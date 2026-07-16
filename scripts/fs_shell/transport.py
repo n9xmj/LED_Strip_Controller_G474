@@ -25,7 +25,9 @@ HARNESS_EXIT = b"\xA5"
 HRN_RDY = "<HRN v1 RDY>"
 HRN_BYE = "<HRN BYE>"
 HRN_FS = "<HRN R FS>"
+# Device may emit bare <HRN R FSEND> or <HRN R FSEND reason=timeout>
 HRN_FSEND = "<HRN R FSEND>"
+HRN_FSEND_TAG = "<HRN R FSEND"  # prefix match (reason= optional)
 
 FRAME_RE = re.compile(r"<HRN [^>]*>")
 
@@ -98,17 +100,8 @@ class Transport:
             pass
 
     def _read_until(self, token: str, timeout_s: float) -> str:
-        buf = ""
-        deadline = time.monotonic() + timeout_s
-        while time.monotonic() < deadline:
-            chunk = self.s.read(4096)
-            if chunk:
-                buf += chunk.decode("utf-8", errors="replace")
-                if token in buf:
-                    return buf
-            else:
-                time.sleep(0.01)
-        return buf
+        """Accumulate RX until *token* appears (single buffer; no trailing re-wait)."""
+        return self._accumulate(timeout_s, lambda b: token in b)
 
     def _read_for(self, seconds: float) -> str:
         buf = ""
@@ -120,6 +113,112 @@ class Transport:
             else:
                 time.sleep(0.01)
         return buf
+
+    def _accumulate(self, timeout_s: float, done_fn) -> str:
+        """Read until *done_fn(buf)* is true or timeout. One shared buffer."""
+        buf = ""
+        deadline = time.monotonic() + timeout_s
+        while time.monotonic() < deadline:
+            chunk = self.s.read(4096)
+            if chunk:
+                buf += chunk.decode("utf-8", errors="replace")
+                if done_fn(buf):
+                    return buf
+            else:
+                time.sleep(0.01)
+        return buf
+
+    @staticmethod
+    def _wrong_layer(buf: str) -> bool:
+        return (
+            "{Ready}:" in buf
+            or "not recognized" in buf
+            or "PLAY>" in buf
+            or HRN_FSEND_TAG in buf
+            or HRN_BYE in buf
+            or HRN_RDY in buf
+        )
+
+    def _response_complete(self, buf: str, kind: str, *, want_fs_prompt: bool) -> bool:
+        """True when a full op response is in *buf* (no second timed wait needed).
+
+        kind:
+          'ls'    — listing: need <HRN R LS … end>
+          'rc'    — any result frame with rc= (ST/RM/MD/…/NOP)
+          'ready' — PU/GT ready line (binary follows; no FS prompt yet)
+        """
+        if not buf:
+            return False
+        # Lost fileops / wrong context — stop waiting for FS prompt
+        if self._wrong_layer(buf):
+            return True
+
+        if kind == "ready":
+            # Complete ready frame: …ready…>
+            i = buf.find("ready")
+            if i < 0:
+                return False
+            return ">" in buf[i:]
+
+        if kind == "ls":
+            # Device: <HRN R LS path=… rc=N end>
+            has_ls = bool(re.search(r"<HRN R LS[^>]*\bend\s*>", buf))
+            if not has_ls:
+                return False
+            if want_fs_prompt:
+                return HRN_FS in buf
+            return True
+
+        # kind == 'rc' (default result frames)
+        frames = FRAME_RE.findall(buf)
+        has_rc = any("rc=" in f for f in frames)
+        if not has_rc:
+            # Partial: rc= may appear before closing >
+            if "rc=" not in buf:
+                return False
+            # Wait for a closed HRN frame that contains rc=
+            if not re.search(r"<HRN [^>]*rc=[^>]*>", buf):
+                return False
+            has_rc = True
+        if want_fs_prompt:
+            return HRN_FS in buf
+        return has_rc
+
+    def read_response(
+        self,
+        kind: str,
+        timeout_s: float = 15.0,
+        *,
+        want_fs_prompt: bool | None = None,
+    ) -> str:
+        """Single-pass accumulate until the op response is complete.
+
+        When in fileops, waits for trailing <HRN R FS> *in the same buffer*
+        so a fast device that emits result+prompt together never burns a 2 s
+        trailing timeout (the previous chained _read_until bug).
+        """
+        if want_fs_prompt is None:
+            want_fs_prompt = self.fileops and kind != "ready"
+        text = self._accumulate(
+            timeout_s,
+            lambda b: self._response_complete(b, kind, want_fs_prompt=want_fs_prompt),
+        )
+        self._apply_layer_hints(text)
+        return text
+
+    def _apply_layer_hints(self, text: str) -> None:
+        if HRN_FSEND_TAG in text:
+            self.fileops = False
+            self.layer = BoardLayer.HARNESS
+        if HRN_BYE in text or "{Ready}:" in text or "not recognized" in text:
+            self.fileops = False
+            self.layer = BoardLayer.MENU
+        if HRN_RDY in text and not self.fileops:
+            self.layer = BoardLayer.HARNESS
+        # Live fileops prompt — not the FSEND end-of-REPL frame
+        if HRN_FS in text and HRN_FSEND_TAG not in text:
+            self.fileops = True
+            self.layer = BoardLayer.FILEOPS
 
     def _read_raw(self, n: int, timeout_s: float) -> bytes:
         out = bytearray()
@@ -135,6 +234,24 @@ class Transport:
     def write_raw(self, data: bytes) -> None:
         self.s.write(data)
         self.s.flush()
+
+    def consume_rx_hints(self) -> str:
+        """Drain pending RX and update layer flags (e.g. idle FSEND while host sat idle).
+
+        Prefer this over ``reset_input_buffer()`` before a command: discarding
+        unread ``<HRN R FSEND>`` leaves sticky ``fileops=True`` while the
+        board has already left the REPL.
+        """
+        try:
+            n = self.s.in_waiting
+        except Exception:
+            return ""
+        if not n:
+            return ""
+        raw = self.s.read(n)
+        text = raw.decode("utf-8", errors="replace")
+        self._apply_layer_hints(text)
+        return text
 
     def read_byte(self, timeout_s: float = 2.0) -> int | None:
         deadline = time.monotonic() + timeout_s
@@ -274,35 +391,53 @@ class Transport:
         if not self.fileops:
             return
         self.s.write(b"Q\r")
-        self._read_until(HRN_FSEND, 2.0)
+        self._read_until(HRN_FSEND_TAG, 2.0)
         self.fileops = False
         self.layer = BoardLayer.HARNESS
 
-    def session_start(self, *, reset: bool = False) -> tuple[bool, str]:
-        """Full bring-up: probe → recover → harness → fileops.
+    def ensure_fileops(self, *, force: bool = False) -> tuple[bool, str]:
+        """Ensure the board is in the fileops REPL.
 
-        Returns (ok, status_message).
+        * force=False (default): trust sticky ``fileops`` if set; otherwise resync.
+        * force=True: always probe and re-enter if needed (``sync`` / ``resync``).
+
+        Does **not** run on every remote op when already in fileops — that would
+        double latency with a NOP ping. Callers should only force-resync on
+        explicit user request or after a wrong-layer response.
+
+        Always drains pending RX first so an idle-timeout FSEND is not ignored.
         """
-        if reset:
-            try:
-                self.hw_reset()
-            except Exception as ex:
-                return False, f"reset failed: {ex}"
+        self.consume_rx_hints()
+        if not force and self.fileops:
+            return True, f"layer={self.layer.value} (sticky)"
+        return self._resync_fileops()
 
+    def _resync_fileops(self) -> tuple[bool, str]:
+        """Probe layer and climb back to fileops if needed."""
+        self.consume_rx_hints()
         layer = self.probe()
         msg = f"probe={layer.value}"
 
         if layer == BoardLayer.FILEOPS:
-            # Already good
+            self.fileops = True
+            self.layer = BoardLayer.FILEOPS
             return True, msg + " (already fileops)"
 
         if layer == BoardLayer.BINARY:
+            self.fileops = False
             return False, msg + " — suspected binary mid-transfer; try --reset"
 
+        if layer == BoardLayer.HARNESS:
+            if self.enter_fileops():
+                return True, msg + " → fileops"
+            return False, msg + " — bare R (fileops) failed; flash R-REPL firmware?"
+
+        # MENU / UNKNOWN — recover then harness → fileops
         if layer != BoardLayer.MENU:
             if not self.recover_to_menu():
-                # Still try harness enter from whatever state
                 msg += " recover_to_menu uncertain"
+            else:
+                msg += " recovered"
 
         if not self.enter_harness():
             return False, (
@@ -316,13 +451,26 @@ class Transport:
 
         return True, msg + " → harness → fileops"
 
+    def session_start(self, *, reset: bool = False) -> tuple[bool, str]:
+        """Full bring-up: optional HW reset, then ensure fileops.
+
+        Returns (ok, status_message).
+        """
+        if reset:
+            try:
+                self.hw_reset()
+            except Exception as ex:
+                return False, f"reset failed: {ex}"
+
+        return self._resync_fileops()
+
     def quit_session(self) -> None:
         """Fileops → harness → debug menu (baseline for the board)."""
         try:
             if self.fileops:
                 self.s.write(b"Q\r")
                 self.s.flush()
-                self._read_until(HRN_FSEND, 2.0)
+                self._read_until(HRN_FSEND_TAG, 2.0)
                 self.fileops = False
                 self.layer = BoardLayer.HARNESS
         except Exception:
@@ -353,7 +501,12 @@ class Transport:
         return FRAME_RE.findall(text)
 
     def op_text(self, line: str, timeout_s: float = 15.0) -> str:
-        """Send a fileops or one-shot line; return raw until end marker."""
+        """Send a fileops or one-shot line; return raw until response complete.
+
+        Uses a **single accumulating buffer** so result + trailing
+        ``<HRN R FS>`` that arrive in one UART burst never trigger a full
+        trailing timeout (was ~2 s of dead air per remote command).
+        """
         # Normalize: if caller still passes "R LS ...", strip R when in fileops
         send = line.strip()
         if self.fileops and send.upper().startswith("R "):
@@ -366,32 +519,27 @@ class Transport:
             if not send.upper().startswith("R"):
                 send = "R " + send
 
-        self.s.reset_input_buffer()
+        # Drain + interpret pending (idle FSEND etc.); do not blind-drop RX.
+        self.consume_rx_hints()
         self.s.write((send + "\r").encode("ascii", errors="replace"))
         self.s.flush()
 
         upper = send.strip().upper()
-        if upper.startswith("LS"):
-            text = self._read_until(" end>", timeout_s)
-            # fileops prints <HRN R FS> after each cmd
-            if self.fileops:
-                text += self._read_until(HRN_FS, 2.0)
-        elif upper.startswith("PU") or upper.startswith("GT"):
-            # caller handles binary after ready — just get ready line here if needed
-            text = self._read_until("ready", timeout_s)
-        else:
-            text = self._read_until("rc=", timeout_s)
-            text += self._read_until(">", 2.0)
-            if self.fileops:
-                text += self._read_until(HRN_FS, 2.0)
+        # Strip optional harness "R " prefix for kind detection
+        if upper.startswith("R "):
+            upper = upper[2:].lstrip()
 
+        if upper.startswith("LS"):
+            kind = "ls"
+        elif upper.startswith("PU") or upper.startswith("GT"):
+            kind = "ready"
+        else:
+            kind = "rc"
+
+        # One-shot harness path (not in fileops) has no trailing <HRN R FS>
+        want_fs = self.fileops and kind != "ready"
+        text = self.read_response(kind, timeout_s, want_fs_prompt=want_fs)
         self._last_raw = text
-        if "{Ready}:" in text or "not recognized" in text:
-            self.fileops = False
-            self.layer = BoardLayer.MENU
-        if HRN_FSEND in text:
-            self.fileops = False
-            self.layer = BoardLayer.HARNESS
         return text
 
     def last_raw(self) -> str:

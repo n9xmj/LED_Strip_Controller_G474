@@ -6,10 +6,10 @@
 - Existing host/HIL patterns: [`scripts/spiflash_bench.py`](../../scripts/spiflash_bench.py), [`App/Src/test_harness.c`](../../App/Src/test_harness.c)
 - Newest FS handoff: [`.grok/memory/session-handoff-2026-07-04-g13-berry-w3.md`](../../.grok/memory/session-handoff-2026-07-04-g13-berry-w3.md)
 
-**Branch:** `main` · **Status:** IMPLEMENTING (V1 code on `main`; harden + smoke)  
+**Branch:** `main` · **Status:** V1 usable (harden + smoke + interactive UX); next = **V2 part admin**  
 **Language:** Python host tool (author need not write Python to *use* the shell)  
 **Depends on:** G13 boot FS + VFS shipped; device harness **`R`** + host `scripts/fs_shell` landed (see handoff)  
-**Session handoff:** [host-fs-shell-session-handoff-2026-07-15.md](host-fs-shell-session-handoff-2026-07-15.md)
+**Session handoff:** [host-fs-shell-session-handoff-2026-07-16.md](host-fs-shell-session-handoff-2026-07-16.md)
 
 > **Brief:** A classic **text command-line REPL on the PC** that manipulates the
 > device’s littlefs volumes (and optionally the host filesystem) over the serial
@@ -25,7 +25,7 @@
 **How to read:** (1) Open decisions → (2) Big Board → (3) § MSG → (4) Wish list →
 (5) Command keywords table → (6) LOCKED CONTEXT + detail stubs.
 
-**Last audited:** 2026-07-15 (wrapup: fileops REPL, host shell, smoke pattern, handoff)
+**Last audited:** 2026-07-16 (wrapup: latency/CAN fix, smoke, globs, ls UX; next V2 parts)
 
 ---
 
@@ -723,9 +723,9 @@ Optional later: a tiny `scripts/fs_shell/requirements.txt` listing those two pin
 
 | Color | Count (approx) |
 |-------|----------------|
-| 🟢 | D1–D9, S1–S6, I1–I3, I5, T1–T2 |
-| 🟡 | I4 (implement W9/`F`) · F mnemonic spellings |
-| 🔴 | *(none blocking V1)* |
-| 🔵 | W12 edit · **W13 part admin** · **W14 format** · backup · … |
+| 🟢 | D1–D9, S1–S6, I1–I3, I5, T1–T2 · V1 shell on `main` (usable) |
+| 🟡 | MSG rows still marked 🟡 pending doc polish (code largely done) |
+| 🔴 | *(none)* |
+| 🔵 | **W13 part admin (V2 next)** · W14 format · W15 ls footer · W12 edit · backup · … |
 
-**V1 next:** implement core **`F`** file/mount + binary get/put + host shell. **V2 later:** part admin session using **W13** baseline.
+**Next:** V2 partition admin shell session (**W13** baseline). Smoke: `python scripts/fs_shell_smoke.py`. Handoff: [host-fs-shell-session-handoff-2026-07-16.md](host-fs-shell-session-handoff-2026-07-16.md).

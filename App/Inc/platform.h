@@ -137,11 +137,12 @@ do { \
 // GPIO control macros
 //------------------------------------------------------------------------------
 
-// Control the user LED on STM32 Nucleo board
-#define NUCLEO_LED_ON()             HAL_GPIO_WritePin(NUCLEO_LED_GPIO_Port, NUCLEO_LED_Pin, 1)
-#define NUCLEO_LED_OFF()            HAL_GPIO_WritePin(NUCLEO_LED_GPIO_Port, NUCLEO_LED_Pin, 0)
-#define NUCLEO_LED_SET(level)       HAL_GPIO_WritePin(NUCLEO_LED_GPIO_Port, NUCLEO_LED_Pin, (level))
-#define NUCLEO_LED_TOGGLE()         HAL_GPIO_TogglePin(NUCLEO_LED_GPIO_Port, NUCLEO_LED_Pin)
+// Heartbeat / debug LED on PA6 (external; NOT Nucleo LD2 — that is PA5/SPI1_SCK).
+// CubeMX label: DEBUG_LED → DEBUG_LED_Pin / DEBUG_LED_GPIO_Port in main.h
+#define DEBUG_LED_ON()              HAL_GPIO_WritePin(DEBUG_LED_GPIO_Port, DEBUG_LED_Pin, GPIO_PIN_SET)
+#define DEBUG_LED_OFF()             HAL_GPIO_WritePin(DEBUG_LED_GPIO_Port, DEBUG_LED_Pin, GPIO_PIN_RESET)
+#define DEBUG_LED_SET(level)        HAL_GPIO_WritePin(DEBUG_LED_GPIO_Port, DEBUG_LED_Pin, (level) ? GPIO_PIN_SET : GPIO_PIN_RESET)
+#define DEBUG_LED_TOGGLE()          HAL_GPIO_TogglePin(DEBUG_LED_GPIO_Port, DEBUG_LED_Pin)
 
 // Read the state of the user button on STM32 Nucleo board
 #define NUCLEO_BUTTON_PRESSED()    (HAL_GPIO_ReadPin(NUCLEO_BUTTON_GPIO_Port, NUCLEO_BUTTON_Pin) == 0)

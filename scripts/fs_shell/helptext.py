@@ -23,6 +23,7 @@ ALIASES = {
     "?": "help",
     "quit": "exit",
     "print": "echo",
+    "resync": "sync",
 }
 
 SHORT = """\
@@ -30,15 +31,16 @@ Commands (default world = remote; -L/--local = host):
   ls/dir      cd/chdir    pwd         cp/copy     mv/move/ren
   rm/del      mkdir/md    rmdir/rd    cat/type    more
   get/download  put/upload   mount  umount  format
-  echo/print  prompt      help/?/man  exit/quit
+  echo/print  prompt      sync/resync help/?/man  exit/quit
 Flags: -L/--local  --remote  -l/--long (ls)  -y/--yes/-f  -h/--help
 Use: help <command>   or   man <command>
 Comments: full-line or trailing  # comment  (not inside quotes)
 
 Batch / headless (host process):
+  python scripts/fs_shell_smoke.py
+      # host unit + HIL asserts (exit code, latency, put/get, batch script)
   python scripts/fs_shell.py --reset -y --host-cwd test-sandbox scripts/fs_shell_smoke.txt
   python scripts/fs_shell.py script.txt
-  python scripts/fs_shell.py < script.txt
   Prefer untracked ./test-sandbox (repo root) as --host-cwd — not scripts/.
   Lines are commands; blank and # comments ignored. Exit code 1 if any error.
 """
@@ -104,15 +106,24 @@ more <path>
     "get": """\
 get <remote> [host]
   Copy remote → host. Dest defaults to basename in host cwd.
+  Remote globs (* ?) expanded on the PC via directory list (non-recursive), e.g.
+    get test/*          → each file under remote cwd/test into host cwd
+    get /lfs0/test/*.log  outdir/
+  Multiple sources require a host directory dest (existing dir, trailing /,
+  or omitted dest). Directories in a glob match are skipped.
   If host file exists: prompt to overwrite; get -y / --force overwrites.
-  Host directories: error. World flags (-L/--remote) are syntax errors.
+  World flags (-L/--remote) are syntax errors.
   Options: -y/--yes/-f/--force, -h/--help
 """,
     "put": """\
 put <host> [remote]
   Copy host → remote. Dest defaults to basename in remote cwd.
+  Host globs (* ?) expanded on the PC (non-recursive), e.g.
+    put LED_Strip_Controller_G474/*.log /lfs0/test/
+  → each match as /lfs0/test/<basename>. Multiple sources require a
+  directory dest (existing remote dir, trailing /, or omitted dest).
   If remote file exists: prompt to overwrite; put -y / --force overwrites.
-  Remote directories: error. World flags (-L/--remote) are syntax errors.
+  World flags (-L/--remote) are syntax errors.
   Options: -y/--yes/-f/--force, -h/--help
 """,
     "mount": """\
@@ -141,6 +152,15 @@ help [command]  (aliases: ?, man)
     "exit": """\
 exit  (alias: quit)
   Leave harness cleanly and quit the shell.
+""",
+    "sync": """\
+sync  (alias: resync)
+  Probe the remote layer and re-enter the fileops REPL if needed.
+  Device fileops idle timeout is 10 minutes (returns to outer harness);
+  outer harness idle is ~15 s (returns to debug menu). After a long
+  pause, run sync before remote ops — or rely on auto-recover after a
+  failed remote command.
+  Does not change host/remote cwd. No options.
 """,
     "echo": """\
 echo [args...]  (alias: print)

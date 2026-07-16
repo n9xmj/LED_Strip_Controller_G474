@@ -124,8 +124,8 @@ void Error_Handler(void);
 #define ANALOG_AMP_GPIO_Port GPIOA
 #define SPI_SCK_Pin GPIO_PIN_5
 #define SPI_SCK_GPIO_Port GPIOA
-#define NUCLEO_LED_Pin GPIO_PIN_6
-#define NUCLEO_LED_GPIO_Port GPIOA
+#define DEBUG_LED_Pin GPIO_PIN_6
+#define DEBUG_LED_GPIO_Port GPIOA
 #define SPI_MOSI_Pin GPIO_PIN_7
 #define SPI_MOSI_GPIO_Port GPIOA
 #define LED_STRIP_1_Pin GPIO_PIN_4

@@ -108,7 +108,15 @@ static void v_write_bytes(const uint8_t *pu8, uint32_t u32_n)
     v_uart_stream_tx_multi_blocking(h, pu8, (uint16_t)u32_n);
 }
 
-/* Read exactly n bytes or fail. Returns 0 OK, -1 timeout/CAN. */
+/*
+ * Read exactly n binary bytes or fail on timeout.
+ *
+ * MUST NOT treat R_CAN (0x18) specially here: payload and CRC32 bytes are
+ * opaque and may legally contain 0x18. Cancel is only recognized while
+ * waiting for SOH (idle between packets). Treating 0x18 as cancel inside
+ * the payload/CRC caused put to NAK any chunk whose data or CRC contained
+ * that byte (e.g. first 256 B of a 14 KB markdown file with CRC …18cf).
+ */
 static int i_read_exact(uint8_t *pu8, uint32_t u32_n)
 {
     uint32_t i;
@@ -116,7 +124,6 @@ static int i_read_exact(uint8_t *pu8, uint32_t u32_n)
     {
         int i_ch = i_read_byte_to(R_PKT_TIMEOUT_MS);
         if (i_ch < 0) { return -1; }
-        if ((uint8_t)i_ch == R_CAN) { return -1; }
         pu8[i] = (uint8_t)i_ch;
     }
     return 0;

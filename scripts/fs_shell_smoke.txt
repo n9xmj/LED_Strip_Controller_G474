@@ -1,18 +1,24 @@
-# fs_shell headless smoke
-# Prefer: python scripts/fs_shell.py --reset -y --host-cwd test-sandbox scripts/fs_shell_smoke.txt
-# (host cwd is untracked ./test-sandbox at repo root — not scripts/)
+# fs_shell headless smoke (batch script)
+# Prefer: python scripts/fs_shell_smoke.py
+# Or direct: python scripts/fs_shell.py --reset -y --host-cwd test-sandbox scripts/fs_shell_smoke.txt
+#
+# Requires test-sandbox/smoke_payload.txt (seeded by fs_shell_smoke.py).
 echo -- smoke start --
+sync
 pwd
-pwd --local
+pwd -L
 ls /lfs0
 ls -l /lfs0
-# Seed a small payload into the sandbox, then put/get round-trip
-# (script path is relative to --host-cwd when using put with a basename)
-# Copy of this file's marker only: write via host before put if needed.
-# For smoke we put a tiny file created in sandbox by the runner, or use
-# a path under host cwd. Place smoke_payload.txt there, or put this script:
+mkdir /lfs0/smoke_batch_dir
 put -y smoke_payload.txt /lfs0/fs_shell_smoke.txt
+stat /lfs0/fs_shell_smoke.txt
 ls -l /lfs0
 get -y /lfs0/fs_shell_smoke.txt fs_shell_smoke_roundtrip.txt
+# empty file round-trip (host file must exist under --host-cwd)
+put -y smoke_empty.txt /lfs0/fs_shell_empty.txt
+get -y /lfs0/fs_shell_empty.txt fs_shell_empty_roundtrip.txt
+rm -y /lfs0/fs_shell_empty.txt
+rm -y /lfs0/smoke_batch_dir
+ls /lfs0
 echo -- smoke done --
 exit

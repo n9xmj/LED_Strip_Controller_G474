@@ -38,10 +38,7 @@ def _await_ready(t: Transport, timeout_s: float = 10.0) -> tuple[str | None, str
     """Read until a complete ready frame; drain trailing bytes. Returns (frame|None, raw)."""
     from .transport import FRAME_RE
 
-    text = t._read_until("ready", timeout_s)
-    # Finish the HRN frame (path=... size=...>)
-    if ">" not in text[text.find("ready") :] if "ready" in text else text:
-        text += t._read_until(">", 2.0)
+    text = t.read_response("ready", timeout_s, want_fs_prompt=False)
     # Consume CR/LF and any trailing noise before binary
     _drain_rx(t, 0.08)
     frames = FRAME_RE.findall(text)
@@ -53,9 +50,10 @@ def put_file(t: Transport, remote_path: str, data: bytes) -> tuple[bool, str]:
     """Host → device PUT. Returns (ok, message)."""
     from .transport import FRAME_RE
 
-    if not t.fileops and not t.enter_fileops():
-        return False, "not in fileops REPL"
-    t.s.reset_input_buffer()
+    ok, msg = t.ensure_fileops(force=False)
+    if not ok:
+        return False, f"not in fileops REPL ({msg})"
+    t.consume_rx_hints()
     cmd = f"PU {remote_path} {len(data)}\r"
     t.s.write(cmd.encode("ascii"))
     t.s.flush()
@@ -84,10 +82,7 @@ def put_file(t: Transport, remote_path: str, data: bytes) -> tuple[bool, str]:
         return False, "EOT failed"
 
     # final text frame (+ optional <HRN R FS> when in fileops REPL)
-    text = t._read_until("rc=", 10.0)
-    text += t._read_until(">", 2.0)
-    if t.fileops:
-        text += t._read_until("<HRN R FS>", 2.0)
+    text = t.read_response("rc", 10.0)
     done = FRAME_RE.findall(text)
     if not done:
         return False, f"no final frame: {text!r}"
@@ -102,9 +97,10 @@ def get_file(t: Transport, remote_path: str) -> tuple[bool, bytes | str]:
     """Device → host GET. Returns (ok, data_or_error)."""
     from .transport import FRAME_RE
 
-    if not t.fileops and not t.enter_fileops():
-        return False, "not in fileops REPL"
-    t.s.reset_input_buffer()
+    ok, msg = t.ensure_fileops(force=False)
+    if not ok:
+        return False, f"not in fileops REPL ({msg})"
+    t.consume_rx_hints()
     t.s.write(f"GT {remote_path}\r".encode("ascii"))
     t.s.flush()
 
@@ -140,10 +136,7 @@ def get_file(t: Transport, remote_path: str) -> tuple[bool, bytes | str]:
             t.write_raw(bytes([R_CAN]))
             return False, "overflow"
 
-    text2 = t._read_until("rc=", 5.0)
-    text2 += t._read_until(">", 2.0)
-    if t.fileops:
-        text2 += t._read_until("<HRN R FS>", 2.0)
+    text2 = t.read_response("rc", 5.0)
     done = FRAME_RE.findall(text2)
     if done:
         final = next((f for f in reversed(done) if "rc=" in f), done[-1])

@@ -248,9 +248,27 @@ void v_print_startup_banner(void)
  *
  ******************************************************************************/
 
+void v_debug_led_blink(void)
+{
+    static uint16_t u16_blink_tick;
+
+    u16_blink_tick++;
+    if (u16_blink_tick >= MS_IN_1S / 4)   /* toggle every 250 ms → ~2 Hz */
+    {
+        DEBUG_LED_TOGGLE();
+        u16_blink_tick = 0;
+    }
+}
+
+/******************************************************************************
+ *
+ ******************************************************************************/
+
 static void v_periodic_timer_service(void)
 {
     static uint16_t u16_timer_1s_prescaler = 0;
+
+    v_debug_led_blink();
 
     v_play_sched_tick_inc();
 

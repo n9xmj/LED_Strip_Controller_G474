@@ -113,6 +113,8 @@ def run(ctx: ShellContext, p: Parsed) -> bool:
         "exit": cmd_exit,
         "stat": cmd_stat,
         "echo": cmd_echo,
+        "sync": cmd_sync,
+        "resync": cmd_sync,
     }
     fn = handlers.get(verb)
     if not fn:
@@ -138,6 +140,20 @@ def cmd_exit(ctx: ShellContext, p: Parsed) -> None:
     except Exception as ex:
         print(f"exit unwind: {ex}")
     ctx.should_exit = True
+
+
+def cmd_sync(ctx: ShellContext, p: Parsed) -> None:
+    """Probe remote layer and re-enter fileops REPL if needed (aliases: resync).
+
+    Use after long idle (device fileops idle = 10 min → harness; harness idle
+    ≈ 15 s → debug menu) or if remote commands start failing with menu/harness noise.
+    """
+    ok, msg = ctx.t.ensure_fileops(force=True)
+    if ok:
+        print(f"sync ok: {msg}")
+        print(f"  layer={ctx.t.layer.value} fileops={ctx.t.fileops}")
+    else:
+        ctx.fail(f"sync failed: {msg}")
 
 
 def cmd_echo(ctx: ShellContext, p: Parsed) -> None:
@@ -201,11 +217,12 @@ def _lfs_type_name(type_s: str) -> str:
 
 
 def _fmt_size(n: int | str) -> str:
+    """Right-align size to 10 columns (dirs use '-' — still pad so name lines up)."""
     try:
         v = int(n)
+        return f"{v:>10}"
     except (TypeError, ValueError):
-        return str(n)
-    return f"{v:>10}"
+        return f"{str(n):>10}"
 
 
 def _print_remote_ent(e: dict, *, long: bool) -> None:
@@ -239,14 +256,41 @@ def _print_host_path(path: Path, *, long: bool, display_name: str | None = None)
         print(f"{'?':4}  {'?':>10}  {name}  ({ex})")
 
 
+def _ls_empty_notice() -> None:
+    """Visible marker when a directory (or glob) has nothing to list."""
+    print("(empty)")
+
+
+def _ls_sort_host(paths: list[Path]) -> list[Path]:
+    """Directories first, then files; case-insensitive name as secondary key."""
+    return sorted(
+        paths,
+        key=lambda p: (0 if p.is_dir() else 1, p.name.casefold()),
+    )
+
+
+def _ls_sort_remote(ents: list[dict]) -> list[dict]:
+    """Directories first (littlefs type 2), then files; case-insensitive name."""
+    return sorted(
+        ents,
+        key=lambda e: (
+            0 if e.get("type") == "2" else 1,
+            (e.get("name") or "").casefold(),
+        ),
+    )
+
+
 def cmd_ls(ctx: ShellContext, p: Parsed) -> None:
     long = p.long_list
 
     if p.local:
         path = pathutil.join_host(ctx.state.host_cwd, p.args[0] if p.args else ".")
         if pathutil.is_glob(p.args[0] if p.args else ""):
-            paths = pathutil.expand_host_glob(ctx.state.host_cwd, p.args[0])
-            if long and paths:
+            paths = _ls_sort_host(pathutil.expand_host_glob(ctx.state.host_cwd, p.args[0]))
+            if not paths:
+                _ls_empty_notice()
+                return
+            if long:
                 print(f"{'type':4}  {'size':>10}  name")
             for x in paths:
                 _print_host_path(x, long=long)
@@ -259,11 +303,15 @@ def cmd_ls(ctx: ShellContext, p: Parsed) -> None:
                 print(f"{'type':4}  {'size':>10}  name")
             _print_host_path(path, long=long)
             return
-        names = sorted(os.listdir(path))
-        if long and names:
+        names = os.listdir(path)
+        paths = _ls_sort_host([path / name for name in names])
+        if not paths:
+            _ls_empty_notice()
+            return
+        if long:
             print(f"{'type':4}  {'size':>10}  name")
-        for name in names:
-            _print_host_path(path / name, long=long)
+        for hp in paths:
+            _print_host_path(hp, long=long)
         return
 
     # remote
@@ -278,8 +326,11 @@ def cmd_ls(ctx: ShellContext, p: Parsed) -> None:
             return
         names = [e.get("name", "") for e in ents if e.get("name") not in (".", "..")]
         match = set(pathutil.expand_remote_glob(names, pathutil.basename_remote(joined)))
-        shown = [e for e in ents if e.get("name") in match]
-        if long and shown:
+        shown = _ls_sort_remote([e for e in ents if e.get("name") in match])
+        if not shown:
+            _ls_empty_notice()
+            return
+        if long:
             print(f"{'type':4}  {'size':>10}  name")
         for e in shown:
             _print_remote_ent(e, long=long)
@@ -300,10 +351,15 @@ def cmd_ls(ctx: ShellContext, p: Parsed) -> None:
         if "{Ready}:" in raw or "not recognized" in raw or "PLAY>" in raw:
             print("  hint: not in test harness — exit and re-run with: python fs_shell.py --reset")
         return
-    visible = [e for e in ents if e.get("name") not in (".", "..")]
-    if long and visible:
+    visible = _ls_sort_remote(
+        [e for e in ents if e.get("name") not in (".", "..")]
+    )
+    if not visible:
+        _ls_empty_notice()
+        return
+    if long:
         print(f"{'type':4}  {'size':>10}  name")
-    for e in ents:
+    for e in visible:
         _print_remote_ent(e, long=long)
 
 
@@ -483,69 +539,184 @@ def _read_text(ctx: ShellContext, p: Parsed) -> str | None:
     return data.decode("utf-8", errors="replace")
 
 
+def _remote_sources_for_get(ctx: ShellContext, token: str) -> tuple[list[str], str | None]:
+    """Expand remote source token to absolute file paths (host-side globs, D6).
+
+    Returns (paths, error_message). Directories are skipped when expanding globs;
+    a bare directory path without a glob is an error (use a trailing pattern).
+    """
+    joined = pathutil.join_remote(ctx.state.remote_cwd, token)
+    base_pat = pathutil.basename_remote(joined)
+    has_glob = pathutil.is_glob(token) or pathutil.is_glob(base_pat)
+
+    if not has_glob:
+        st = ctx.dev.stat(joined)
+        if st.get("rc") != "0":
+            return [], f"not found: {joined}"
+        if st.get("type") == "2":
+            return [], f"is a directory: {joined}  (use a glob, e.g. {joined.rstrip('/') + '/*'})"
+        return [joined], None
+
+    parent = pathutil.parent_remote(joined)
+    rc, ents, raw = ctx.dev.ls(parent)
+    if rc != 0:
+        return [], f"ls failed path={parent} rc={rc}"
+
+    names = [e.get("name", "") for e in ents if e.get("name") not in (".", "..")]
+    type_by_name = {e.get("name", ""): e.get("type") for e in ents}
+    matched = pathutil.expand_remote_glob(names, base_pat)
+    files = [
+        pathutil.join_remote(parent, n)
+        for n in matched
+        if type_by_name.get(n) != "2"  # files only (type 1 or unknown)
+    ]
+    if not files:
+        return [], f"no files match: {token}"
+    return files, None
+
+
 def cmd_get(ctx: ShellContext, p: Parsed) -> None:
-    """Remote → host. Symmetric with put: confirm before overwriting destination."""
+    """Remote → host. Remote globs expanded on the host (D6).
+
+    Directory host dest (existing dir, trailing separator, or omitted dest):
+    each source is stored as ``<dest>/<basename>``. Explicit file dest only
+    for a single source.
+    """
     if not p.args:
         print("usage: get <remote> [host]   (-y/--force to overwrite without prompt)")
         return
-    rpath = pathutil.join_remote(ctx.state.remote_cwd, p.args[0])
-    if len(p.args) >= 2:
-        hpath = pathutil.join_host(ctx.state.host_cwd, p.args[1])
-    else:
-        hpath = ctx.state.host_cwd / pathutil.basename_remote(rpath)
 
-    if hpath.exists():
-        if hpath.is_dir():
-            ctx.fail(f"get: host path is a directory: {hpath}")
-            return
-        if not _confirm(ctx, f"Overwrite host '{hpath}'?", p.yes):
-            print("aborted")
-            ctx.errors += 1
-            return
-
-    ok, data = xfer.get_file(ctx.t, rpath)
-    if not ok:
-        ctx.fail(f"get failed: {data}")
+    sources, err = _remote_sources_for_get(ctx, p.args[0])
+    if err:
+        ctx.fail(err)
         return
-    assert isinstance(data, bytes)
-    hpath.parent.mkdir(parents=True, exist_ok=True)
-    hpath.write_bytes(data)
-    print(f"get {rpath} -> {hpath} ({len(data)} bytes)")
+
+    dest_dir_intent = False
+    if len(p.args) >= 2:
+        raw_dest = p.args[1]
+        dest_dir_intent = raw_dest.endswith("/") or raw_dest.endswith("\\")
+        dest_base = pathutil.join_host(ctx.state.host_cwd, raw_dest)
+    else:
+        dest_dir_intent = True
+        dest_base = ctx.state.host_cwd
+
+    dest_is_container = dest_dir_intent or (dest_base.exists() and dest_base.is_dir())
+
+    if len(sources) > 1 and not dest_is_container:
+        ctx.fail(
+            "get: multiple sources require a host directory destination "
+            f"(got file path {dest_base})"
+        )
+        return
+
+    for rpath in sources:
+        base = pathutil.basename_remote(rpath)
+        if dest_is_container:
+            hpath = dest_base / base
+        else:
+            hpath = dest_base
+
+        while True:
+            try:
+                if hpath.exists():
+                    if hpath.is_dir():
+                        raise RuntimeError(f"host path is a directory: {hpath}")
+                    if not _confirm(ctx, f"Overwrite host '{hpath}'?", p.yes):
+                        print("aborted")
+                        ctx.errors += 1
+                        return
+                ok, data = xfer.get_file(ctx.t, rpath)
+                if not ok:
+                    raise RuntimeError(str(data))
+                assert isinstance(data, bytes)
+                hpath.parent.mkdir(parents=True, exist_ok=True)
+                hpath.write_bytes(data)
+                print(f"get {rpath} -> {hpath} ({len(data)} bytes)")
+                break
+            except Exception as ex:
+                print(f"error: {ex}")
+                act = _arf(ctx, f"{rpath} -> {hpath}", p.yes)
+                if act == "retry":
+                    continue
+                if act == "skip":
+                    break
+                return
 
 
 def cmd_put(ctx: ShellContext, p: Parsed) -> None:
-    """Host → remote. Symmetric with get: confirm before overwriting destination."""
+    """Host → remote. Host globs expanded here (D6); multi-file needs a dir dest.
+
+    Directory dest (existing littlefs dir, trailing ``/``, or omitted dest):
+    each source is stored as ``<dest>/<basename>``. Explicit file dest is only
+    valid for a single source.
+    """
     if not p.args:
         ctx.fail("usage: put <host> [remote]   (-y/--force to overwrite without prompt)")
         return
-    hpath = pathutil.join_host(ctx.state.host_cwd, p.args[0])
-    if not hpath.is_file():
-        ctx.fail(f"not a file: {hpath}")
+
+    sources = pathutil.expand_host_glob(ctx.state.host_cwd, p.args[0])
+    files = [hp for hp in sources if hp.is_file()]
+    if not files:
+        if pathutil.is_glob(p.args[0]):
+            ctx.fail(f"no files match: {p.args[0]}")
+        else:
+            # Single path: show resolved target for clearer errors
+            one = pathutil.join_host(ctx.state.host_cwd, p.args[0])
+            ctx.fail(f"not a file: {one}")
         return
+
+    dest_dir_intent = False
+    dest_base: str | None = None  # remote container or explicit file path
     if len(p.args) >= 2:
-        rpath = pathutil.join_remote(ctx.state.remote_cwd, p.args[1])
+        raw_dest = p.args[1]
+        dest_dir_intent = raw_dest.endswith("/") or raw_dest.endswith("\\")
+        dest_base = pathutil.join_remote(ctx.state.remote_cwd, raw_dest)
     else:
-        rpath = pathutil.join_remote(ctx.state.remote_cwd, hpath.name)
+        # No dest → each file into remote cwd under its basename
+        dest_dir_intent = True
+        dest_base = ctx.state.remote_cwd
 
-    # Overwrite policy (host-side): device open uses O_TRUNC when transfer runs.
-    st = ctx.dev.stat(rpath)
-    rc = st.get("rc")
-    if rc == "0":
-        if st.get("type") == "2":
-            ctx.fail(f"put: remote path is a directory: {rpath}")
-            return
-        if not _confirm(ctx, f"Overwrite remote '{rpath}'?", p.yes):
-            print("aborted")
-            ctx.errors += 1
-            return
-    # rc != 0 → treat as missing (ENOENT); proceed to create
+    st_base = ctx.dev.stat(dest_base)
+    base_is_dir = st_base.get("rc") == "0" and st_base.get("type") == "2"
+    dest_is_container = base_is_dir or dest_dir_intent
 
-    data = hpath.read_bytes()
-    ok, msg = xfer.put_file(ctx.t, rpath, data)
-    if ok:
-        print(msg)
-    else:
-        ctx.fail(f"put failed: {msg}")
+    if len(files) > 1 and not dest_is_container:
+        ctx.fail(
+            "put: multiple sources require a remote directory destination "
+            f"(got file path {dest_base})"
+        )
+        return
+
+    for hpath in files:
+        if dest_is_container:
+            rpath = pathutil.join_remote(dest_base, hpath.name)
+        else:
+            rpath = dest_base  # single source → explicit remote file path
+
+        while True:
+            try:
+                st = ctx.dev.stat(rpath)
+                if st.get("rc") == "0":
+                    if st.get("type") == "2":
+                        raise RuntimeError(f"remote path is a directory: {rpath}")
+                    if not _confirm(ctx, f"Overwrite remote '{rpath}'?", p.yes):
+                        print("aborted")
+                        ctx.errors += 1
+                        return
+                data = hpath.read_bytes()
+                ok, msg = xfer.put_file(ctx.t, rpath, data)
+                if not ok:
+                    raise RuntimeError(msg)
+                print(msg)
+                break
+            except Exception as ex:
+                print(f"error: {ex}")
+                act = _arf(ctx, f"{hpath} -> {rpath}", p.yes)
+                if act == "retry":
+                    continue
+                if act == "skip":
+                    break
+                return
 
 
 def cmd_mount(ctx: ShellContext, p: Parsed) -> None:
