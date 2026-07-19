@@ -861,22 +861,24 @@ static void v_debug_play_resolve(play_instance_t *px_instance,
     switch (px_event->e_kind)
     {
         case PLAY_RESOLVE_NOTE:
-            printf("PLAY + %c%u%s %.1fHz %lums @%lu\r\n",
+            printf("PLAY + %c%u%s %.1fHz %lums @%lu t=%lu\r\n",
                    px_event->c_letter,
                    (unsigned)px_event->u8_octave,
                    psz_play_dur_suffix(px_event->u8_dur_x2, px_event->u8_dot_count),
                    (double)px_event->f_hz,
                    (unsigned long)(px_event->u32_ticks *
                                    (PLAY_SCHED_TICK_US / 1000U)),
-                   (unsigned long)px_event->u32_src_offset);
+                   (unsigned long)px_event->u32_src_offset,
+                   (unsigned long)u32_play_sched_tick_get());
             break;
 
         case PLAY_RESOLVE_REST:
-            printf("PLAY + R%s %lums @%lu\r\n",
+            printf("PLAY + R%s %lums @%lu t=%lu\r\n",
                    psz_play_dur_suffix(px_event->u8_dur_x2, px_event->u8_dot_count),
                    (unsigned long)(px_event->u32_ticks *
                                    (PLAY_SCHED_TICK_US / 1000U)),
-                   (unsigned long)px_event->u32_src_offset);
+                   (unsigned long)px_event->u32_src_offset,
+                   (unsigned long)u32_play_sched_tick_get());
             break;
 
         case PLAY_RESOLVE_META:

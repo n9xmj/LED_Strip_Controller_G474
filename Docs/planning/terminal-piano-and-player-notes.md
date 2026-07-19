@@ -6,7 +6,7 @@
 
 **Authoritative locked decisions:** [play-v1-implementation-plan.md](play-v1-implementation-plan.md) (**I8**, **I9**, handle API, feature fence). This doc is a **focused agent brief** — not a substitute for the full plan.
 
-**Cross-refs:** [uart_stream-port-notes.md](uart_stream-port-notes.md) · [PLAY_language_design.md](../PLAY_language_design.md) · [Player/cheat_sheet.md](../Player/cheat_sheet.md) · existing interactive player: `App/Src/note_player.c` (debug menu **`p`**).
+**Cross-refs:** [uart_stream-port-notes.md](uart_stream-port-notes.md) · [PLAY_language_design.md](../PLAY_language_design.md) · [play-timing-and-sync-notes.md](play-timing-and-sync-notes.md) (fixed-point drift fix + polyphony sync) · [Player/cheat_sheet.md](../Player/cheat_sheet.md) · existing interactive player: `App/Src/note_player.c` (debug menu **`p`**).
 
 ---
 

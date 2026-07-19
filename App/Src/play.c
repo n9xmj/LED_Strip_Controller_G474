@@ -113,6 +113,9 @@ typedef struct
     play_sched_phase_t    e_phase;
     uint32_t              u32_deadline_tick;
     uint32_t              u32_note_end_tick;
+    uint32_t              u32_ideal_tick;    /* cumulative ideal start-tick of next note (drift-free anchor) */
+    uint32_t              u32_frac_q32;      /* .32 fractional carry of the ideal timeline (Bresenham) */
+    bool                  b_timeline_seeded; /* false until first scheduled note seeds the anchor to now */
     uint8_t               u8_beat_unit_x2;
     play_note_memory_t    x_note_mem;
     play_fault_policy_t   e_fault_policy;
@@ -185,7 +188,8 @@ static float f_play_calc_hz(uint8_t u8_octave, int8_t i8_semitone);
 static uint32_t u32_play_calc_note_ticks(uint16_t u16_tempo_bpm,
                                          uint8_t u8_beat_unit_x2,
                                          uint8_t u8_dur_x2,
-                                         uint8_t u8_dot_count);
+                                         uint8_t u8_dot_count,
+                                         uint32_t *pu32_frac_q32);
 static void v_play_apply_duty_shorthand(play_note_memory_t *px_mem,
                                         uint8_t u8_num);
 static void v_play_apply_duty_percent(play_note_memory_t *px_mem,
@@ -1592,10 +1596,40 @@ static float f_play_calc_hz(uint8_t u8_octave, int8_t i8_semitone)
     double f_hz = (double)PLAY_C1_HZ * pow(2.0, (double)n / 12.0);
     return (float)f_hz;
 }
+/**
+ * @brief floor(u64_rem * 2^32 / u64_den) with u64_rem < u64_den.
+ *
+ * Two radix-2^16 long-division steps so the intermediate shift can't overflow
+ * 64 bits (a single `u64_rem << 32` would for large denominators).
+ */
+static uint32_t u32_play_frac_q32(uint64_t u64_rem, uint64_t u64_den)
+{
+    if (u64_den == 0U)
+    {
+        return 0U;
+    }
+    uint64_t u64_r = u64_rem << 16U;
+    uint32_t u32_frac = (uint32_t)((u64_r / u64_den) << 16U);
+    u64_r = (u64_r % u64_den) << 16U;
+    u32_frac |= (uint32_t)(u64_r / u64_den);
+    return u32_frac;
+}
+/**
+ * @brief Ideal note duration in scheduler ticks as 24.8-style {integer, .32 fraction}.
+ *
+ * Returns the integer tick count; the sub-tick remainder is returned via
+ * @p pu32_frac_q32 as a Q0.32 fraction. The caller carries that fraction across
+ * notes (Bresenham) so quantization never accumulates into audible drift — see
+ * Docs/planning/play-timing-and-sync-notes.md. The integer part is NOT clamped
+ * to >= 1 here (a sub-tick note contributes its fraction to the carry instead);
+ * the SOUND-vs-GAP clamp in v_play_schedule_note handles audibility of a played
+ * note.
+ */
 static uint32_t u32_play_calc_note_ticks(uint16_t u16_tempo_bpm,
                                          uint8_t u8_beat_unit_x2,
                                          uint8_t u8_dur_x2,
-                                         uint8_t u8_dot_count)
+                                         uint8_t u8_dot_count,
+                                         uint32_t *pu32_frac_q32)
 {
     if (u16_tempo_bpm == 0U)
     {
@@ -1605,18 +1639,21 @@ static uint32_t u32_play_calc_note_ticks(uint16_t u16_tempo_bpm,
     {
         u8_beat_unit_x2 = PLAY_DEFAULT_BEAT_UNIT_X2;
     }
+    /* ticks = 60000 * dur_x2 / (bpm * beat_unit_x2 * tick_ms); at TICK_US==1000
+     * tick_ms==1 so ms==ticks. Keep the fold general so a coarser tick stays exact. */
     uint64_t u64_num = 60000ULL * (uint64_t)u8_dur_x2;
+    uint64_t u64_den = (uint64_t)u16_tempo_bpm * (uint64_t)u8_beat_unit_x2 *
+                       (uint64_t)(PLAY_SCHED_TICK_US / 1000U);
     if (u8_dot_count > 0U)
     {
         uint64_t u64_pow = 1ULL << u8_dot_count;
-        u64_num = u64_num * ((u64_pow << 1U) - 1ULL) / u64_pow;
+        u64_num *= ((u64_pow << 1U) - 1ULL);   /* * (2^(d+1) - 1) */
+        u64_den *= u64_pow;                     /* / 2^d — folded to keep precision */
     }
-    uint64_t u64_den = (uint64_t)u16_tempo_bpm * (uint64_t)u8_beat_unit_x2;
-    uint32_t u32_ms = (uint32_t)(u64_num / u64_den);
-    uint32_t u32_ticks = u32_ms / (PLAY_SCHED_TICK_US / 1000U);
-    if (u32_ticks == 0U)
+    uint32_t u32_ticks = (uint32_t)(u64_num / u64_den);
+    if (pu32_frac_q32 != NULL)
     {
-        u32_ticks = 1U;
+        *pu32_frac_q32 = u32_play_frac_q32(u64_num % u64_den, u64_den);
     }
     return u32_ticks;
 }
@@ -2144,10 +2181,24 @@ static void v_play_start_note(play_runtime_t *px_rt,
                               bool b_is_rest,
                               int16_t i16_abs_sound)
 {
+    uint32_t u32_dur_frac = 0U;
     uint32_t u32_note_ticks = u32_play_calc_note_ticks(px_rt->x_public.u16_tempo_bpm,
                                                        px_rt->u8_beat_unit_x2,
                                                        u8_dur_x2,
-                                                       u8_dot_count);
+                                                       u8_dot_count,
+                                                       &u32_dur_frac);
+    /* Seed the ideal timeline to "now" on the first scheduled note; thereafter it
+     * free-runs cumulatively so inter-note timing never re-anchors to observed time. */
+    if (!px_rt->b_timeline_seeded)
+    {
+        px_rt->u32_ideal_tick = su32_sched_tick;
+        px_rt->u32_frac_q32 = 0U;
+        px_rt->b_timeline_seeded = true;
+    }
+    /* Bresenham carry: accumulate the sub-tick fraction; overflow adds a whole tick. */
+    uint64_t u64_frac_sum = (uint64_t)px_rt->u32_frac_q32 + (uint64_t)u32_dur_frac;
+    px_rt->u32_frac_q32 = (uint32_t)u64_frac_sum;
+    u32_note_ticks += (uint32_t)(u64_frac_sum >> 32U);
     uint32_t u32_active = (u32_note_ticks * (uint32_t)u8_duty_num) /
                           (uint32_t)u8_duty_den;
     uint32_t u32_off = u32_token_start;
@@ -2172,8 +2223,9 @@ static void v_play_start_note(play_runtime_t *px_rt,
             u32_active = 1U;
         }
     }
-    uint32_t u32_now = su32_sched_tick;
-    px_rt->u32_note_end_tick = u32_now + u32_note_ticks;
+    uint32_t u32_start = px_rt->u32_ideal_tick;
+    px_rt->u32_note_end_tick = u32_start + u32_note_ticks;
+    px_rt->u32_ideal_tick = px_rt->u32_note_end_tick;   /* advance anchor for next note */
     if (b_is_rest || u32_active == 0U)
     {
         px_rt->e_phase = PLAY_SCHED_GAP;
@@ -2183,7 +2235,7 @@ static void v_play_start_note(play_runtime_t *px_rt,
         return;
     }
     px_rt->e_phase = PLAY_SCHED_SOUND;
-    px_rt->u32_deadline_tick = u32_now + u32_active;
+    px_rt->u32_deadline_tick = u32_start + u32_active;
     if (i16_abs_sound >= 0)
     {
         int16_t i16_work = i16_abs_sound;
@@ -3210,13 +3262,16 @@ static void v_play_service(play_runtime_t *px_rt)
         (void)b_play_exec_next(px_rt);
         return;
     }
-    if (su32_sched_tick < px_rt->u32_deadline_tick)
+    /* Wrap-safe deadline test (cf. ELAPSED_TIME in platform.h): survives the 32-bit
+     * tick wrap and lets best-effort catch-up fire immediately when the ideal deadline
+     * is already in the past. */
+    if ((int32_t)(su32_sched_tick - px_rt->u32_deadline_tick) < 0)
     {
         return;
     }
     if (px_rt->e_phase == PLAY_SCHED_SOUND)
     {
-        if (su32_sched_tick >= px_rt->u32_note_end_tick)
+        if ((int32_t)(su32_sched_tick - px_rt->u32_note_end_tick) >= 0)
         {
             px_rt->e_phase = PLAY_SCHED_PARSE;
         }
