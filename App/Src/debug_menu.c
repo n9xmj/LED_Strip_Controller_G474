@@ -23,6 +23,7 @@
 #include "play_presets.h"
 #include "berry_app.h"     // Berry scripting REPL ('b' from top menu)
 #include "spiflash_test.h" // SPI-NOR bench/HIL surface ('f' submenu + harness 'S' op)
+#include "rtc_api.h"
 
 #include "debug_config.h"   // logging sugar (LOGCT etc.) for this module
 
@@ -1725,6 +1726,328 @@ static const menu_item_t x_term_tests_submenu[] =
 };
 
 //------------------------------------------------------------------------------
+// RTC operations submenu
+//------------------------------------------------------------------------------
+
+static void v_debug_rtc_report(void)
+{
+    RTC_TimeTypeDef x_s_time = {0};
+    RTC_DateTypeDef x_s_date = {0};
+
+    /* Ensure registers are synchronized */
+    uint16_t u16_timeout_count = 0;
+    while (((RTC->ICSR & RTC_ICSR_RSF) == 0) && (u16_timeout_count < 500))
+    {
+        u16_timeout_count++;
+    }
+
+    HAL_RTC_GetTime(&hrtc, &x_s_time, RTC_FORMAT_BIN);
+    HAL_RTC_GetDate(&hrtc, &x_s_date, RTC_FORMAT_BIN);
+
+    printf("RTC Time: %02u/%02u/%04u %02u:%02u:%02u\r\n",
+           x_s_date.Month,
+           x_s_date.Date,
+           (unsigned int)(RTC_CALENDAR_BASE_YEAR + x_s_date.Year),
+           x_s_time.Hours,
+           x_s_time.Minutes,
+           x_s_time.Seconds);
+}
+
+static void v_debug_rtc_set(void)
+{
+    char ac_buf[16];
+    int i_status;
+    bool b_valid;
+
+    RTC_TimeTypeDef x_s_time = {0};
+    RTC_DateTypeDef x_s_date = {0};
+
+    /* Ensure registers are synchronized */
+    uint16_t u16_timeout_count = 0;
+    while (((RTC->ICSR & RTC_ICSR_RSF) == 0) && (u16_timeout_count < 500))
+    {
+        u16_timeout_count++;
+    }
+
+    HAL_RTC_GetTime(&hrtc, &x_s_time, RTC_FORMAT_BIN);
+    HAL_RTC_GetDate(&hrtc, &x_s_date, RTC_FORMAT_BIN);
+
+    int i_year   = (int)x_s_date.Year;
+    int i_month  = (int)x_s_date.Month;
+    int i_day    = (int)x_s_date.Date;
+    int i_hour   = (int)x_s_time.Hours;
+    int i_minute = (int)x_s_time.Minutes;
+    int i_second = (int)x_s_time.Seconds;
+
+    /* 1. Year (0..99) */
+    do
+    {
+        printf("Year (0..99) [%d]: ", (int)x_s_date.Year);
+        i_status = i_getline(ac_buf, (uint16_t)sizeof(ac_buf));
+        if (i_status < 0)
+        {
+            printf("Cancelled.\r\n");
+            return;
+        }
+        if (i_status == 0)
+        {
+            b_valid = true;
+        }
+        else
+        {
+            i_year = atoi(ac_buf);
+            if (i_year < 0 || i_year > 99)
+            {
+                printf("Invalid Year. Must be 0..99.\r\n");
+                b_valid = false;
+            }
+            else
+            {
+                b_valid = true;
+            }
+        }
+    }
+    while (!b_valid);
+
+    /* 2. Month (1..12) */
+    do
+    {
+        printf("Month (1..12) [%d]: ", (int)x_s_date.Month);
+        i_status = i_getline(ac_buf, (uint16_t)sizeof(ac_buf));
+        if (i_status < 0)
+        {
+            printf("Cancelled.\r\n");
+            return;
+        }
+        if (i_status == 0)
+        {
+            b_valid = true;
+        }
+        else
+        {
+            i_month = atoi(ac_buf);
+            if (i_month < 1 || i_month > 12)
+            {
+                printf("Invalid Month. Must be 1..12.\r\n");
+                b_valid = false;
+            }
+            else
+            {
+                b_valid = true;
+            }
+        }
+    }
+    while (!b_valid);
+
+    /* 3. Day (1..31) */
+    do
+    {
+        printf("Day (1..31) [%d]: ", (int)x_s_date.Date);
+        i_status = i_getline(ac_buf, (uint16_t)sizeof(ac_buf));
+        if (i_status < 0)
+        {
+            printf("Cancelled.\r\n");
+            return;
+        }
+        if (i_status == 0)
+        {
+            b_valid = true;
+        }
+        else
+        {
+            i_day = atoi(ac_buf);
+            if (i_day < 1 || i_day > 31)
+            {
+                printf("Invalid Day. Must be 1..31.\r\n");
+                b_valid = false;
+            }
+            else
+            {
+                b_valid = true;
+            }
+        }
+    }
+    while (!b_valid);
+
+    /* 4. Hour (0..23) */
+    do
+    {
+        printf("Hour (0..23) [%d]: ", (int)x_s_time.Hours);
+        i_status = i_getline(ac_buf, (uint16_t)sizeof(ac_buf));
+        if (i_status < 0)
+        {
+            printf("Cancelled.\r\n");
+            return;
+        }
+        if (i_status == 0)
+        {
+            b_valid = true;
+        }
+        else
+        {
+            i_hour = atoi(ac_buf);
+            if (i_hour < 0 || i_hour > 23)
+            {
+                printf("Invalid Hour. Must be 0..23.\r\n");
+                b_valid = false;
+            }
+            else
+            {
+                b_valid = true;
+            }
+        }
+    }
+    while (!b_valid);
+
+    /* 5. Minute (0..59) */
+    do
+    {
+        printf("Minute (0..59) [%d]: ", (int)x_s_time.Minutes);
+        i_status = i_getline(ac_buf, (uint16_t)sizeof(ac_buf));
+        if (i_status < 0)
+        {
+            printf("Cancelled.\r\n");
+            return;
+        }
+        if (i_status == 0)
+        {
+            b_valid = true;
+        }
+        else
+        {
+            i_minute = atoi(ac_buf);
+            if (i_minute < 0 || i_minute > 59)
+            {
+                printf("Invalid Minute. Must be 0..59.\r\n");
+                b_valid = false;
+            }
+            else
+            {
+                b_valid = true;
+            }
+        }
+    }
+    while (!b_valid);
+
+    /* 6. Seconds (0..59) */
+    do
+    {
+        printf("Seconds (0..59) [%d]: ", (int)x_s_time.Seconds);
+        i_status = i_getline(ac_buf, (uint16_t)sizeof(ac_buf));
+        if (i_status < 0)
+        {
+            printf("Cancelled.\r\n");
+            return;
+        }
+        if (i_status == 0)
+        {
+            b_valid = true;
+        }
+        else
+        {
+            i_second = atoi(ac_buf);
+            if (i_second < 0 || i_second > 59)
+            {
+                printf("Invalid Seconds. Must be 0..59.\r\n");
+                b_valid = false;
+            }
+            else
+            {
+                b_valid = true;
+            }
+        }
+    }
+    while (!b_valid);
+
+    x_s_date.Year = (uint8_t)i_year;
+    x_s_date.Month = (uint8_t)i_month;
+    x_s_date.Date = (uint8_t)i_day;
+    x_s_time.Hours = (uint8_t)i_hour;
+    x_s_time.Minutes = (uint8_t)i_minute;
+    x_s_time.Seconds = (uint8_t)i_second;
+    x_s_time.SubSeconds = 0;
+    x_s_time.TimeFormat = RTC_HOURFORMAT_24;
+    x_s_time.DayLightSaving = RTC_DAYLIGHTSAVING_NONE;
+    x_s_time.StoreOperation = RTC_STOREOPERATION_RESET;
+
+    /* Derive weekday from input date to satisfy RTC requirements */
+    struct tm x_tm = {0};
+    x_tm.tm_year = (int)x_s_date.Year + (int)(RTC_CALENDAR_BASE_YEAR - 1900U);
+    x_tm.tm_mon  = (int)x_s_date.Month - 1;
+    x_tm.tm_mday = (int)x_s_date.Date;
+    x_tm.tm_hour = (int)x_s_time.Hours;
+    x_tm.tm_min  = (int)x_s_time.Minutes;
+    x_tm.tm_sec  = (int)x_s_time.Seconds;
+    x_tm.tm_isdst = -1;
+
+    if (mktime(&x_tm) != (time_t)-1)
+    {
+        x_s_date.WeekDay = (x_tm.tm_wday == 0) ? RTC_WEEKDAY_SUNDAY : (uint8_t)x_tm.tm_wday;
+    }
+    else
+    {
+        x_s_date.WeekDay = RTC_WEEKDAY_MONDAY;
+    }
+
+    if (HAL_RTC_SetTime(&hrtc, &x_s_time, RTC_FORMAT_BIN) != HAL_OK)
+    {
+        printf("Error: HAL_RTC_SetTime failed.\r\n");
+        return;
+    }
+
+    if (HAL_RTC_SetDate(&hrtc, &x_s_date, RTC_FORMAT_BIN) != HAL_OK)
+    {
+        printf("Error: HAL_RTC_SetDate failed.\r\n");
+        return;
+    }
+
+    /* Set the magic constant in backup register to mark RTC as valid */
+    HAL_RTCEx_BKUPWrite(&hrtc, RTC_BKP_DR0, 0x5E5E);
+
+    printf("RTC successfully updated.\r\n");
+    v_debug_rtc_report();
+}
+
+static const menu_item_t x_rtc_tests_submenu[] =
+{
+    {
+        .x_type = MENU_ITEM_HELP_TEXT_FIXED,
+        .c_key = 0,
+        .p_c_text = "\r\n--- RTC operations ---\r\n"
+    },
+    {
+        .x_type = MENU_ITEM_HELP,
+        .c_key = '?',
+        .p_c_text = NULL
+    },
+    {
+        .x_type = MENU_ITEM_HELP_HIDDEN,
+        .c_key = '\r',
+        .p_c_text = NULL
+    },
+    {
+        .x_type = MENU_ITEM_FUNCTION,
+        .c_key = 't',
+        .p_c_text = "Report RTC date and time",
+        .pfn_function = v_debug_rtc_report
+    },
+    {
+        .x_type = MENU_ITEM_FUNCTION,
+        .c_key = 's',
+        .p_c_text = "Set RTC time and date",
+        .pfn_function = v_debug_rtc_set
+    },
+    {
+        .x_type = MENU_ITEM_RETURN_TO_PREVIOUS_MENU,
+        .c_key = 0x1B,
+        .p_c_text = NULL
+    },
+    {
+        .x_type = MENU_ITEM_END_OF_LIST,
+    }
+};
+
+//------------------------------------------------------------------------------
 // SPI flash and storage operations. Home for the W25Q128 SPI-NOR driver bring-up
 // (transport -> device -> geometry -> partitions -> littlefs) and its bench
 // tests. Grows incrementally per the G12 plan; for now it hosts the two migrated
@@ -1829,6 +2152,12 @@ static const menu_item_t x_debug_top_menu[] =
         .c_key = 'm',
         .p_c_text = "Player tests and experiments (PLAY)",
         .p_x_menu = x_player_tests_submenu
+    },
+    {
+        .x_type = MENU_ITEM_CALL_MENU,
+        .c_key = 'r',
+        .p_c_text = "RTC operations",
+        .p_x_menu = x_rtc_tests_submenu
     },
     {
         .x_type = MENU_ITEM_FUNCTION,
