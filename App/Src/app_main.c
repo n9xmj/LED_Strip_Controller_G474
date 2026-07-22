@@ -15,6 +15,7 @@
 #include "play.h"
 #include "uart_stream.h"
 #include "filesystem.h"     // x_fs_system_init (boot-time SPI-NOR / littlefs bring-up, G13)
+#include "rtc_api.h"
 
 #include "debug_config.h"   // for RPRINTF + logging tags (banner uses RPRINTF)
 
@@ -308,6 +309,8 @@ static void v_system_init(void)
     v_synth_engine_init();
 
     v_play_init();
+
+    v_rtc_api_init();
 
     // Bring the SPI-NOR filesystem online: init the device, load/provision the
     // partition table, and mount every littlefs partition via the VFS so

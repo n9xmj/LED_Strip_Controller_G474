@@ -162,6 +162,4 @@ extern const char * pc_reset_source_description(reset_type_t  x_reset_type);
 
 extern void v_system_tick_set(uint32_t u32_tick_set);
 extern void v_system_tick_add(uint32_t u32_tick_add);
-extern void v_set_rtc_wakeup_timer(uint16_t u16_duration_ms);
-//extern uint64_t u64_get_rtc_time(void);
-extern uint32_t u32_get_rtc_hour_time(void);
+
