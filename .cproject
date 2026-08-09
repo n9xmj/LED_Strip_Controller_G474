@@ -49,7 +49,7 @@
 									<listOptionValue builtIn="false" value="../App/menu-api"/>
 									<listOptionValue builtIn="false" value="../App/logging"/>
 									<listOptionValue builtIn="false" value="../App/common"/>
-									<listOptionValue builtIn="false" value="../App/uart-stream"/>
+									<listOptionValue builtIn="false" value="../App/uart_stream"/>
 									<listOptionValue builtIn="false" value="../App/tlsf"/>
 									<listOptionValue builtIn="false" value="../App/spiflash"/>
 									<listOptionValue builtIn="false" value="../App/nvmparams"/>
@@ -188,7 +188,7 @@
 									<listOptionValue builtIn="false" value="../App/menu-api"/>
 									<listOptionValue builtIn="false" value="../App/logging"/>
 									<listOptionValue builtIn="false" value="../App/common"/>
-									<listOptionValue builtIn="false" value="../App/uart-stream"/>
+									<listOptionValue builtIn="false" value="../App/uart_stream"/>
 									<listOptionValue builtIn="false" value="../App/berry-lang/src"/>
 									<listOptionValue builtIn="false" value="../App/tlsf"/>
 									<listOptionValue builtIn="false" value="../App/spiflash"/>
