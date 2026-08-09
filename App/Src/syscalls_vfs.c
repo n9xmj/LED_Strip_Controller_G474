@@ -9,7 +9,7 @@
  * fd routing:
  *   fd 0 (stdin)  -> console  __io_getchar()
  *   fd 1 (stdout) -> console  __io_putchar()
- *   fd 2 (stderr) -> console  __io_putchar_stderr()  (its own weak seam so it can
+ *   fd 2 (stderr) -> console  __io_putchar_stderr()  (its own weak port point so it can
  *                    later be re-pointed at semihosting / a VFS tty device
  *                    without touching stdout; see plan W15)
  *   fd >= 3       -> the VFS fd table (i_vfs_* / z_vfs_*)
@@ -123,7 +123,7 @@ int _write(int file, char *ptr, int len)
     lfs_ssize_t z_n;
     int         i;
 
-    if (file == 2)                               // stderr -> its own seam
+    if (file == 2)                               // stderr -> its own port point
     {
         for (i = 0; i < len; i++) { (void)__io_putchar_stderr(ptr[i]); }
         return len;

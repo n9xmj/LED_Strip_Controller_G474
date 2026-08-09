@@ -55,7 +55,7 @@ static void v_periodic_timer_service(void);
  * The definitions here route STDxxx stream I/O (e.g. putchar, getchar, printf,
  * etc.) to the debug port UART.
  *
- * __io_putchar_stderr() is a SEPARATE seam for stderr (fd 2): today it mirrors
+ * __io_putchar_stderr() is a SEPARATE port point for stderr (fd 2): today it mirrors
  * __io_putchar() to the same debug UART, but keeping it a distinct (weak) symbol
  * lets stderr later be re-pointed at ARM semihosting or a VFS tty device without
  * disturbing stdout (plan W15). The stdio fd split lives in syscalls_vfs.c.

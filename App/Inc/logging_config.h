@@ -7,7 +7,7 @@
  * classes -- verbosity tier, tag string and color -- and then pulls in the
  * macro helpers from the vendored module.
  *
- * APPLICATION-OWNED SEAM. Created by copying App/logging/logging_config_template.h
+ * APPLICATION-OWNED PORT FILE. Created by copying App/logging/logging_config_template.h
  * into App/Inc/ and customizing the tag list. Edit it freely; never edit the
  * files under App/logging/ or App/common/ -- those are vendored and are kept
  * byte-identical across G0B1_Skeleton, SwitchTester and this project.
