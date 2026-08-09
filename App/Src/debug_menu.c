@@ -8,7 +8,7 @@
 #include <stdlib.h>
 #include <math.h>
 
-#include "ansi.h"
+#include "ANSI.h"
 #include "i2s.h"
 #include "menu-api.h"
 #include "utils.h"
@@ -25,7 +25,7 @@
 #include "spiflash_test.h" // SPI-NOR bench/HIL surface ('f' submenu + harness 'S' op)
 #include "rtc_api.h"
 
-#include "debug_config.h"   // logging sugar (LOGCT etc.) for this module
+#include "logging_config.h"   // logging sugar (LOGCT etc.) for this module
 
 #define DEBUG_MENU_STACK_SIZE   4
 

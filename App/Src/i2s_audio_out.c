@@ -12,7 +12,7 @@
 #include "app_global.h"
 #include "i2s_audio_out.h"
 #include "sai.h"
-#include "debug_config.h"  // LOGCT(LOG_I2S_OUT, ...) for audio path diagnosis
+#include "logging_config.h"  // LOGCT(LOG_I2S_OUT, ...) for audio path diagnosis
 
 typedef enum
 {

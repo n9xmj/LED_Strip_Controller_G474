@@ -7,7 +7,7 @@
 
 #include "audio_in_service.h"
 #include "app_global.h"
-#include "debug_config.h"
+#include "logging_config.h"
 
 static audio_in_service_config_t s_x_cfg;
 static bool s_b_cfg_valid;

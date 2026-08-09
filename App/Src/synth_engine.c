@@ -16,7 +16,7 @@
 #include "synth_engine.h"
 #include "i2s_audio_out.h"
 #include "cordic.h"   // for hcordic and MX_ (already inited)
-#include "debug_config.h"  // for LOGCT(LOG_I2S_OUT, ...) diagnostics
+#include "logging_config.h"  // for LOGCT(LOG_I2S_OUT, ...) diagnostics
 #include "utils.h"         // for v_app_polling_task declaration (used in short drain wait)
 
 #include <math.h>     // only for M_PI in step calc if needed; we avoid sinf

@@ -8,7 +8,7 @@
 
 #include "platform.h"
 #include "rtc_api.h"
-#include "debug_config.h"
+#include "logging_config.h"
 #include "logging.h"
 
 // Change this to match the RTC_WAKEUPCLOCK_RTCCLK_DIVxx selected when

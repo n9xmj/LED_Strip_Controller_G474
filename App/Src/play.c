@@ -11,7 +11,7 @@
 #include <stdio.h>
 #include <string.h>
 #include "synth_engine.h"
-#include "debug_config.h"
+#include "logging_config.h"
 /* =============================================================================
  * CONSTANTS AND MACROS
  * ============================================================================= */

@@ -5,7 +5,24 @@
  * Author       : MSchultz
  * Date         : 24 May 2020
  *
+ * ---------------------------------------------------------------------------
+ * VENDORED LEAF -- App/common/
+ *
+ * Pure macro header with NO dependencies of its own (not even the C library).
+ * Copied unchanged between projects; never edit it per-project. Used by the
+ * logging module and by terminal/menu code alike, which is why it lives in
+ * common/ rather than inside any one module directory.
+ *
+ * Include it explicitly as "ANSI.h" -- matching the file name exactly. Do not
+ * write "ansi.h": that resolves on Windows but fails on a case-sensitive
+ * filesystem.
+ *
+ * Reconciled 2026-08-09 from the G0B1_Skeleton and LED_Strip_Controller_G474
+ * copies, which had drifted apart.
  ******************************************************************************/
+
+#ifndef ANSI_H
+#define ANSI_H
 
 // ANSI cursor control sequences
 
@@ -73,7 +90,10 @@
 #define ANSI_CLEAR_BOS              CSI_S "1J"      // Beginning of screen to cursor
 #define ANSI_CLEAR_SCREEN           CSI_S "2J"      // Clear entire screen
 #define ANSI_CLEAR_SCROLLBACK       CSI_S "3J"      // Same as ANSI_CLEAR_SCREEN but also clears scrollback buffer
-#define ANSI_CLEAR_AND_HOME         ANSI_HOME_CURSOR ANSI_CLEAR_SCREEN
+// ED(2) does not move the cursor, so clear-then-home and home-then-clear are
+// equivalent. The two project copies had these in opposite orders; this one is
+// canonical.
+#define ANSI_CLEAR_AND_HOME         ANSI_CLEAR_SCREEN ANSI_HOME_CURSOR
 
 #define ANSI_SCROLL_UP(n)           CSI_S #n "S"
 #define ANSI_SCROLL_UP_FMT          CSI_S "%uS"
@@ -133,8 +153,8 @@
 
 #define ANSI_FG_FMT                 CSI_S "38;5;%um"
 
-#define ANSI_FG_RGB(r,g,b)          CSI_S "38;2;" #r ";" #g ";" #b
-#define ANSI_FG_RGB_FMT             CSI_S "38;2;%u;%u;%u"
+#define ANSI_FG_RGB(r,g,b)          CSI_S "38;2;" #r ";" #g ";" #b "m"
+#define ANSI_FG_RGB_FMT             CSI_S "38;2;%u;%u;%um"
 
 #define ANSI_BG_BLACK               CSI_S "48;5;0m"
 #define ANSI_BG_RED                 CSI_S "48;5;1m"
@@ -154,7 +174,9 @@
 #define ANSI_BG_BRIGHT_CYAN         CSI_S "48;5;14m"
 #define ANSI_BG_BRIGHT_WHITE        CSI_S "48;5;15m"
 
-#define ANSI_BG_RGB(r,g,b)          CSI_S "48;2;" #r ";" #g ";" #b
-#define ANSI_BG_RGB_FMT             CSI_S "48;2;%u;%u;%u"
+#define ANSI_BG_RGB(r,g,b)          CSI_S "48;2;" #r ";" #g ";" #b "m"
+#define ANSI_BG_RGB_FMT             CSI_S "48;2;%u;%u;%um"
 
 #define ANSI_DEFAULT_COLOR          ANSI_ATTR_OFF
+
+#endif // ANSI_H

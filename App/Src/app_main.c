@@ -17,7 +17,7 @@
 #include "filesystem.h"     // x_fs_system_init (boot-time SPI-NOR / littlefs bring-up, G13)
 #include "rtc_api.h"
 
-#include "debug_config.h"   // for RPRINTF + logging tags (banner uses RPRINTF)
+#include "logging_config.h"   // for RPRINTF + logging tags (banner uses RPRINTF)
 
 //------------------------------------------------------------------------------
 // Global variables

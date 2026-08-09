@@ -8,7 +8,7 @@
 
 #include "i2s_audio_in.h"
 #include "i2s.h"
-#include "debug_config.h"
+#include "logging_config.h"
 
 typedef enum
 {

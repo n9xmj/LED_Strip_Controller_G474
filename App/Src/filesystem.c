@@ -15,7 +15,7 @@
 #include "vfs.h"               // v_vfs_attach, i_vfs_mount, VFS_MAX_MOUNTS
 #include "platform.h"          // FLASH_SPI_HANDLE, FLASH_CS_GPIO_Port, FLASH_CS_Pin
 #include "utils.h"             // v_app_polling_task (cooperative idle pump)
-#include "debug_config.h"      // LOGCT, LOG_FILESYSTEM
+#include "logging_config.h"      // LOGCT, LOG_FILESYSTEM
 
 //------------------------------------------------------------------------------
 // Owned state: the one production device handle + its RAM partition table.

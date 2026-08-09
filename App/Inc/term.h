@@ -23,7 +23,7 @@
 #include <stdbool.h>
 #include <stddef.h>     /* size_t */
 
-#include "ansi.h"   /* ESC, CSI_S, terminal-control output macros */
+#include "ANSI.h"   /* ESC, CSI_S, terminal-control output macros */
 
 /******************************************************************************
  * Return-code map for i16_term_get_key() (int16_t)
