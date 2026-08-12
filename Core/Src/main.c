@@ -127,6 +127,7 @@ int main(void)
   MX_TIM16_Init();
   MX_USB_PCD_Init();
   MX_CRC_Init();
+  MX_TIM5_Init();
   /* USER CODE BEGIN 2 */
 
   // Disable I/O buffering for STDxxx streams, so that I/O data is

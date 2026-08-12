@@ -116,6 +116,8 @@ void Error_Handler(void);
 #define FLASH_CS_GPIO_Port GPIOC
 #define ANALOG_MIC_Pin GPIO_PIN_0
 #define ANALOG_MIC_GPIO_Port GPIOA
+#define ENCODER_B_Pin GPIO_PIN_1
+#define ENCODER_B_GPIO_Port GPIOA
 #define DEBUG_TX_Pin GPIO_PIN_2
 #define DEBUG_TX_GPIO_Port GPIOA
 #define DEBUG_RX_Pin GPIO_PIN_3
@@ -130,6 +132,8 @@ void Error_Handler(void);
 #define SPI_MOSI_GPIO_Port GPIOA
 #define LED_STRIP_1_Pin GPIO_PIN_4
 #define LED_STRIP_1_GPIO_Port GPIOC
+#define ENCODER_A_Pin GPIO_PIN_2
+#define ENCODER_A_GPIO_Port GPIOB
 #define I2S_MIC_WS_Pin GPIO_PIN_12
 #define I2S_MIC_WS_GPIO_Port GPIOB
 #define I2S_MIC_SCK_Pin GPIO_PIN_13
