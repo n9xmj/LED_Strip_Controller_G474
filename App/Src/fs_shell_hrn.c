@@ -93,19 +93,36 @@ static int i_read_byte_to(uint32_t u32_timeout_ms)
     }
 }
 
+/*
+ * Binary-transfer TX bound, milliseconds.
+ *
+ * Deliberately far more generous than the console default: these carry payload
+ * and CRC bytes, where a dropped byte corrupts the transfer, so waiting is the
+ * right answer and latency is not a concern. It exists only to stop a wedged
+ * peripheral hanging the main loop forever, which is what the pre-2026-08-12
+ * void-returning calls did.
+ *
+ * NOTE the result is discarded below. A timeout is now DETECTABLE -- the byte
+ * call returns bool, the multi call returns the count actually queued -- but
+ * both wrappers are void and their callers have no error path, so plumbing that
+ * through is a change to the fs_shell protocol rather than to this migration.
+ */
+#define FS_SHELL_TX_TIMEOUT_MS      1000U
+
 static void v_write_byte(uint8_t u8)
 {
     uart_stream_h_t h = x_app_debug_console_handle();
     /* Drain any pending printf text first so ACK is not stuck behind stdio. */
     (void)fflush(stdout);
-    v_uart_stream_tx_byte_blocking(h, u8);
+    (void)b_uart_stream_tx_byte_blocking(h, u8, FS_SHELL_TX_TIMEOUT_MS);
 }
 
 static void v_write_bytes(const uint8_t *pu8, uint32_t u32_n)
 {
     uart_stream_h_t h = x_app_debug_console_handle();
     (void)fflush(stdout);
-    v_uart_stream_tx_multi_blocking(h, pu8, (uint16_t)u32_n);
+    (void)u16_uart_stream_tx_multi_blocking(h, pu8, (uint16_t)u32_n,
+                                            FS_SHELL_TX_TIMEOUT_MS);
 }
 
 /*

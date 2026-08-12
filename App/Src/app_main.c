@@ -63,15 +63,23 @@ static void v_periodic_timer_service(void);
  * See also: syscalls.c and syscalls_vfs.c.
  ******************************************************************************/
 
+/* The blocking TX calls are BOUNDED since the 2026-08-12 uart_stream migration:
+ * they give up after UART_STREAM_TX_BLOCK_TIMEOUT_MS with the ring still full,
+ * where the previous void-returning versions spun forever. Dropping the byte is
+ * the right failure here -- console output must never be able to hang the main
+ * loop -- so the bool is deliberately discarded and ch is still returned, which
+ * keeps printf's own accounting happy. */
 int __io_putchar(int ch)
 {
-    v_uart_stream_tx_byte_blocking(h_debug_uart, (uint8_t)ch);
+    (void) b_uart_stream_tx_byte_blocking(h_debug_uart, (uint8_t)ch,
+                                          UART_STREAM_TX_BLOCK_TIMEOUT_MS);
     return ch;
 }
 
 int __io_putchar_stderr(int ch)
 {
-    v_uart_stream_tx_byte_blocking(h_debug_uart, (uint8_t)ch);
+    (void) b_uart_stream_tx_byte_blocking(h_debug_uart, (uint8_t)ch,
+                                          UART_STREAM_TX_BLOCK_TIMEOUT_MS);
     return ch;
 }
 

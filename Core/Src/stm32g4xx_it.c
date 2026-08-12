@@ -23,6 +23,7 @@
 /* Private includes ----------------------------------------------------------*/
 /* USER CODE BEGIN Includes */
 #include "uart_stream.h"
+#include "usart.h"          /* huart2 -- the console handle passed to the service call */
 /* USER CODE END Includes */
 
 /* Private typedef -----------------------------------------------------------*/
@@ -350,9 +351,14 @@ void DMA1_Channel8_IRQHandler(void)
 
 /* USER CODE BEGIN 1 */
 
+/* Debug console, and the ONLY UART uart_stream owns in this project -- every
+ * other provisioned UART is HAL + DMA TX and is serviced by its DMA channel
+ * handler above. b_uart_stream_service_uart() returns whether it recognised the
+ * handle; on the G474 each UART has its own vector, so there is nothing to
+ * chain and nothing to test. (The G0B1 siblings share vectors and do chain.) */
 void USART2_IRQHandler(void)
 {
-    v_uart_stream_isr_for(USART2);
+    (void) b_uart_stream_service_uart(&huart2);
 }
 
 /* USER CODE END 1 */
