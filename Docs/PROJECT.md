@@ -162,6 +162,7 @@ Items may be done out of order. Toggle boxes as work completes.
 - [ ] CMSIS-DSP audio processing (scope TBD).
 - [x] Debug menu bench tests — ongoing; expand as features land.
 - [x] Integrate and restructure legacy logging API.
+- [ ] **Migrate stdio onto the shared `stdio_retarget` module.** Deferred, assessed. Brings the stdout mute (which the acon migration below will want), a cursor-column tracker, block console writes and a pre-bind HAL fallback. The `_read` convention change is nearly free — all six stdin consumers here are already defensive; the real work is that `stdio_retarget.c` and `syscalls_vfs.c` both define `_write`/`_read`/etc., and the vendored versions reject the fd range where littlefs lives. Plan and audit: [`Docs/planning/stdio-retarget-migration-plan.md`](planning/stdio-retarget-migration-plan.md).
 - [ ] **Migrate to the shared `automation_console` (acon), retiring the first-generation HIL interface.** Long-term; the MCU-side port is ordinary work but ~5,100 lines of host Python across 17 scripts are written against the current protocol, with no regression suite. Plan, cost and sequencing: [`Docs/planning/automation-console-migration-plan.md`](planning/automation-console-migration-plan.md).
 - [ ] CORDIC (and FMAC) experiment: use hardware trig acceleration for sine synthesis, filtering, etc. (prerequisite for music sequencer / player-piano; see wishlist below and [Docs/PLAY_language_design.md](Docs/PLAY_language_design.md)).
 

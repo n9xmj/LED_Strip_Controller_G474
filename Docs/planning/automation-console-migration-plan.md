@@ -90,10 +90,12 @@ worked".
   of this project's `uart_stream` re-vendor. `automation_console` talks to `uart_stream`
   directly (it bypasses stdio in SCRIPT mode by design), so its foundation must be proven
   first.
-- Ideally **S4** as well (the `stdio_retarget` convergence, in the same repo's
-  `logging-api-plan.md`), since the console's stdout-mute depends on that layer. Not a hard
-  blocker — the mute is what protects the frame stream from async chatter, and its absence
-  degrades rather than breaks.
+- Ideally the **`stdio_retarget` migration** first —
+  [`stdio-retarget-migration-plan.md`](stdio-retarget-migration-plan.md) — because that is
+  what brings the **stdout mute**, and the mute is precisely what stops async chatter
+  landing inside a machine-readable frame. Not a hard blocker: without it the console still
+  works, it is just corruptible by anything that prints during a session. Doing stdio first
+  is the natural order, and that plan is already assessed and costed.
 
 ## What this is NOT
 
