@@ -162,6 +162,7 @@ Items may be done out of order. Toggle boxes as work completes.
 - [ ] CMSIS-DSP audio processing (scope TBD).
 - [x] Debug menu bench tests — ongoing; expand as features land.
 - [x] Integrate and restructure legacy logging API.
+- [ ] **Migrate to the shared `automation_console` (acon), retiring the first-generation HIL interface.** Long-term; the MCU-side port is ordinary work but ~5,100 lines of host Python across 17 scripts are written against the current protocol, with no regression suite. Plan, cost and sequencing: [`Docs/planning/automation-console-migration-plan.md`](planning/automation-console-migration-plan.md).
 - [ ] CORDIC (and FMAC) experiment: use hardware trig acceleration for sine synthesis, filtering, etc. (prerequisite for music sequencer / player-piano; see wishlist below and [Docs/PLAY_language_design.md](Docs/PLAY_language_design.md)).
 
 ## TODO Wishlist (Low Priority / Experiments)
@@ -180,7 +181,7 @@ Items may be done out of order. Toggle boxes as work completes.
 - [ ] **General MIDI (GM) synthesizer (H7 wishlist).** Design a full GM synth engine as a **companion** to a future **FM** synth voice — not a G474 target. Would need substantially more CPU/RAM (likely **STM32H7** board already on the hardware roadmap). Open questions: locate a **free/open GM patch set** (SoundFont / sample bank / procedural patches — nothing vetted yet), polyphony budget, streaming samples from QSPI/SD, and how GM voices share the mix bus with FM + PLAY-driven voices. Motivation: “would be fun” — park here until PLAY + simpler synth voices are further along.
 
 - [ ] **ANSI terminal piano keyboard (“virtual synthboard”).** **Status: idea on paper only.** Agent brief: [`Docs/planning/terminal-piano-and-player-notes.md`](planning/terminal-piano-and-player-notes.md) (layout, **I8** consumer, **JOB_PIANO_DRAW**, depends on **`uart_stream`**).
-- [x] **`uart_stream` (debug USART2).** Non-blocking console TX/RX via register-level ISR — **shipped (G11)**; lives in `App/uart-stream/`, stdio routes through it. Design reference: [`Docs/planning/uart_stream-port-notes.md`](planning/uart_stream-port-notes.md). Enables the terminal piano UI's bursty ANSI.
+- [x] **`uart_stream` (debug USART2).** Non-blocking console TX/RX via register-level ISR — **shipped (G11)**; lives in `App/uart_stream/`, stdio routes through it. **Re-vendored 2026-08-12** from the shared `G0B1_Skeleton` module and now byte-identical across all three projects — **live test still owed**. Design reference: [`Docs/planning/uart_stream-port-notes.md`](planning/uart_stream-port-notes.md). Enables the terminal piano UI's bursty ANSI.
 
 - [ ] **Berry scripting layer (`App/berry-lang`).** Embed the [Berry](https://github.com/berry-lang/berry) ultra-light scripting VM (ANSI C99, MIT, <40 KiB core, runs in a few KB of heap) as an *optional* on-device scripting front-end — **invoked by** the debug menu and (potentially) the automated test runner; **not** a replacement for the menu, the test REPL, or PLAY. The **PLAY interpreter is exposed as a Berry predefined/native function** so scripts can drive note sequences. Vendored as a plain source drop, **no submodule**. LLM-friendly references in [`Docs/berry-lang/`](berry-lang/) (from berry-lang [PR #525](https://github.com/berry-lang/berry/pull/525)); human-targeted reference PDF to follow.
 

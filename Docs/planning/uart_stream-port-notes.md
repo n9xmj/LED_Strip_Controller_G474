@@ -1,11 +1,19 @@
 # `uart_stream` design notes (G474, USART2 console)
 
 **Status:** **Shipped (G11).** Non-blocking USART2 console TX/RX driven by a
-register-level ISR. Code lives in [`App/uart-stream/uart_stream.{c,h}`](../../App/uart-stream/);
+register-level ISR. Code lives in [`App/uart_stream/`](../../App/uart_stream/) (underscore —
+the directory was renamed from `uart-stream` to match its main source file);
 the vector is wired in `Core/Src/stm32g4xx_it.c` (`USART2_IRQHandler` →
-`v_uart_stream_isr_for(USART2)`, inside USER CODE). `__io_putchar` / `__io_getchar`
+`b_uart_stream_service_uart(&huart2)`, inside USER CODE). `__io_putchar` / `__io_getchar`
 route stdio through it (see AGENTS.md § *Critical Rules* on the `--wrap=fflush`
 console-drain dependency).
+
+> **RE-VENDORED 2026-08-12 — and NOT YET LIVE TESTED.** This module was replaced
+> wholesale with the shared version from `G0B1_Skeleton` / `SwitchTester`; the four
+> vendored files are byte-identical across all three projects. The ISR entry point,
+> the blocking-call signatures and the flush all changed — see *What the re-vendor
+> changed* below. Nothing has run on hardware; item **7a** of
+> `G0B1_Skeleton/Docs/planning/improvements-backlog.md` is the owed test.
 
 This file is kept as a **design reference** — the ownership rules and the
 register-ISR-vs-HAL rationale still govern any future UART that wants this treatment
@@ -36,7 +44,7 @@ for each **bound** instance — register-level ISR only. HAL is used for **init 
 (clocks, pins, baud, FIFO off); after bind, HAL must **not** touch `CR1` interrupt
 enables or runtime state for that UART.
 
-### ISR shape (`v_uart_stream_isr_for`)
+### ISR shape (`b_uart_stream_service_uart`)
 
 1. For the bound instance: read `Instance->ISR`.
 2. **RX:** drain `RDR` into RX ring while `RXNE`/`RXFNE` set.
@@ -60,7 +68,7 @@ IRQs (see AGENTS.md § *LED Driver*).
 
 | Peripheral | Role | Owner | IRQ path |
 |------------|------|-------|----------|
-| **USART2** | Debug console @ 921600 | **`uart_stream`** | Register ISR → `v_uart_stream_isr_for(USART2)` |
+| **USART2** | Debug console @ 921600 | **`uart_stream`** | Register ISR → `b_uart_stream_service_uart(&huart2)` |
 | **USART1** | LED strip [1] WS2812 | `led_strip_control` | HAL + DMA; completion in `stm32g4xx_it.c` |
 | **USART3** | LED strip | `led_strip_control` | HAL + DMA |
 | **UART4**  | LED strip | `led_strip_control` | HAL + DMA |
@@ -76,10 +84,35 @@ If a future feature binds a second UART (e.g. an ESP32 coprocessor link):
 - [ ] Bind via `uart_stream` init (HAL init-only; enable `RXNEIE`/`TXEIE` or the G4
       FIFO equivalents **inside** `uart_stream`, not via `HAL_UART_*_IT`).
 - [ ] Add **only** that UART's `*_IRQHandler` in `stm32g4xx_it.c` USER CODE, forwarding
-      to `v_uart_stream_isr_for()`.
+      to `b_uart_stream_service_uart(&huartN)`.
+- [ ] The UART must already appear in `App/Src/uart_stream_target_g474.c`. All six are
+      listed there; that table is a handle→vector lookup, not a claim of ownership, so
+      an entry is inert until something binds it.
 - [ ] Leave LED strip UARTs untouched (DMA TX only).
 - [ ] No `HAL_UART_IRQHandler()` on the owned path.
 - [ ] Build + `/smoke` after IRQ wiring (the USART2 banner must still print cleanly).
+
+---
+
+## What the re-vendor changed (2026-08-12)
+
+| | Before | After |
+|---|---|---|
+| ISR entry | `v_uart_stream_isr_for(USART2)` | `b_uart_stream_service_uart(&huart2)`, returns whether it recognised the handle |
+| Byte TX | `v_uart_stream_tx_byte_blocking()`, void, spun forever | `b_uart_stream_tx_byte_blocking()`, takes a timeout, returns success |
+| Block TX | `v_uart_stream_tx_multi_blocking()`, void | `u16_uart_stream_tx_multi_blocking()`, returns count queued |
+| Flush | `v_uart_stream_tx_flush_blocking()` — **unbounded** spin on queue-empty AND on TC | `v_uart_stream_tx_flush{,_timeout}()`, both waits bounded, TC bound derived from the live baud |
+| Vector map | `static e_uart_stream_get_irqn()` inside the module | app-owned `App/Src/uart_stream_target_g474.c` |
+| Config | none | `App/Inc/uart_stream_config.h` |
+| Baud | none | `u32_uart_stream_get_baud()` / `u32_uart_stream_set_baud()` |
+| Queue | heap `p_x_queue_create()`, `*_blocking` variants | `*_isr` variants that skip PRIMASK where an ISR cannot be preempted |
+
+**The safety headline:** the old flush could hang the main loop permanently on a wedged
+UART. Both of its waits are bounded now.
+
+**The behavioural one:** `printf` drops a byte after `UART_STREAM_TX_BLOCK_TIMEOUT_MS`
+(100 ms) on a full ring instead of blocking indefinitely. For a debug console that is the
+right trade, and it is called out at the call site in `app_main.c`.
 
 ---
 
