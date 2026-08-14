@@ -4,7 +4,7 @@
  *
  * Experimental for-fun feature. Monophonic sustained tones using the CORDIC
  * synth engine (direct path). Invoked from main debug menu ('p') but does not
- * use the menu-api for its own input — uses a dedicated semi-blocking loop
+ * use the menusystem for its own input — uses a dedicated semi-blocking loop
  * with i_getchar_blocking() (which cooperatively yields via polling task).
  *
  * Frequency computation uses equal-tempered 2^(n/12) from C1 base (no LUT).

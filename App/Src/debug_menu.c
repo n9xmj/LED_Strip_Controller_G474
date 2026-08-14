@@ -10,7 +10,7 @@
 
 #include "ANSI.h"
 #include "i2s.h"
-#include "menu-api.h"
+#include "menusystem.h"
 #include "utils.h"
 #include "term.h"           // terminal extended-key reader (decode-echo test)
 #include "test_harness.h"   // deterministic automation REPL (sentinel-entered)
