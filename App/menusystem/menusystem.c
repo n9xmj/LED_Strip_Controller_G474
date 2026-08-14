@@ -1,6 +1,7 @@
-/******************************************************************************
- * menusystem.c
- ******************************************************************************/
+/**
+ * @file    menusystem.c
+ * @brief   Dispatch, help printer and key-conflict checker for @ref menusystem.h.
+ */
 
 #include "menusystem.h"
 
@@ -10,10 +11,13 @@
 #include <stdbool.h>
 
 
-/******************************************************************************
+/**
+ * @brief Render a key as a short printable string. See @ref pc_char_to_str decl.
  *
- ******************************************************************************/
-
+ * @param c_ch    Key to render (masked to 7 bits).
+ * @param p_c_str Caller's buffer; up to 3 chars plus NUL.
+ * @return @p p_c_str, or @c NULL when @p p_c_str is @c NULL.
+ */
 char *pc_char_to_str(char c_ch, char *p_c_str)
 {
     if (p_c_str == NULL)
@@ -45,12 +49,20 @@ char *pc_char_to_str(char c_ch, char *p_c_str)
     return p_c_str;
 }
 
-/******************************************************************************
- *
- ******************************************************************************/
-
+/** @brief Caption substituted for a keyed entry that supplies no text of its own. */
 static const char * const p_c_no_description = "--- no description ---";
 
+/**
+ * @brief Initialise a control block and select the home menu.
+ *
+ * See @ref v_menu_init declaration for the contract.
+ *
+ * @param p_x_menu_control Control block to initialise.
+ * @param p_x_home_menu    Top-level (home) menu array.
+ * @param p_v_menu_stack   Storage for @p u8_stack_depth menu pointers, or
+ *                         @c NULL to allocate here.
+ * @param u8_stack_depth   Stack capacity; forced to at least 1.
+ */
 void v_menu_init(menu_control_t *p_x_menu_control,
                  const menu_item_t *p_x_home_menu,
                  void *p_v_menu_stack,
@@ -78,10 +90,17 @@ void v_menu_init(menu_control_t *p_x_menu_control,
     p_x_menu_control->u8_stack_depth = u8_stack_depth;
 }
 
-/******************************************************************************
+/**
+ * @brief Warn about any two entries in one menu that share a selecting key.
  *
- ******************************************************************************/
-
+ * Runs from the help printer; duplicate keys are a data error caught at run
+ * time, not compile time. The warning is monochrome by design (no ANSI), which
+ * is what keeps this module dependency-free.
+ *
+ * @param menu Menu array to scan.
+ * @retval true  At least one key collision was found (and reported).
+ * @retval false No collisions.
+ */
 bool b_menu_key_conflict_check(const menu_item_t *menu)
 {
     uint16_t u16_outer_index;
@@ -130,10 +149,10 @@ bool b_menu_key_conflict_check(const menu_item_t *menu)
     return b_key_conflict;
 }
 
-/******************************************************************************
- *
- ******************************************************************************/
-
+/**
+ * @brief Emit a CR/LF unless the item asked to suppress it.
+ * @param u8_no_newline Non-zero to suppress the newline (see @c b_no_newline).
+ */
 static void v_newline(uint8_t u8_no_newline)
 {
     if (!u8_no_newline)
@@ -143,6 +162,17 @@ static void v_newline(uint8_t u8_no_newline)
     }
 }
 
+/**
+ * @brief Print a menu's help listing.
+ *
+ * Walks the array, printing one line per visible entry (@c "[key] text"), with
+ * per-type handling of default captions and hidden entries, then runs the
+ * key-conflict check. An entry with @c .p_c_text @c == @c NULL is suppressed
+ * from the listing for the item types where that is the convention (hidden
+ * aliases, bare function keys and @c RETURN_TO_PREVIOUS_MENU).
+ *
+ * @param p_x_menu_list Menu array to print; @c NULL is ignored.
+ */
 void v_menu_help(const menu_item_t *p_x_menu_list)
 {
     const menu_item_t *p_x_entry;
@@ -227,9 +257,13 @@ void v_menu_help(const menu_item_t *p_x_menu_list)
                 break;
 
             case MENU_ITEM_RETURN_TO_PREVIOUS_MENU:
+                // A NULL text hides this entry from the listing (as a NULL-text
+                // FUNCTION does), while the return still works - the pattern for
+                // an unadvertised home-menu return. A visible return supplies
+                // its own text.
                 if (p_x_entry->p_c_text == NULL)
                 {
-                    p_c_text = "Return to previous menu";
+                    b_print_entry = false;
                 }
                 break;
 
@@ -259,10 +293,17 @@ void v_menu_help(const menu_item_t *p_x_menu_list)
     printf("\r\n");
 }
 
-/******************************************************************************
+/**
+ * @brief Dispatch one key against the current menu.
  *
- ******************************************************************************/
-
+ * See @ref v_menu_exec declaration for the contract. Preserves the optional
+ * cleanup callback on the two RETURN item types: the @c pfn_function slot is
+ * unused by RETURN entries (GOTO/CALL use @c p_x_menu), so a menu may set it to
+ * run tear-down on leaving a submenu without growing @ref menu_item_t.
+ *
+ * @param p_x_menu_control Control block from @ref v_menu_init.
+ * @param c_key            Key to dispatch, or @c 0xFF to just print the menu.
+ */
 void v_menu_exec(menu_control_t *p_x_menu_control, char c_key)
 {
     const menu_item_t *p_x_current_menu;
@@ -397,9 +438,9 @@ void v_menu_exec(menu_control_t *p_x_menu_control, char c_key)
                     }
                     else
                     {
-                        printf("WARNING: Menu stack empty\r\n");
+                        printf("\r\n[At top-level menu]\r\n");
                     }
-                    // Optional cleanup / exit callback (e.g. stop active synth on leaving i submenu).
+                    // Optional cleanup / exit callback (e.g. stop active synth on leaving a submenu).
                     // The pfn_function slot is unused by RETURN items (GOTO/CALL use p_x_menu),
                     // so we repurpose it here without changing struct size.
                     if (p_x_entry->pfn_function != NULL)
@@ -451,7 +492,7 @@ void v_menu_exec(menu_control_t *p_x_menu_control, char c_key)
     }
 
 POST_EXEC_PROMPT:
-#ifdef MENU_API_PROMPT
-    printf("%s", MENU_API_PROMPT);
+#ifdef MENUSYSTEM_PROMPT
+    printf("%s", MENUSYSTEM_PROMPT);
 #endif
 }
